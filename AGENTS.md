@@ -43,6 +43,9 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build   # перед PR
 
 ## Процесс
 
+- `docs/PLAN.md` — **единственный** документ требований и решений: отдельные
+  спеки и spec-фреймворки (OpenSpec и т.п.) не заводим. Задачи и статус фич
+  ведём в GitHub Issues, milestone = этап плана.
 - Ветки `feature/*`, `fix/*`, `chore/*`, `docs/*` → PR в `main`. Ревью
   опционально, зелёный CI обязателен. Подробности: [CONTRIBUTING.md](CONTRIBUTING.md).
 - Коммиты: `feat|fix|chore|docs|refactor: суть изменения` (по-русски можно).
@@ -51,6 +54,8 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build   # перед PR
 ## Для ИИ-ассистентов
 
 - Не меняй `docs/PLAN.md` и игровые правила без явной просьбы владельца.
+- Не заводи отдельные спек-структуры (openspec/, RFC и т.п.) — единственный
+  документ требований это `docs/PLAN.md`, задачи — в GitHub Issues.
 - Новые настройки добавляй в `Setting` + zod-схему в `packages/shared`.
 - Не добавляй зависимости без необходимости; добавил — обнови
   `pnpm-lock.yaml` тем же коммитом (`pnpm install && git add pnpm-lock.yaml`).
