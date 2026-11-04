@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    name: lint + typecheck + test + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Версию pnpm берёт из поля packageManager в package.json
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        # TODO: вернуть --frozen-lockfile после первого коммита pnpm-lock.yaml
+        # (lock-файл не вошёл в первый коммит из-за размера; закоммитьте его
+        # локально: pnpm install && git add pnpm-lock.yaml)
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Audit dependencies
+        run: pnpm audit --prod
+        continue-on-error: true # TODO: сделать обязательным после стабилизации зависимостей
