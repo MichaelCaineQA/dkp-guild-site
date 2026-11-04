@@ -26,6 +26,6 @@
 - Node.js ≥ 20, pnpm (`corepack enable`), Docker (PostgreSQL + Redis:
   `docker compose up -d`).
 - Секреты не коммитим: всё через `.env` (образец — `.env.example`).
-- **TODO (первый контрибьютор с git-доступом):** закоммитить `pnpm-lock.yaml`
-  (`pnpm install && git add pnpm-lock.yaml && git commit && git push`) и
-  вернуть `--frozen-lockfile` в `.github/workflows/ci.yml`.
+- `pnpm-lock.yaml` коммитим всегда: CI ставит зависимости с
+  `--frozen-lockfile`. После изменения зависимостей — `pnpm install` и
+  закоммитьте обновлённый lock-файл вместе с `package.json`.
