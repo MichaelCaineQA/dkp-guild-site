@@ -1,0 +1,435 @@
+// Доменная модель ДКП-системы — по docs/PLAN.md, раздел 3.
+//
+// Ключевые принципы:
+//  - DkpEntry — append-only журнал: баланс = SUM(amount), записи не правятся
+//    и не удаляются, «исправление» — новая запись (раздел 2.2).
+//  - Чек-ин коды хранятся хэшем: сам код видит только РЛ ивента (раздел 2.2).
+//  - Отсутствие без апрува: оформил = уважительная причина; отметка «Увидел»
+//    на статус не влияет (раздел 2.3).
+//  - Оргструктура: Гильдия → КП → Пак; игрок ровно в одном паке (раздел 2.7).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rank {
+  GUILD_LEADER // Глава
+  ADMIN // Администратор сайта
+  OFFICER // Офицер
+  MEMBER // Рядовой
+}
+
+enum CombatRole {
+  DPS
+  HEALER
+  TANK
+}
+
+enum EventMode {
+  PVE
+  PVP
+}
+
+enum EventStatus {
+  PLANNED
+  RUNNING
+  FINISHED
+  CANCELLED
+}
+
+enum EventScope {
+  GUILD
+  KP
+  PACK
+}
+
+enum AttendanceStatus {
+  PRESENT // был
+  LATE // опоздал
+  LEFT_EARLY // ушёл раньше
+  NO_SHOW // неявка
+  EXCUSED_ABSENCE // оформленное отсутствие (раздел 2.3)
+}
+
+enum CheckInPhase {
+  START
+  END
+}
+
+enum CheckInStatus {
+  PENDING // окно ещё не открылось
+  ACTIVE // окно открыто
+  PASSED // отметил себя верным кодом
+  FAILED // ошибся — дальше только ручная отметка РЛ
+  EXPIRED // не успел в окно
+  MANUAL // отмечен РЛ вручную
+}
+
+enum DkpEntryType {
+  CHECKIN_EARN // начисление за чек-ин код (50% платы за ивент)
+  MANUAL_EARN // ручное начисление РЛ
+  AUCTION_SPEND // трата на аукционе (с наценкой «чужому» классу, если применимо)
+  ADJUSTMENT // корректировка — новая запись, не правка старой
+}
+
+enum AbsenceStatus {
+  ACTIVE
+  CANCELLED
+}
+
+enum AuctionStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum ItemTargetRole {
+  ALL
+  DPS
+  HEALER
+  TANK
+}
+
+model Guild {
+  id String @id @default(cuid())
+  name String
+
+  // Игровой цикл день/ночь (раздел 2.1): якорь — момент начала известной
+  // дневной фазы, длительности фаз — настройки.
+  gameTimeAnchor DateTime
+  gameTimeDayMinutes Int @default(90)
+  gameTimeNightMinutes Int @default(30)
+
+  kps KP[]
+  createdAt DateTime @default(now())
+}
+
+/// КП — объединение паков (Гильдия → КП → Пак).
+model KP {
+  id String @id @default(cuid())
+  name String
+  guildId String
+  guild Guild @relation(fields: [guildId], references: [id])
+  packs Pack[]
+  events Event[] @relation("EventKP")
+  createdAt DateTime @default(now())
+
+  @@index([guildId])
+}
+
+model Pack {
+  id String @id @default(cuid())
+  name String
+  kpId String
+  kp KP @relation(fields: [kpId], references: [id])
+  leaderId String? @unique
+  leader Member? @relation("PackLeader", fields: [leaderId], references: [id])
+
+  /// Игрок состоит ровно в одном паке (раздел 2.7).
+  members Member[] @relation("PackMembers")
+  events Event[] @relation("EventPack")
+  createdAt DateTime @default(now())
+
+  @@index([kpId])
+}
+
+model User {
+  id String @id @default(cuid())
+  discordId String @unique
+  username String
+  member Member?
+  createdAt DateTime @default(now())
+}
+
+model Member {
+  id String @id @default(cuid())
+  userId String? @unique
+  user User? @relation(fields: [userId], references: [id])
+  nickname String
+  rank Rank @default(MEMBER)
+  combatRole CombatRole?
+  packId String?
+  pack Pack? @relation("PackMembers", fields: [packId], references: [id])
+  ledPacks Pack[] @relation("PackLeader")
+
+  // РЛ — не ранг, а назначение на конкретный ивент (раздел 2.6).
+  raidEvents Event[] @relation("EventRaidLead")
+
+  attendance Attendance[]
+  manualAttendance Attendance[] @relation("ManualAttendanceBy")
+  absences Absence[]
+  seenAbsences AbsenceSeen[]
+  bids Bid[]
+  awards LootAward[]
+  dkpEntries DkpEntry[]
+  manualDkpEntries DkpEntry[] @relation("ManualDkpBy")
+  gsRecords GearScoreRecord[]
+  primeTime PrimeTimeSlot[]
+  auditLogs AuditLog[]
+  createdAt DateTime @default(now())
+
+  @@index([packId])
+}
+
+/// Тип ивента — редактируемый справочник (гильдбосс, осада, контракты…).
+model EventType {
+  id String @id @default(cuid())
+  name String @unique
+  events Event[]
+}
+
+model Event {
+  id String @id @default(cuid())
+  eventTypeId String
+  eventType EventType @relation(fields: [eventTypeId], references: [id])
+  mode EventMode
+  status EventStatus @default(PLANNED)
+  scope EventScope @default(GUILD)
+  packId String?
+  pack Pack? @relation("EventPack")
+  kpId String?
+  kp KP? @relation("EventKP")
+  raidLeadId String
+  raidLead Member @relation("EventRaidLead", fields: [raidLeadId], references: [id])
+  startsAt DateTime
+  endsAt DateTime
+
+  /// Плата ДКП за ивент — фиксируется при создании (раздел 12, решение 1).
+  dkpReward Int
+  place String?
+  notes String?
+
+  checkInCodes CheckInCode[]
+  attendance Attendance[]
+  lootDrops LootDrop[]
+  dkpEntries DkpEntry[]
+  createdAt DateTime @default(now())
+
+  @@index([startsAt])
+  @@index([raidLeadId])
+}
+
+/// Чек-ин код (раздел 2.2). Хранится только хэш; окно задаётся генерацией.
+model CheckInCode {
+  id String @id @default(cuid())
+  eventId String
+  event Event @relation(fields: [eventId], references: [id])
+  phase CheckInPhase
+  codeHash String
+  windowOpensAt DateTime
+  windowClosesAt DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, phase])
+}
+
+model Attendance {
+  id String @id @default(cuid())
+  eventId String
+  event Event @relation(fields: [eventId], references: [id])
+  memberId String
+  member Member @relation(fields: [memberId], references: [id])
+  status AttendanceStatus?
+  checkinStart CheckInStatus @default(PENDING)
+  checkinEnd CheckInStatus @default(PENDING)
+  manualById String?
+  manualBy Member? @relation("ManualAttendanceBy", fields: [manualById], references: [id])
+  manualComment String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, memberId])
+}
+
+/// Отсутствие: поданная заявка сразу = уважительная причина (раздел 2.3).
+/// Дедлайн — за 3 минуты до старта ивента, задним числом нельзя (валидация в API).
+model Absence {
+  id String @id @default(cuid())
+  memberId String
+  member Member @relation(fields: [memberId], references: [id])
+  dateFrom DateTime
+  dateTo DateTime
+  reason String
+  status AbsenceStatus @default(ACTIVE)
+  seenBy AbsenceSeen[]
+  createdAt DateTime @default(now())
+
+  @@index([memberId, dateFrom])
+}
+
+/// Отметка «Увидел» от РЛ/офицера и выше — фиксация, на статус не влияет.
+model AbsenceSeen {
+  id String @id @default(cuid())
+  absenceId String
+  absence Absence @relation(fields: [absenceId], references: [id])
+  seenById String
+  seenBy Member @relation(fields: [seenById], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([absenceId, seenById])
+}
+
+model Item {
+  id String @id @default(cuid())
+  name String
+  rarity String?
+  slot String?
+
+  /// «кому нужна» — мультивыбор; ALL = без классовой наценки (раздел 2.4).
+  targetRoles ItemTargetRole[]
+  defaultStartPrice Int?
+  lootDrops LootDrop[]
+  createdAt DateTime @default(now())
+
+  @@unique([name])
+}
+
+model LootDrop {
+  id String @id @default(cuid())
+  eventId String
+  event Event @relation(fields: [eventId], references: [id])
+  itemId String
+  item Item @relation(fields: [itemId], references: [id])
+  auction Auction?
+  createdAt DateTime @default(now())
+
+  @@index([eventId])
+}
+
+/// Открытый аукцион (раздел 6): лоты любой длительности, настраиваемый анти-снайп.
+model Auction {
+  id String @id @default(cuid())
+  lootDropId String @unique
+  lootDrop LootDrop @relation(fields: [lootDropId], references: [id])
+  status AuctionStatus @default(OPEN)
+  startPrice Int @default(0)
+  step Int @default(1)
+
+  /// Живая раздача: 60–90 сек, таймер от первой ставки; длинный лот — на дни,
+  /// таймер от открытия лота.
+  durationSec Int
+  timerFromFirstBid Boolean @default(true)
+  antiSnipeSec Int @default(30)
+  firstBidAt DateTime?
+  endsAt DateTime?
+  bids Bid[]
+  award LootAward?
+  dkpEntries DkpEntry[]
+  createdAt DateTime @default(now())
+}
+
+model Bid {
+  id String @id @default(cuid())
+  auctionId String
+  auction Auction @relation(fields: [auctionId], references: [id])
+  memberId String
+  member Member @relation(fields: [memberId], references: [id])
+  amount Int
+  createdAt DateTime @default(now())
+
+  @@index([auctionId])
+}
+
+model LootAward {
+  id String @id @default(cuid())
+  auctionId String @unique
+  auction Auction @relation(fields: [auctionId], references: [id])
+  winnerId String
+  winner Member @relation(fields: [winnerId], references: [id])
+  finalPrice Int
+  markupPct Int @default(0) // применённая наценка «чужому» классу, %
+  createdAt DateTime @default(now())
+}
+
+/// ЖУРНАЛ ДКП — append-only. Баланс = SUM(amount), снапшоты для дашбордов — позже.
+model DkpEntry {
+  id String @id @default(cuid())
+  memberId String
+  member Member @relation(fields: [memberId], references: [id])
+  type DkpEntryType
+  amount Int // >0 начисление, <0 трата/корректировка
+  eventId String?
+  event Event? @relation(fields: [eventId], references: [id])
+  auctionId String?
+  auction Auction? @relation(fields: [auctionId], references: [id])
+  comment String?
+  createdById String?
+  createdBy Member? @relation("ManualDkpBy", fields: [createdById], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([memberId, createdAt])
+}
+
+model GearScoreRecord {
+  id String @id @default(cuid())
+  memberId String
+  member Member @relation(fields: [memberId], references: [id])
+  value Int
+
+  /// Путь к скрину профиля. GS без модерации (раздел 2.5): правило — на скрине
+  /// видны ник и GS; скрин старше 2 недель помечается иконкой «GS устарел».
+  screenshotPath String?
+  createdAt DateTime @default(now())
+
+  @@index([memberId, createdAt])
+}
+
+/// Прайм-тайм: интервалы по дням недели, редактирует сам игрок (раздел 2.5).
+model PrimeTimeSlot {
+  id String @id @default(cuid())
+  memberId String
+  member Member @relation(fields: [memberId], references: [id])
+  weekday Int // 0 = пн … 6 = вс
+  fromMinute Int // минуты от начала суток
+  toMinute Int
+  createdAt DateTime @default(now())
+
+  @@index([memberId])
+}
+
+/// Лог действий — на все действия пользователей (раздел 2.9).
+model AuditLog {
+  id String @id @default(cuid())
+  actorMemberId String?
+  actor Member? @relation(fields: [actorMemberId], references: [id])
+  action String // например: ROLE_CHANGE, MANUAL_ATTENDANCE, AUCTION_ASSIGN_WINNER
+  entityType String
+  entityId String
+  comment String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorMemberId])
+}
+
+/// Страницы правил (раздел 2.10): Markdown + эмодзи, редактируют Глава и Админ.
+model RulesPage {
+  slug String @id // "guild-rules" | "site-rules"
+  title String
+  contentMd String
+  version Int @default(1)
+  history RulesPageVersion[]
+  updatedAt DateTime @updatedAt
+}
+
+model RulesPageVersion {
+  id String @id @default(cuid())
+  pageSlug String
+  page RulesPage @relation(fields: [pageSlug], references: [slug])
+  contentMd String
+  version Int
+  createdAt DateTime @default(now())
+
+  @@unique([pageSlug, version])
+}
+
+/// Настройки системы: дефолты аукциона, окна чек-ина, наценка «чужим» классам.
+model Setting {
+  key String @id
+  value Json
+}
