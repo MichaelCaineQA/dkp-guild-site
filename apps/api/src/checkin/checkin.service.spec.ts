@@ -231,6 +231,24 @@ describe('CheckInService.submit', () => {
     );
   });
 
+  it('ревизия: отменённый/завершённый ивент — чек-ин недоступен (409), ДКП не начисляются', async () => {
+    const { db, dkp } = makeDb();
+    // Подменяем ивент на CANCELLED с тем же id
+    (db.event.findUnique as unknown) = async () => ({
+      ...EVENT,
+      status: 'CANCELLED',
+    });
+    const service = new CheckInService(db, SETTINGS, () => new Date('2026-03-03T16:58:00Z'), ENC_KEY);
+
+    await expect(service.submit('e-1', 'm-player', { code: '123' })).rejects.toThrow(
+      ConflictException,
+    );
+    await expect(service.raidLeadView('e-1', ACTOR, 'OFFICER')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(dkp).toHaveLength(0);
+  });
+
   it('двуxфазная изоляция: старт PASSED не мешает финалу', async () => {
     const { db } = makeDb();
     const seeded = new Map([['e-1:m-player', { checkinStart: 'PASSED', checkinEnd: 'PENDING' }]]);

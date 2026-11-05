@@ -12,6 +12,7 @@ import {
 import { useSession } from '../../components/session-context';
 import { api } from '../../lib/api';
 import { CheckInPanel, RaidLeadCodePanel } from '../../components/checkin-panels';
+import { AbsentMembersPanel } from '../../components/absent-members-panel';
 import {
   Badge,
   Button,
@@ -478,6 +479,9 @@ function EventCard({
           {canConduct && (event.status === 'PLANNED' || event.status === 'RUNNING') && (
             <RaidLeadCodePanel eventId={event.id} />
           )}
+
+          {/* Оформленно отсутствующие (план 2.3): всем, авто-отметка при закрытии */}
+          <AbsentMembersPanel eventStartsAt={event.startsAt} />
 
           {canConduct && event.status === 'PLANNED' && (
             <div className="mt-3 flex gap-2">
