@@ -15,18 +15,18 @@ import {
 } from '../../components/ui';
 
 /**
- * Витрина дизайна: все токены и UI-примитивы на живых примерах.
- * Страница для согласования стиля с главой гильдии — показываем её,
- * а не абстрактные палитры. Не требует входа: только демонстрация.
- * Когда дизайн согласован и внесён в токены, страница остаётся
- * живой документацией компонентов.
+ * Витрина дизайна: палитра и UI-примитивы на живых примерах.
+ * Канал согласования стиля с главой гильдии — показываем живую страницу,
+ * а не скриншоты. Спецификация — apps/web/DESIGN.md.
+ * Когда дизайн согласован и внесён, страница остаётся живой документацией
+ * компонентов. Не требует входа: только демонстрация.
  */
 export default function DesignPage() {
   return (
     <Page width="wide">
       <PageHeader
         title="Витрина дизайна"
-        subtitle="Все цвета, текстуры и компоненты сайта. Стиль меняется в одном месте — app/globals.css (токены), components/ui (примитивы) — и применяется ко всем страницам."
+        subtitle="Палитра и компоненты сайта. Спецификация — apps/web/DESIGN.md; палитра и шрифт — app/globals.css; вёрстка — components/ui. Для согласования показывайте эту страницу."
       />
 
       <Card>
@@ -47,8 +47,8 @@ export default function DesignPage() {
               ['Предупреждение', 'warning', 'bg-warning'],
             ] as const
           ).map(([title, token, cls]) => (
-            <div key={token} className="rounded-card border border-line">
-              <div className={`h-12 rounded-t-card ${cls}`} />
+            <div key={token} className="rounded-lg border border-line">
+              <div className={`h-12 rounded-t-lg ${cls}`} />
               <div className="p-2 text-xs">
                 <div className="font-medium text-primary">{title}</div>
                 <code className="text-secondary">{token}</code>

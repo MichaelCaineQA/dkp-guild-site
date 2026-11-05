@@ -21,7 +21,7 @@ export function UserMenu() {
   if (!user) {
     return (
       <a
-        className="rounded-card bg-accent px-4 py-1.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
+        className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
         href={`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/auth/discord`}
       >
         Войти через Discord

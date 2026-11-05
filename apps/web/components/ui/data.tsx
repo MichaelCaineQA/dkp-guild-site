@@ -18,8 +18,7 @@ export function Badge({
       className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]} ${className}`}
       {...props}
     />
-  );
-}
+  );}
 
 interface TableProps {
   children: ReactNode;
