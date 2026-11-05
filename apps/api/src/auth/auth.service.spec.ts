@@ -4,6 +4,8 @@ function makeDb(state: { users: UserRow[] }) {
   const db: AuthDb = {
     user: {
       count: async () => state.users.length,
+      findFirst: async ({ where }) =>
+        state.users.find((u) => u.username === where.username) ?? null,
       findUnique: async ({ where }) =>
         state.users.find((u) => u.id === where.id) ?? null,
       upsert: async ({ where, create, update }) => {

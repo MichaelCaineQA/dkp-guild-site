@@ -44,6 +44,24 @@ pnpm dev                 # web: http://localhost:3000, api: http://localhost:300
 | `pnpm lint` / `pnpm typecheck` / `pnpm test` | проверки по всему монорепо |
 | `pnpm format` | prettier |
 | `pnpm db:generate` / `pnpm db:migrate` / `pnpm db:seed` | Prisma-клиент / миграции / стартовые данные |
+| `pnpm db:seed:test` | тестовые пользователи для e2e (см. ниже) |
+
+## Тестирование
+
+**Юнит-тесты** — `pnpm test` (обязательны в каждом PR, CI гоняет их же).
+
+**Тестовый вход без Discord** (e2e, ручная проверка ролей на staging):
+
+```bash
+pnpm db:seed:test                          # создать test-leader/test-officer/test-member(-2)
+# в apps/api/.env: AUTH_TEST_MODE=true     # и перезапустить API
+curl -c cookies.txt -d '{"username":"test-officer"}' localhost:3001/auth/test-login
+curl -b cookies.txt localhost:3001/auth/me # сессия с рангом OFFICER
+```
+
+Без `AUTH_TEST_MODE=true` ручка отвечает 404. В production приложение
+с включённым флагом **не стартует** (fail-fast). Тестовые пользователи
+создаются только с никами `test-*`, за реальных людей войти нельзя.
 
 ## Разработка
 

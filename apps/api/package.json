@@ -10,7 +10,8 @@
     "test": "jest",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "db:seed:test": "ts-node prisma/seed-test.ts"
   },
   "dependencies": {
     "@dkp/shared": "workspace:*",

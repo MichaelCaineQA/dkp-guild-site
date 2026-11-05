@@ -20,3 +20,6 @@ next-env.d.ts
 # IDE
 .idea/
 .vscode/
+
+# локальный семантический индекс MCP codebase-index
+.codebase-index/

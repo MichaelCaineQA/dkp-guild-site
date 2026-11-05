@@ -15,7 +15,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,css,json,yml,yaml}\"",
     "db:generate": "pnpm --filter @dkp/api db:generate",
     "db:migrate": "pnpm --filter @dkp/api db:migrate",
-    "db:seed": "pnpm --filter @dkp/api db:seed"
+    "db:seed": "pnpm --filter @dkp/api db:seed",
+    "db:seed:test": "pnpm --filter @dkp/api db:seed:test"
   },
   "devDependencies": {
     "prettier": "^3.4.2",
