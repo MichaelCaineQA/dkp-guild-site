@@ -7,3 +7,4 @@ export * from './members';
 export * from './settings';
 export * from './schedule';
 export * from './checkin';
+export * from './absences';

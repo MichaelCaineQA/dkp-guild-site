@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EventsController } from './events.controller';
 import { EventsService, type EventsDb } from './events.service';
 
-/** Расписание ивентов (issue #8). */
+/** Расписание ивентов (issue #8). Экспортирует сервис для хука отсутствий (#11). */
 @Module({
   controllers: [EventsController],
   providers: [
@@ -14,5 +14,6 @@ import { EventsService, type EventsDb } from './events.service';
       inject: [PrismaService],
     },
   ],
+  exports: [EventsService],
 })
 export class EventsModule {}

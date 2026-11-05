@@ -10,6 +10,7 @@ const NAV_ITEMS: Array<{ href: string; label: string; permission?: Permission }>
   { href: '/', label: 'Главная' },
   { href: '/schedule', label: 'Расписание', permission: 'members.view_roster' },
   { href: '/roster', label: 'Состав', permission: 'members.view_roster' },
+  { href: '/absences', label: 'Отсутствия', permission: 'members.view_roster' },
   { href: '/link-requests', label: 'Заявки', permission: 'link_requests.review' },
   { href: '/settings', label: 'Настройки', permission: 'items.manage' },
   { href: '/design', label: 'Дизайн', permission: 'members.view_roster' },

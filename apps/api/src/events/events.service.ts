@@ -278,8 +278,26 @@ export class EventsService {
       id,
       `Статус ${event.status} → ${input.status}`,
     );
+
+    // Закрытие ивента: отсутствующим по уважительной — авто-отметка
+    // EXCUSED_ABSENCE (план 2.3, issue #11). Хук опционален: без него
+    // (старые вызовы/тесты) завершение работает как раньше.
+    if (input.status === 'FINISHED' && this.onEventFinished) {
+      const marked = await this.onEventFinished(id, event.startsAt);
+      if (marked > 0) {
+        await this.audit(
+          actor,
+          'ABSENCE_AUTO_MARK',
+          id,
+          `Отсутствующим по уважительной проставлен EXCUSED_ABSENCE (${marked})`,
+        );
+      }
+    }
     return { id, status: input.status };
   }
+
+  /** Хук завершения ивента — ставится модулем отсутствий (issue #11). */
+  onEventFinished?: (eventId: string, startsAt: Date) => Promise<number>;
 
   private toRow(event: {
     id: string;
