@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { SETTING_DEFAULTS } from '@dkp/shared';
@@ -5,6 +6,13 @@ import { AuthGuard, type AuthedRequest } from '../auth/auth.guard';
 import { PermissionsGuard, RequirePermission } from '../permissions/permissions.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { CheckInService, type CheckInDb, type CheckInSettings } from './checkin.service';
+
+/**
+ * Ключ AES для чек-ин кодов: в проде — env CHECKIN_ENC_KEY. Локально без
+ * ключа — случайный на время жизни процесса: окна живут 3 минуты, потеря
+ * при рестарте внутри окна редка и не страшна (прод задаёт ключ явно).
+ */
+const CHECKIN_ENC_KEY = process.env.CHECKIN_ENC_KEY || randomBytes(32).toString('hex');
 
 /**
  * Чек-ин кодами (issue #9): игрок отмечается в карточке ивента, РЛ видит
@@ -75,7 +83,7 @@ export class CheckInController {
       this.prisma as unknown as CheckInDb,
       settings,
       () => new Date(),
-      process.env.CHECKIN_ENC_KEY ?? '',
+      CHECKIN_ENC_KEY,
     );
   }
 }

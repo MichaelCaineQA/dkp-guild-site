@@ -1,0 +1,29 @@
+# Контекст сборки Docker: только исходники, без локальных артефактов.
+# Секреты (.env) в контекст не попадают — compose отдаёт их контейнеру
+# с хоста через env_file в рантайме.
+
+.git
+.github
+.zcode
+.codebase-index
+.idea
+.vscode
+docs
+scripts
+
+node_modules
+**/node_modules
+
+**/.next
+**/dist
+**/dist-seed
+**/coverage
+**/*.tsbuildinfo
+
+.env
+**/.env
+**/.env.*
+!**/.env.example
+
+pnpm-store
+*.log

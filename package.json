@@ -16,7 +16,11 @@
     "db:generate": "pnpm --filter @dkp/api db:generate",
     "db:migrate": "pnpm --filter @dkp/api db:migrate",
     "db:seed": "pnpm --filter @dkp/api db:seed",
-    "db:seed:test": "pnpm --filter @dkp/api db:seed:test"
+    "db:seed:test": "pnpm --filter @dkp/api db:seed:test",
+    "site:up": "docker compose --profile app up --build",
+    "site:up:bg": "docker compose --profile app up --build -d",
+    "site:down": "docker compose --profile app down",
+    "site:logs": "docker compose logs -f api web"
   },
   "devDependencies": {
     "prettier": "^3.4.2",

@@ -23,7 +23,17 @@ pnpm db:generate         # после изменения Prisma-схемы
 pnpm db:migrate          # создать/применить миграции (локально)
 pnpm dev                 # web: http://localhost:3000, api: :3001
 pnpm lint && pnpm typecheck && pnpm test && pnpm build   # перед PR
+
+# Весь сайт в контейнерах одной командой (Windows/macOS, Docker Desktop):
+pnpm site:up             # сборка + запуск: web :3000, api :3001, БД, Redis
+pnpm site:down           # остановить (данные БД сохраняются в томе)
 ```
+
+`pnpm site:up` собирает образы из `apps/api/Dockerfile` и
+`apps/web/Dockerfile`, применяет миграции и идемпотентный seed при старте;
+секреты берёт из `apps/api/.env` (без файла — dev-дефолты, вход только
+через настроенный Discord OAuth). Обычная разработка — как раньше,
+через `pnpm dev`.
 
 ## Непреложные правила архитектуры
 

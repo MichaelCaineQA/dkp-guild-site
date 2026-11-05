@@ -1,5 +1,13 @@
 # Локальная инфраструктура для разработки.
 # Прод-окружение разворачивается отдельно — см. docs/PLAN.md, раздел 8.
+#
+# Два режима (одинаково на Windows и macOS, нужен запущенный Docker Desktop):
+#   docker compose up -d            — только БД+Redis (для pnpm dev)
+#   pnpm site:up                    — весь сайт в контейнерах
+#     (= docker compose --profile app up --build)
+#
+# Приложение читает секреты из apps/api/.env (env_file ниже); DATABASE_URL
+# и REDIS_URL переопределяются на контейнерные хосты db/redis.
 services:
   db:
     image: postgres:16-alpine
@@ -23,6 +31,49 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
+
+  api:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      # Секреты (Discord, SESSION_SECRET, CHECKIN_ENC_KEY…) — с хоста;
+      # файл не обязателен: без него сайт поднимется с дефолтами dev-режима
+      - path: apps/api/.env
+        required: false
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://dkp:dkp@db:5432/dkp?schema=public
+      REDIS_URL: redis://redis:6379
+      PORT: "3001"
+      WEB_URL: ${WEB_URL:-http://localhost:3000}
+      # Локальный запуск по http://localhost — cookie без Secure-флага
+      COOKIE_SECURE: "false"
+    ports:
+      # Хостовые порты настраиваются в корневом .env (SITE_API_PORT/SITE_WEB_PORT):
+      # на Windows WinNAT может резервировать диапазоны и блокировать 3000/3001
+      - "${SITE_API_PORT:-3001}:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  web:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Вшивается в клиентский бандл; для нестандартного порта задать
+        # в корневом .env или переменной окружения при сборке
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+    ports:
+      - "${SITE_WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_started
 
 volumes:
   db-data:
