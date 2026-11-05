@@ -37,7 +37,7 @@ export function NavMenu() {
           <Link
             key={item.href}
             href={item.href}
-            className={`rounded-card px-3 py-1.5 text-sm ${
+            className={`rounded-lg px-3 py-1.5 text-sm ${
               active
                 ? 'bg-accent-soft font-semibold text-accent'
                 : 'text-secondary hover:bg-surface-muted hover:text-primary'

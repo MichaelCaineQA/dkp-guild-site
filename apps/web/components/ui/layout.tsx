@@ -3,9 +3,9 @@ import type { ReactNode } from 'react';
 /**
  * UI-примитивы (components/ui) — ЕДИНСТВЕННОЕ место, где появляется вёрстка
  * и стили. Страницы собирают экраны из этих блоков и не пишут стилей сами —
- * поэтому перевёрстка под новый дизайн = правка этого каталога и токенов,
- * а страницы (данные, обработчики, права) не меняются. Конвенции:
- * apps/web/README.md.
+ * поэтому перевёрстка под новый дизайн = правка этого каталога и палитры,
+ * а страницы (данные, обработчики, права) не меняются. Спецификация —
+ * apps/web/DESIGN.md.
  */
 
 /** Обёртка страницы: центрирует контент, задаёт поля и ширину. */
@@ -31,7 +31,7 @@ export function PageHeader({ title, subtitle }: { title: string; subtitle?: stri
 /** Карточка — основной контейнер контента. */
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <section className={`rounded-panel border border-line bg-surface p-5 shadow-(--shadow-card) ${className}`}>
+    <section className={`rounded-xl border border-line bg-surface p-5 shadow-sm ${className}`}>
       {children}
     </section>
   );
@@ -49,7 +49,7 @@ export function Notice({ tone = 'info', children }: { tone?: 'info' | 'success' 
     success: 'border-success/40 bg-success-soft text-success',
     danger: 'border-danger/40 bg-danger-soft text-danger',
   };
-  return <p className={`rounded-card border p-3 ${tones[tone]}`}>{children}</p>;
+  return <p className={`rounded-lg border p-3 ${tones[tone]}`}>{children}</p>;
 }
 
 /** Текст ошибки. */

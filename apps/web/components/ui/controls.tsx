@@ -13,7 +13,7 @@ export function Button({
   };
   return (
     <button
-      className={`rounded-card px-4 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
+      className={`rounded-lg px-4 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
       {...props}
     />
   );
@@ -23,7 +23,7 @@ export function Button({
 export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={`rounded-card border border-line bg-surface px-3 py-1.5 text-sm text-primary placeholder:text-disabled focus:border-accent focus:outline-none ${className}`}
+      className={`rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-primary placeholder:text-disabled focus:border-accent focus:outline-none ${className}`}
       {...props}
     />
   );
@@ -33,7 +33,7 @@ export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInpu
 export function Select({ className = '', children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className={`rounded-card border border-line bg-surface px-3 py-1.5 text-sm text-primary focus:border-accent focus:outline-none ${className}`}
+      className={`rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-primary focus:border-accent focus:outline-none ${className}`}
       {...props}
     >
       {children}
