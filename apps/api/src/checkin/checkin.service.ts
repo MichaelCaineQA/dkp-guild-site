@@ -149,7 +149,7 @@ export class CheckInService {
   async playerView(eventId: string, memberId: string): Promise<PlayerCheckInView> {
     const event = await this.mustGetEvent(eventId);
     const now = this.clock();
-    const phase = this.currentPhase(event, now) ?? 'START';
+    const phase = (await this.currentPhase(event, now)) ?? 'START';
 
     const existing = await this.db.attendance.findUnique({
       where: { eventId_memberId: { eventId, memberId } },
@@ -197,7 +197,7 @@ export class CheckInService {
     }
 
     const now = this.clock();
-    const phase = this.currentPhase(event, now) ?? 'START';
+    const phase = (await this.currentPhase(event, now)) ?? 'START';
     const stored = await this.ensureCode(event, phase);
     const windowState = checkInWindowState(now, stored.windowOpensAt, stored.windowClosesAt);
     const code = this.reveal(stored);
@@ -240,7 +240,7 @@ export class CheckInService {
       throw new ConflictException('Ивент отменён или завершён — чек-ин недоступен');
     }
     const now = this.clock();
-    const phase = this.currentPhase(event, now);
+    const phase = await this.currentPhase(event, now);
     if (phase === null) {
       throw new ConflictException('Чек-ин недоступен: окно не активно');
     }
@@ -303,17 +303,110 @@ export class CheckInService {
     return decryptCheckInCode(stored.codeEnc, this.encKeyHex);
   }
 
-  /** Текущая фаза по времени: START в [начало−N, конец), END в [конец, конец+N]. */
-  private currentPhase(event: { startsAt: Date; endsAt: Date }, now: Date): CheckInPhase | null {
+  /**
+   * Текущая фаза по времени: START в [начало−N, конец), END в [конец, конец+N].
+   * Досрочно запущенный END-код (план 2.2 п.5) перекрывает всё, включая
+   * ещё не открывшееся стартовое окно: РЛ закончил раньше плана.
+   */
+  private async currentPhase(
+    event: { id: string; startsAt: Date; endsAt: Date },
+    now: Date,
+  ): Promise<CheckInPhase | null> {
     const startBounds = phaseWindowBounds('START', event, this.settings);
     const endBounds = phaseWindowBounds('END', event, this.settings);
-    if (now >= startBounds.windowOpensAt && now < event.endsAt) {
-      return 'START';
-    }
     if (now >= endBounds.windowOpensAt && now <= endBounds.windowClosesAt) {
       return 'END';
     }
+    const earlyEnd = await this.db.checkInCode.findUnique({
+      where: { eventId_phase: { eventId: event.id, phase: 'END' } },
+    });
+    if (
+      earlyEnd &&
+      earlyEnd.codeEnc !== '' &&
+      now >= earlyEnd.windowOpensAt &&
+      now <= earlyEnd.windowClosesAt
+    ) {
+      return 'END';
+    }
+    if (now >= startBounds.windowOpensAt && now < event.endsAt) {
+      return 'START';
+    }
     return null;
+  }
+
+  /**
+   * Досрочный финальный код (план 2.2 п.5): РЛ закончил раньше плана —
+   * кнопка запускает END-окно от текущего момента. Если плановое окно
+   * уже открыто/прошло или код уже сгенерирован — 409 (нет смысла).
+   * Возвращает код один раз — РЛ видит его на странице проведения.
+   */
+  async startEndCodeEarly(
+    eventId: string,
+    actor: EventsActor,
+    actorRank: string | null,
+  ): Promise<RaidLeadCheckInView> {
+    const event = await this.mustGetEvent(eventId);
+    const allowed =
+      can(
+        { rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId },
+        'events.conduct',
+      ) || actor.memberId === event.raidLeadId;
+    if (!allowed) {
+      throw new ForbiddenException('Досрочный код — РЛ ивента или офицеру');
+    }
+    if (event.status === 'CANCELLED' || event.status === 'FINISHED') {
+      throw new ConflictException('Ивент отменён или завершён');
+    }
+
+    const existing = await this.db.checkInCode.findUnique({
+      where: { eventId_phase: { eventId: event.id, phase: 'END' } },
+    });
+    if (existing) {
+      const windowState = checkInWindowState(this.clock(), existing.windowOpensAt, existing.windowClosesAt);
+      if (windowState !== 'CLOSED') {
+        throw new ConflictException('Финальный код уже сгенерирован');
+      }
+      // Прошедшее пустое окно можно пересоздать досрочным? Нет: плановое
+      // окно уже было — «досрочным» его не сделать, это история.
+      throw new ConflictException('Плановое финальное окно уже прошло');
+    }
+
+    const planned = phaseWindowBounds('END', event, this.settings);
+    const now = this.clock();
+    if (now >= planned.windowOpensAt) {
+      throw new ConflictException('Плановое окно уже открылось — используйте обычный код');
+    }
+
+    // Досрочное окно: от сейчас, длительность — та же настройка
+    const bounds = {
+      windowOpensAt: new Date(now.getTime()),
+      windowClosesAt: new Date(now.getTime() + this.settings.windowSec * 1000),
+    };
+    const { code, salt, codeHash } = newCodeWithHash();
+    const stored: StoredCode = {
+      codeHash,
+      salt,
+      codeEnc: encryptCheckInCode(code, this.encKeyHex),
+      ...bounds,
+    };
+    await this.db.checkInCode.create({
+      data: {
+        eventId: event.id,
+        phase: 'END',
+        codeHash,
+        salt,
+        codeEnc: stored.codeEnc,
+        windowOpensAt: bounds.windowOpensAt,
+        windowClosesAt: bounds.windowClosesAt,
+      },
+    });
+    return {
+      phase: 'END',
+      windowState: 'ACTIVE',
+      code,
+      windowOpensAt: bounds.windowOpensAt,
+      windowClosesAt: bounds.windowClosesAt,
+    };
   }
 
   /**

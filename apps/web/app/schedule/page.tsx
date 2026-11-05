@@ -488,6 +488,12 @@ function EventCard({
               <Button variant="primary" disabled={busy} onClick={() => changeStatus('RUNNING')}>
                 Начать ивент
               </Button>
+              <a
+                href={`/schedule/${event.id}/conduct`}
+                className="rounded-lg border border-line bg-surface px-4 py-1.5 text-sm font-medium hover:bg-surface-muted"
+              >
+                Страница проведения
+              </a>
               <Button disabled={busy} onClick={() => changeStatus('CANCELLED')}>
                 Отменить
               </Button>
@@ -498,6 +504,12 @@ function EventCard({
               <Button variant="primary" disabled={busy} onClick={() => changeStatus('FINISHED')}>
                 Завершить
               </Button>
+              <a
+                href={`/schedule/${event.id}/conduct`}
+                className="rounded-lg border border-line bg-surface px-4 py-1.5 text-sm font-medium hover:bg-surface-muted"
+              >
+                Страница проведения
+              </a>
               <Button disabled={busy} onClick={() => changeStatus('CANCELLED')}>
                 Отменить
               </Button>

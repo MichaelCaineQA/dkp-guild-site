@@ -276,3 +276,56 @@ describe('CheckInService: игрок получает варианты без р
     expect(Object.keys(view).sort()).toEqual(['choices', 'phase', 'status', 'windowState']);
   });
 });
+
+describe('CheckInService.startEndCodeEarly', () => {
+  it('досрочный финальный код: окно от «сейчас», фаза переключается на END', async () => {
+    const { db } = makeDb();
+    // Ивент идёт: now внутри START-фазы (18:30 при конце 19:00)
+    const clock: Clock = () => new Date('2026-03-03T18:30:00Z');
+    const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
+
+    const early = await service.startEndCodeEarly('e-1', ACTOR, 'OFFICER');
+    expect(early.phase).toBe('END');
+    expect(early.windowState).toBe('ACTIVE');
+    expect(early.code).toMatch(/^\d{3}$/);
+    // Окно длится настройку windowSec от момента запуска
+    expect(early.windowOpensAt.getTime()).toBe(new Date('2026-03-03T18:30:00Z').getTime());
+    expect(early.windowClosesAt.getTime()).toBe(new Date('2026-03-03T18:33:00Z').getTime());
+
+    // Игрок теперь в фазе END (не START) и получает варианты финального кода
+    const player = await service.playerView('e-1', 'm-player');
+    expect(player.phase).toBe('END');
+    expect(player.choices).toContain(early.code);
+  });
+
+  it('повторный досрочный запуск — 409', async () => {
+    const { db } = makeDb();
+    const clock: Clock = () => new Date('2026-03-03T18:30:00Z');
+    const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
+
+    await service.startEndCodeEarly('e-1', ACTOR, 'OFFICER');
+    await expect(service.startEndCodeEarly('e-1', ACTOR, 'OFFICER')).rejects.toThrow(
+      ConflictException,
+    );
+  });
+
+  it('когда плановое окно уже открылось — 409 «используйте обычный код»', async () => {
+    const { db } = makeDb();
+    const clock: Clock = () => new Date('2026-03-03T19:01:00Z'); // плановое END-окно
+    const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
+
+    await expect(service.startEndCodeEarly('e-1', ACTOR, 'OFFICER')).rejects.toThrow(
+      ConflictException,
+    );
+  });
+
+  it('рядовой-не-РЛ не может запустить досрочно — 403', async () => {
+    const { db } = makeDb();
+    const clock: Clock = () => new Date('2026-03-03T18:30:00Z');
+    const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
+
+    await expect(
+      service.startEndCodeEarly('e-1', { memberId: 'm-other', isAdmin: false }, 'MEMBER'),
+    ).rejects.toThrow(ForbiddenException);
+  });
+});
