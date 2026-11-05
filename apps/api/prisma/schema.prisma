@@ -138,12 +138,36 @@ model Pack {
   @@index([kpId])
 }
 
+/// Учётная запись для входа: Discord-пользователь либо резервный админ
+/// (тогда discordId пустой, вход по паролю из env).
 model User {
   id String @id @default(cuid())
-  discordId String @unique
+  discordId String? @unique
   username String
   member Member?
+  linkRequests MemberLinkRequest[]
   createdAt DateTime @default(now())
+}
+
+/// Заявка на привязку «Discord ↔ профиль члена гильдии» (план 2.9):
+/// вошедший без Member указывает свой игровой ник, офицер подтверждает.
+model MemberLinkRequest {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id])
+  nickname String
+  status MemberLinkRequestStatus @default(PENDING)
+  resolvedById String?
+  resolvedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, nickname])
+}
+
+enum MemberLinkRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model Member {
