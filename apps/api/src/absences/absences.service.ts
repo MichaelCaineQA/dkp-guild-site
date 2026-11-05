@@ -61,15 +61,16 @@ export interface AbsencesDb {
   };
   event: {
     findMany(args: {
-      where: { startsAt: { gte: Date; lte: Date }; status: string };
+      where: { startsAt: { gte: Date; lte: Date }; status: string | { notIn: string[] } };
       select: { startsAt: true };
     }): Promise<Array<{ startsAt: Date }>>;
   };
   attendance: {
-    upsert(args: {
+    findUnique(args: {
       where: { eventId_memberId: { eventId: string; memberId: string } };
-      create: { eventId: string; memberId: string; status: string };
-      update: { status: string };
+    }): Promise<{ status: string | null } | null>;
+    create(args: {
+      data: { eventId: string; memberId: string; status: string };
     }): Promise<unknown>;
   };
   auditLog: AuditWriter;
@@ -132,12 +133,15 @@ export class AbsencesService {
   async create(memberId: string, body: unknown, actor: AbsencesActor): Promise<{ id: string }> {
     const input: CreateAbsenceInput = createAbsenceSchema.parse(body);
 
-    // Ивенты будущего периода заявки: от now до dateTo
+    // Ивенты, попадающие в период заявки, включая уже начавшиеся:
+    // идущий (RUNNING) ивент тем более «меньше 3 минут до старта» —
+    // план 2.3 запрещает заявку и на него. Завершённые (FINISHED/
+    // CANCELLED) не блокируют: их период уже прошёл.
     const now = this.clock();
     const events = await this.db.event.findMany({
       where: {
         startsAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000), lte: input.dateTo },
-        status: 'PLANNED',
+        status: { notIn: ['FINISHED', 'CANCELLED'] },
       },
       select: { startsAt: true },
     });
@@ -229,20 +233,30 @@ export class AbsencesService {
    * Авто-отметка при закрытии ивента (план 2.3): отсутствующим по
    * уважительной ставится EXCUSED_ABSENCE — очков нет, «неявкой» не
    * считается. Вызывается из events при переходе в FINISHED.
+   *
+   * Не трогаем существующие отметки: игрок мог передумать, прийти и
+   * отметиться кодом (PASSED) или получить ручную отметку РЛ — отсутствие
+   * на дату не должно их затирать. Ставим только тем, кого ещё не отмечали.
    */
   async markExcusedForFinishedEvent(
     eventId: string,
     eventStartsAt: Date,
   ): Promise<number> {
     const absent = await this.forEvent(eventStartsAt);
+    let marked = 0;
     for (const row of absent) {
-      await this.db.attendance.upsert({
+      const existing = await this.db.attendance.findUnique({
         where: { eventId_memberId: { eventId, memberId: row.memberId } },
-        create: { eventId, memberId: row.memberId, status: 'EXCUSED_ABSENCE' },
-        update: { status: 'EXCUSED_ABSENCE' },
       });
+      if (existing) {
+        continue; // уже отмечен (чек-ин/руками) — не перезаписываем
+      }
+      await this.db.attendance.create({
+        data: { eventId, memberId: row.memberId, status: 'EXCUSED_ABSENCE' },
+      });
+      marked++;
     }
-    return absent.length;
+    return marked;
   }
 
   private async mustExist(id: string) {

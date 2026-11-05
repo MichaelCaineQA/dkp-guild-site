@@ -184,6 +184,9 @@ export class CheckInService {
     actorRank: string | null,
   ): Promise<RaidLeadCheckInView> {
     const event = await this.mustGetEvent(eventId);
+    if (event.status === 'CANCELLED' || event.status === 'FINISHED') {
+      throw new ConflictException('Ивент отменён или завершён — чек-ин недоступен');
+    }
     const allowed =
       can(
         { rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId },
@@ -233,6 +236,9 @@ export class CheckInService {
   ): Promise<{ result: 'PASSED' | 'FAILED' }> {
     const input: SubmitCheckInInput = submitCheckInSchema.parse(body);
     const event = await this.mustGetEvent(eventId);
+    if (event.status === 'CANCELLED' || event.status === 'FINISHED') {
+      throw new ConflictException('Ивент отменён или завершён — чек-ин недоступен');
+    }
     const now = this.clock();
     const phase = this.currentPhase(event, now);
     if (phase === null) {

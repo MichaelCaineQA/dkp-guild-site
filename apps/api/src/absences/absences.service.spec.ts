@@ -73,19 +73,22 @@ function makeDb(seed: Array<Partial<AbsenceRecord> & { id: string }> = []) {
           (e) =>
             e.startsAt >= (where?.startsAt?.gte ?? new Date(0)) &&
             e.startsAt <= (where?.startsAt?.lte ?? new Date(8640000000000000)) &&
-            e.status === where?.status,
+            (typeof where?.status === 'string'
+              ? e.status === where.status
+              : where?.status && 'notIn' in where.status
+                ? !where.status.notIn.includes(e.status)
+                : true),
         ),
     },
     attendance: {
-      upsert: async ({ where, create, update }) => {
-        const existing = attendance.find(
-          (a) => a.eventId === where.eventId_memberId.eventId && a.memberId === where.eventId_memberId.memberId,
-        );
-        if (existing) {
-          existing.status = update.status;
-        } else {
-          attendance.push({ ...create });
-        }
+      findUnique: async ({ where }) =>
+        attendance.find(
+          (a) =>
+            a.eventId === where.eventId_memberId.eventId &&
+            a.memberId === where.eventId_memberId.memberId,
+        ) ?? null,
+      create: async ({ data }) => {
+        attendance.push({ ...data });
       },
     },
     auditLog: {
@@ -139,6 +142,20 @@ describe('AbsencesService.create', () => {
     const { db, events } = makeDb();
     // Ивент через 2 минуты — в периоде заявки
     events.push({ startsAt: new Date('2026-03-10T12:02:00Z'), status: 'PLANNED' });
+    const service = new AbsencesService(db, SETTINGS, clock);
+
+    await expect(
+      service.create(
+        'm-1',
+        createBody({ dateFrom: '2026-03-10T00:00:00Z', dateTo: '2026-03-11T00:00:00Z' }),
+        ACTOR,
+      ),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('ревизия: уже начавшийся (RUNNING) ивент в периоде — заявку подать нельзя', async () => {
+    const { db, events } = makeDb();
+    events.push({ startsAt: new Date('2026-03-10T11:00:00Z'), status: 'RUNNING' }); // начался час назад
     const service = new AbsencesService(db, SETTINGS, clock);
 
     await expect(
@@ -223,6 +240,17 @@ describe('AbsencesService.forEvent / markExcusedForFinishedEvent', () => {
       { eventId: 'e-1', memberId: 'm-1', status: 'EXCUSED_ABSENCE' },
       { eventId: 'e-1', memberId: 'm-2', status: 'EXCUSED_ABSENCE' },
     ]);
+  });
+
+  it('ревизия: не перезаписывает существующие отметки (чек-ин PASSED остаётся)', async () => {
+    const { db, attendance } = makeDb([{ id: 'a-1', memberId: 'm-1' }]);
+    // m-1 пришёл и отметился кодом до закрытия ивента
+    attendance.push({ eventId: 'e-1', memberId: 'm-1', status: 'PRESENT' });
+    const service = new AbsencesService(db, SETTINGS, clock);
+
+    const marked = await service.markExcusedForFinishedEvent('e-1', new Date('2026-03-20T17:00:00Z'));
+    expect(marked).toBe(0); // никого нового не отметили
+    expect(attendance).toEqual([{ eventId: 'e-1', memberId: 'm-1', status: 'PRESENT' }]);
   });
 });
 
