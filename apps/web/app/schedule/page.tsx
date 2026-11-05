@@ -11,6 +11,7 @@ import {
 } from '@dkp/shared';
 import { useSession } from '../../components/session-context';
 import { api } from '../../lib/api';
+import { CheckInPanel, RaidLeadCodePanel } from '../../components/checkin-panels';
 import {
   Badge,
   Button,
@@ -469,6 +470,14 @@ function EventCard({
               </>
             )}
           </dl>
+
+          {/* Чек-ин кодами (план 2.2): игрок отмечается, РЛ видит код */}
+          {(event.status === 'PLANNED' || event.status === 'RUNNING') && (
+            <CheckInPanel eventId={event.id} />
+          )}
+          {canConduct && (event.status === 'PLANNED' || event.status === 'RUNNING') && (
+            <RaidLeadCodePanel eventId={event.id} />
+          )}
 
           {canConduct && event.status === 'PLANNED' && (
             <div className="mt-3 flex gap-2">

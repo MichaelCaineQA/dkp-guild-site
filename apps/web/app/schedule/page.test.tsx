@@ -55,6 +55,20 @@ describe('SchedulePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api).mockImplementation(async (path: string) => {
+      if (path.startsWith('/events') && path.endsWith('/checkin/me')) {
+        // Чек-ин игрока: окно закрыто (ивент в будущем)
+        return { phase: 'START', windowState: 'NOT_OPEN_YET', choices: [], status: 'PENDING' };
+      }
+      if (path.startsWith('/events') && path.endsWith('/checkin/code')) {
+        // Код РЛ: окно ещё не открылось
+        return {
+          phase: 'START',
+          windowState: 'NOT_OPEN_YET',
+          code: '',
+          windowOpensAt: '2026-03-03T16:57:00Z',
+          windowClosesAt: '2026-03-03T17:00:00Z',
+        };
+      }
       if (path.startsWith('/events')) {
         return [eventFixture()];
       }

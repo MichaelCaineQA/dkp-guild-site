@@ -243,13 +243,17 @@ model Event {
   @@index([seriesId])
 }
 
-/// Чек-ин код (раздел 2.2). Хранится только хэш; окно задаётся генерацией.
+/// Чек-ин код (раздел 2.2). Сверка попыток — по хэшу с солью; отдельное
+/// поле codeEnc хранит код зашифрованным AES-256-GCM (ключ в env) для
+/// повторного показа РЛ: открытым текстом код в БД не хранится.
 model CheckInCode {
   id String @id @default(cuid())
   eventId String
   event Event @relation(fields: [eventId], references: [id])
   phase CheckInPhase
   codeHash String
+  salt String
+  codeEnc String @default("")
   windowOpensAt DateTime
   windowClosesAt DateTime
   createdAt DateTime @default(now())
