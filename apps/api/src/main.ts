@@ -6,6 +6,13 @@ import passport from 'passport';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
+  // Тестовый вход (/auth/test-login) — только для dev/staging/e2e.
+  // Если флаг забыли выключить на проде — падаем сразу, а не отдаём
+  // «войдите кем угодно» наружу.
+  if (process.env.NODE_ENV === 'production' && process.env.AUTH_TEST_MODE === 'true') {
+    throw new Error('AUTH_TEST_MODE включён в production — тестовый вход запрещён');
+  }
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // httpOnly-cookie сессия: единая для API и SSR-страниц Next (план 2.9).

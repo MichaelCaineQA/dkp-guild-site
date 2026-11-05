@@ -5,6 +5,10 @@ import type { SessionUser } from './session.types';
 export interface AuthDb {
   user: {
     count(): Promise<number>;
+    findFirst(args: {
+      where: { username: string };
+      include: { member: { select: { id: true; rank: true } } };
+    }): Promise<UserRow | null>;
     findUnique(args: {
       where: { id: string };
       include: { member: { select: { id: true; rank: true } } };
@@ -88,6 +92,26 @@ export class AuthService {
         memberId: null,
         rank: null,
         isAdmin: true,
+      };
+    }
+    // Тестовые пользователи e2e (issue #20): User в БД создаёт db:seed:test,
+    // ранг и Member перечитываются из него. isAdmin всегда false — он
+    // зарезервирован за резервным админом (admin:).
+    if (userId.startsWith('test:')) {
+      const username = userId.slice('test:'.length);
+      const user = await this.db.user.findFirst({
+        where: { username },
+        include: { member: { select: { id: true, rank: true } } },
+      });
+      if (!user) {
+        return { userId, username, memberId: null, rank: null, isAdmin: false };
+      }
+      return {
+        userId: user.id,
+        username: user.username,
+        memberId: user.member?.id ?? null,
+        rank: (user.member?.rank as SessionUser['rank']) ?? null,
+        isAdmin: false,
       };
     }
     const user = await this.db.user.findUnique({

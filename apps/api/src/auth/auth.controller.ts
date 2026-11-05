@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  NotFoundException,
   Param,
   Post,
   Req,
@@ -16,6 +17,7 @@ import { createLinkRequestSchema, type SessionUser } from '@dkp/shared';
 import { AuthService } from './auth.service';
 import { AuthGuard, MinRank, type AuthedRequest } from './auth.guard';
 import { LinkRequestService } from './link-request.service';
+import { performTestLogin } from './test-login';
 
 const WEB_URL = process.env.WEB_URL ?? 'http://localhost:3000';
 
@@ -86,6 +88,28 @@ export class AuthController {
       res.clearCookie('dkp.sid');
       res.json({ ok: true });
     });
+  }
+
+  /**
+   * Тестовый вход для e2e и ручной проверки ролей (issue #20): выдаёт
+   * обычную сессионную cookie. Доступен только при AUTH_TEST_MODE=true —
+   * иначе ручка отвечает 404, как будто её нет.
+   */
+  @Post('test-login')
+  @HttpCode(200)
+  testLogin(
+    @Body() body: { username?: string },
+    @Req() req: AuthedRequest,
+  ): { ok: boolean; error?: string } {
+    const result = performTestLogin(body, process.env.AUTH_TEST_MODE);
+    if (result.error === 'NOT_FOUND') {
+      throw new NotFoundException();
+    }
+    if (result.ok && result.user) {
+      // Роль/Member лежат в БД (pnpm db:seed:test), /auth/me перечитает их.
+      req.session!.user = result.user;
+    }
+    return { ok: result.ok, error: result.error };
   }
 
   /** Заявка на привязку своего Discord к нику члена гильдии. */
