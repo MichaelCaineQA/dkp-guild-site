@@ -1,0 +1,363 @@
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  EVENT_TRANSITIONS,
+  can,
+  changeEventStatusSchema,
+  createEventApiSchema,
+  createEventSeriesSchema,
+  eventsQuerySchema,
+  generateSeriesEvents,
+  updateEventSchema,
+  type ChangeEventStatusInput,
+  type CreateEventApiInput,
+  type CreateEventSeriesInput,
+  type EventsQuery,
+  type UpdateEventInput,
+} from '@dkp/shared';
+import type { AuditWriter } from '../members/members.service';
+
+/** Строка списка/календаря. */
+export interface EventRow {
+  id: string;
+  eventTypeId: string;
+  eventTypeName: string;
+  mode: string;
+  status: string;
+  startsAt: Date;
+  endsAt: Date;
+  dkpReward: number;
+  raidLeadId: string;
+  raidLeadName: string;
+  place: string | null;
+  notes: string | null;
+}
+
+export interface EventDetail extends EventRow {
+  seriesId: string | null;
+}
+
+/** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
+export interface EventsDb {
+  eventType: {
+    findUnique(args: { where: { id: string } }): Promise<{ id: string; name: string } | null>;
+  };
+  member: {
+    findUnique(args: { where: { id: string } }): Promise<{ id: string; nickname: string } | null>;
+  };
+  event: {
+    findMany(args: {
+      where: {
+        startsAt?: { gte?: Date; lte?: Date };
+        eventTypeId?: string;
+        mode?: string;
+        status?: { not: string };
+      };
+      orderBy: { startsAt: 'asc' };
+      include: { eventType: { select: { name: true } }; raidLead: { select: { nickname: true } } };
+    }): Promise<
+      Array<{
+        id: string;
+        eventTypeId: string;
+        mode: string;
+        status: string;
+        startsAt: Date;
+        endsAt: Date;
+        dkpReward: number;
+        raidLeadId: string;
+        place: string | null;
+        notes: string | null;
+        seriesId: string | null;
+        eventType: { name: string };
+        raidLead: { nickname: string };
+      }>
+    >;
+    findUnique(args: {
+      where: { id: string };
+      include: { eventType: { select: { name: true } }; raidLead: { select: { nickname: true } } };
+    }): Promise<(EventDetail & { eventType: { name: string }; raidLead: { nickname: string } }) | null>;
+    create(args: {
+      data: {
+        eventTypeId: string;
+        mode: string;
+        startsAt: Date;
+        endsAt: Date;
+        dkpReward: number;
+        raidLeadId: string;
+        place?: string | null;
+        notes?: string | null;
+        seriesId?: string;
+      };
+    }): Promise<{ id: string; startsAt: Date }>;
+    update(args: {
+      where: { id: string };
+      data: Record<string, unknown>;
+    }): Promise<{ id: string }>;
+    deleteMany(args: { where: { seriesId: string; status: string } }): Promise<{ count: number }>;
+    count(args: { where: { seriesId: string; status: { not: string } } }): Promise<number>;
+  };
+  auditLog: AuditWriter;
+}
+
+/** Действующий пользователь сессии — для прав и аудита. */
+export interface EventsActor {
+  memberId: string | null;
+  isAdmin: boolean;
+}
+
+/**
+ * Расписание ивентов (issue #8, план 2.1). Плата ДКП фиксируется при
+ * создании и дальше неизменяема (решение гильдии №1). Редактирование —
+ * офицеры+ или РЛ этого ивента (механизм «РЛ ивента» из 2.6).
+ */
+@Injectable()
+export class EventsService {
+  constructor(private readonly db: EventsDb) {}
+
+  /** Список за период с фильтрами — календарь и «ближайшие». */
+  async list(query: unknown): Promise<EventRow[]> {
+    const filters: EventsQuery = eventsQuerySchema.parse(query);
+    const where: {
+      startsAt?: { gte?: Date; lte?: Date };
+      eventTypeId?: string;
+      mode?: string;
+    } = {};
+    if (filters.from) {
+      where.startsAt = { ...where.startsAt, gte: filters.from };
+    }
+    if (filters.to) {
+      where.startsAt = { ...where.startsAt, lte: filters.to };
+    }
+    if (filters.eventTypeId) {
+      where.eventTypeId = filters.eventTypeId;
+    }
+    if (filters.mode) {
+      where.mode = filters.mode;
+    }
+
+    const events = await this.db.event.findMany({
+      where,
+      orderBy: { startsAt: 'asc' },
+      include: {
+        eventType: { select: { name: true } },
+        raidLead: { select: { nickname: true } },
+      },
+    });
+    return events.map((event) => this.toRow(event));
+  }
+
+  async getOne(id: string): Promise<EventDetail> {
+    const event = await this.mustExist(id);
+    return { ...this.toRow(event), seriesId: event.seriesId };
+  }
+
+  /** Создание ивента (events.manage — офицеры+). */
+  async create(body: unknown, actor: EventsActor): Promise<{ id: string }> {
+    const input: CreateEventApiInput = createEventApiSchema.parse(body);
+    await this.mustExistEventType(input.eventTypeId);
+    await this.mustExistMember(input.raidLeadId);
+    this.assertValidRange(input.startsAt, input.endsAt);
+
+    const created = await this.db.event.create({
+      data: {
+        eventTypeId: input.eventTypeId,
+        mode: input.mode,
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+        dkpReward: input.dkpReward,
+        raidLeadId: input.raidLeadId,
+        place: input.place ?? null,
+        notes: input.notes ?? null,
+      },
+    });
+    await this.audit(actor, 'EVENT_CREATE', created.id, this.describeCreated(input));
+    return { id: created.id };
+  }
+
+  /**
+   * Серия по шаблону (issue #8): «вт/чт 20:00 × N недель» одним действием.
+   * Все ивенты серии несут общий seriesId — удаляются тоже целиком.
+   */
+  async createSeries(body: unknown, actor: EventsActor): Promise<{ seriesId: string; created: number }> {
+    const input: CreateEventSeriesInput = createEventSeriesSchema.parse(body);
+    await this.mustExistEventType(input.eventTypeId);
+    await this.mustExistMember(input.raidLeadId);
+    this.assertValidRange(input.startsAt, input.endsAt);
+
+    const seriesId = `series-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    let created = 0;
+    for (const slot of generateSeriesEvents(input)) {
+      await this.db.event.create({
+        data: {
+          eventTypeId: input.eventTypeId,
+          mode: input.mode,
+          startsAt: slot.startsAt,
+          endsAt: slot.endsAt,
+          dkpReward: input.dkpReward,
+          raidLeadId: input.raidLeadId,
+          place: input.place ?? null,
+          notes: input.notes ?? null,
+          seriesId,
+        },
+      });
+      created++;
+    }
+    await this.audit(
+      actor,
+      'EVENT_SERIES_CREATE',
+      seriesId,
+      `Серия из ${created} ивентов: ${input.startsAt.toISOString()} × ${input.weeks} нед.`,
+    );
+    return { seriesId, created };
+  }
+
+  /** Удаление серии целиком — только пока все ивенты PLANNED (issue #8). */
+  async deleteSeries(seriesId: string, actor: EventsActor): Promise<{ deleted: number }> {
+    const active = await this.db.event.count({
+      where: { seriesId, status: { not: 'PLANNED' } },
+    });
+    if (active > 0) {
+      throw new ConflictException('В серии есть незапланированные ивенты — удалить нельзя');
+    }
+    const result = await this.db.event.deleteMany({ where: { seriesId, status: 'PLANNED' } });
+    await this.audit(
+      actor,
+      'EVENT_SERIES_DELETE',
+      seriesId,
+      `Удалена серия целиком (${result.count} ивентов)`,
+    );
+    return { deleted: result.count };
+  }
+
+  /**
+   * Редактирование: офицеры+ (проверил guard по events.manage) или РЛ
+   * этого ивента — точечная проверка can() с target.raidLeadId (2.6).
+   * Плата ДКП в схеме отсутствует — попытка её передать отбрасывается zod'ом.
+   */
+  async update(id: string, body: unknown, actor: EventsActor, actorRank: string | null): Promise<{ id: string }> {
+    const input: UpdateEventInput = updateEventSchema.parse(body);
+    const event = await this.mustExist(id);
+
+    const isRl = actor.memberId === event.raidLeadId;
+    const isOfficer = can({ rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId }, 'events.manage');
+    if (!isOfficer && !isRl) {
+      throw new ForbiddenException('Редактировать может офицер или РЛ ивента');
+    }
+
+    if (input.eventTypeId) {
+      await this.mustExistEventType(input.eventTypeId);
+    }
+    if (input.raidLeadId) {
+      await this.mustExistMember(input.raidLeadId);
+    }
+    const startsAt = input.startsAt ?? event.startsAt;
+    const endsAt = input.endsAt ?? event.endsAt;
+    this.assertValidRange(startsAt, endsAt);
+
+    await this.db.event.update({
+      where: { id },
+      data: { ...input, place: input.place ?? undefined, notes: input.notes ?? undefined },
+    });
+    await this.audit(actor, 'EVENT_UPDATE', id, `Изменён ивент ${event.startsAt.toISOString()}`);
+    return { id };
+  }
+
+  /** Смена статуса: planned → running → finished / cancelled (план 2.1). */
+  async changeStatus(id: string, body: unknown, actor: EventsActor): Promise<{ id: string; status: string }> {
+    const input: ChangeEventStatusInput = changeEventStatusSchema.parse(body);
+    const event = await this.mustExist(id);
+
+    const allowed = EVENT_TRANSITIONS[event.status] ?? [];
+    if (!allowed.includes(input.status)) {
+      throw new ConflictException(`Переход ${event.status} → ${input.status} невозможен`);
+    }
+
+    await this.db.event.update({ where: { id }, data: { status: input.status } });
+    await this.audit(
+      actor,
+      'EVENT_STATUS_CHANGE',
+      id,
+      `Статус ${event.status} → ${input.status}`,
+    );
+    return { id, status: input.status };
+  }
+
+  private toRow(event: {
+    id: string;
+    eventTypeId: string;
+    mode: string;
+    status: string;
+    startsAt: Date;
+    endsAt: Date;
+    dkpReward: number;
+    raidLeadId: string;
+    place: string | null;
+    notes: string | null;
+    eventType: { name: string };
+    raidLead: { nickname: string };
+  }): EventRow {
+    return {
+      id: event.id,
+      eventTypeId: event.eventTypeId,
+      eventTypeName: event.eventType.name,
+      mode: event.mode,
+      status: event.status,
+      startsAt: event.startsAt,
+      endsAt: event.endsAt,
+      dkpReward: event.dkpReward,
+      raidLeadId: event.raidLeadId,
+      raidLeadName: event.raidLead.nickname,
+      place: event.place,
+      notes: event.notes,
+    };
+  }
+
+  private async mustExist(id: string) {
+    const event = await this.db.event.findUnique({
+      where: { id },
+      include: {
+        eventType: { select: { name: true } },
+        raidLead: { select: { nickname: true } },
+      },
+    });
+    if (!event) {
+      throw new NotFoundException('Ивент не найден');
+    }
+    return event;
+  }
+
+  private async mustExistEventType(id: string) {
+    const type = await this.db.eventType.findUnique({ where: { id } });
+    if (!type) {
+      throw new NotFoundException('Тип ивента не найден');
+    }
+  }
+
+  private async mustExistMember(id: string) {
+    const member = await this.db.member.findUnique({ where: { id } });
+    if (!member) {
+      throw new NotFoundException('Рейд-лид не найден среди членов гильдии');
+    }
+  }
+
+  private assertValidRange(startsAt: Date, endsAt: Date) {
+    if (endsAt.getTime() <= startsAt.getTime()) {
+      throw new ConflictException('Ивент должен заканчиваться позже начала');
+    }
+  }
+
+  private describeCreated(input: CreateEventApiInput): string {
+    return `Создан ивент ${input.startsAt.toISOString()}, плата ${input.dkpReward} ДКП, режим ${input.mode}`;
+  }
+
+  private async audit(actor: EventsActor, action: string, entityId: string, comment: string) {
+    await this.db.auditLog.create({
+      data: {
+        actorMemberId: actor.memberId,
+        action,
+        entityType: 'Event',
+        entityId,
+        comment,
+      },
+    });
+  }
+}
