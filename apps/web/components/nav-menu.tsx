@@ -10,6 +10,8 @@ const NAV_ITEMS: Array<{ href: string; label: string; permission?: Permission }>
   { href: '/', label: 'Главная' },
   { href: '/roster', label: 'Состав', permission: 'members.view_roster' },
   { href: '/link-requests', label: 'Заявки', permission: 'link_requests.review' },
+  { href: '/settings', label: 'Настройки', permission: 'items.manage' },
+  { href: '/design', label: 'Дизайн', permission: 'members.view_roster' },
 ];
 
 /** Навигация по сайту: ссылки видимы по правам сессии. */
@@ -18,7 +20,7 @@ export function NavMenu() {
   const pathname = usePathname();
 
   if (loading || !user) {
-    return null; // до входа внутренняя навигация не нужна
+    return <span className="text-sm font-semibold text-primary">ДКП-система гильдии</span>;
   }
 
   const items = NAV_ITEMS.filter(
@@ -28,16 +30,23 @@ export function NavMenu() {
   );
 
   return (
-    <nav className="site-nav">
-      {items.map((item) => (
-        <Link
-          key={item.href}
-          href={item.href}
-          className={pathname === item.href ? 'nav-link active' : 'nav-link'}
-        >
-          {item.label}
-        </Link>
-      ))}
+    <nav className="flex flex-wrap items-center gap-1">
+      {items.map((item) => {
+        const active = pathname === item.href;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`rounded-card px-3 py-1.5 text-sm ${
+              active
+                ? 'bg-accent-soft font-semibold text-accent'
+                : 'text-secondary hover:bg-surface-muted hover:text-primary'
+            }`}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }

@@ -5,19 +5,27 @@ import {
   COMBAT_ROLES,
   COMBAT_ROLE_LABELS,
   RANKS,
+  RANK_LABELS,
   can,
   type CombatRole,
   type Rank,
 } from '@dkp/shared';
 import { useSession } from '../../components/session-context';
 import { api } from '../../lib/api';
-
-const RANK_LABELS: Record<Rank, string> = {
-  GUILD_LEADER: 'Глава',
-  ADMIN: 'Админ',
-  OFFICER: 'Офицер',
-  MEMBER: 'Рядовой',
-};
+import {
+  Badge,
+  Button,
+  Card,
+  ErrorText,
+  Field,
+  Input,
+  Muted,
+  Notice,
+  Page,
+  PageHeader,
+  Select,
+  Table,
+} from '../../components/ui';
 
 interface RosterRow {
   id: string;
@@ -64,89 +72,94 @@ export default function RosterPage() {
   );
 
   if (sessionLoading) {
-    return <main style={{ padding: 24 }}>Загрузка…</main>;
+    return <Page>Загрузка…</Page>;
   }
 
   if (!user) {
     return (
-      <main style={{ padding: 24 }}>
-        <h1>Состав гильдии</h1>
-        <p>Раздел доступен членам гильдии после входа.</p>
-      </main>
+      <Page>
+        <PageHeader title="Состав гильдии" />
+        <Notice>Раздел доступен членам гильдии после входа.</Notice>
+      </Page>
     );
   }
 
   if (!user.memberId && !user.isAdmin) {
     return (
-      <main style={{ padding: 24 }}>
-        <h1>Состав гильдии</h1>
-        <p>
+      <Page>
+        <PageHeader title="Состав гильдии" />
+        <Notice>
           Ваш аккаунт ещё не привязан к члену гильдии. Отправьте{' '}
-          <a href="/link">заявку на привязку ника</a>.
-        </p>
-      </main>
+          <a className="text-accent hover:underline" href="/link">
+            заявку на привязку ника
+          </a>
+          .
+        </Notice>
+      </Page>
     );
   }
 
   return (
-    <main style={{ padding: 24 }}>
-      <h1>Состав гильдии</h1>
+    <Page width="wide">
+      <PageHeader title="Состав гильдии" subtitle="Все члены гильдии: ранги, роли в бою, привязка Discord" />
 
-      <div className="roster-filters">
-        <label>
-          Ранг:{' '}
-          <select value={rankFilter} onChange={(e) => setRankFilter(e.target.value as Rank | '')}>
+      <div className="mb-4 flex flex-wrap items-center gap-4">
+        <Field label="Ранг:">
+          <Select value={rankFilter} onChange={(e) => setRankFilter(e.target.value as Rank | '')}>
             <option value="">все ранги</option>
             {RANKS.map((rank) => (
               <option key={rank} value={rank}>
                 {RANK_LABELS[rank]}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Роль в бою:{' '}
-          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as CombatRole | '')}>
+          </Select>
+        </Field>
+        <Field label="Роль в бою:">
+          <Select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as CombatRole | '')}>
             <option value="">все роли</option>
             {COMBAT_ROLES.map((role) => (
               <option key={role} value={role}>
                 {COMBAT_ROLE_LABELS[role]}
               </option>
             ))}
-          </select>
-        </label>
-        <span className="muted">Всего: {rows.length}</span>
+          </Select>
+        </Field>
+        <Muted>Всего: {rows.length}</Muted>
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
 
-      <table className="roster-table">
-        <thead>
-          <tr>
-            <th>Ник</th>
-            <th>Ранг</th>
-            <th>Роль в бою</th>
-            <th>Discord</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id} onClick={() => setSelected(row)} className="roster-row">
-              <td>{row.nickname}</td>
-              <td>{RANK_LABELS[row.rank]}</td>
-              <td>{row.combatRole ? COMBAT_ROLE_LABELS[row.combatRole] : '—'}</td>
-              <td>{row.discord ?? '—'}</td>
-            </tr>
-          ))}
-          {rows.length === 0 && (
+      <Card className="p-0">
+        <Table className="p-5">
+          <thead>
             <tr>
-              <td colSpan={4} className="muted">
-                Никого не найдено
-              </td>
+              <Table.Th>Ник</Table.Th>
+              <Table.Th>Ранг</Table.Th>
+              <Table.Th>Роль в бою</Table.Th>
+              <Table.Th>Discord</Table.Th>
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <Table.Row key={row.id} onClick={() => setSelected(row)}>
+                <Table.Td className="font-medium">{row.nickname}</Table.Td>
+                <Table.Td>{RANK_LABELS[row.rank]}</Table.Td>
+                <Table.Td>
+                  {row.combatRole ? <Badge tone="accent">{COMBAT_ROLE_LABELS[row.combatRole]}</Badge> : <Muted>—</Muted>}
+                </Table.Td>
+                <Table.Td>{row.discord ?? <Muted>—</Muted>}</Table.Td>
+              </Table.Row>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <Table.Td colSpan={4}>
+                  <Muted>Никого не найдено</Muted>
+                </Table.Td>
+              </tr>
+            )}
+          </tbody>
+        </Table>
+      </Card>
 
       {canManage && <CreateMemberForm onCreated={loadRoster} />}
 
@@ -165,7 +178,7 @@ export default function RosterPage() {
           }}
         />
       )}
-    </main>
+    </Page>
   );
 }
 
@@ -193,31 +206,31 @@ function CreateMemberForm({ onCreated }: { onCreated: () => void }) {
   };
 
   return (
-    <section className="card">
-      <h2>Добавить члена</h2>
-      <form onSubmit={submit}>
-        <input
+    <Card className="mt-4">
+      <h2 className="mb-3 text-lg font-semibold text-primary">Добавить члена</h2>
+      <form className="flex flex-wrap items-center gap-2" onSubmit={submit}>
+        <Input
           value={nickname}
           onChange={(e) => setNickname(e.target.value)}
           placeholder="Игровой ник"
           minLength={2}
           maxLength={40}
           required
-        />{' '}
-        <select value={combatRole} onChange={(e) => setCombatRole(e.target.value as CombatRole | '')}>
+        />
+        <Select value={combatRole} onChange={(e) => setCombatRole(e.target.value as CombatRole | '')}>
           <option value="">роль в бою —</option>
           {COMBAT_ROLES.map((role) => (
             <option key={role} value={role}>
               {COMBAT_ROLE_LABELS[role]}
             </option>
           ))}
-        </select>{' '}
-        <button type="submit" disabled={nickname.length < 2}>
+        </Select>
+        <Button type="submit" variant="primary" disabled={nickname.length < 2}>
           Добавить
-        </button>
+        </Button>
       </form>
-      {result && <p>{result}</p>}
-    </section>
+      {result && <p className="mt-2 text-sm text-primary">{result}</p>}
+    </Card>
   );
 }
 
@@ -281,69 +294,73 @@ function MemberCard({
   };
 
   return (
-    <section className="card member-card">
-      <h2>{row.nickname}</h2>
-      <p className="muted">
+    <Card className="mt-4">
+      <h2 className="text-xl font-semibold text-primary">{row.nickname}</h2>
+      <p className="mt-1 text-sm text-secondary">
         Ранг: {RANK_LABELS[row.rank]} · Роль в бою:{' '}
         {row.combatRole ? COMBAT_ROLE_LABELS[row.combatRole] : '—'}
       </p>
 
       {canManage && (
-        <div className="member-edit">
-          <h3>Редактирование</h3>
-          <input
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            placeholder="Игровой ник"
-            minLength={2}
-            maxLength={40}
-          />{' '}
-          <select value={combatRole} onChange={(e) => setCombatRole(e.target.value as CombatRole | '')}>
-            <option value="">роль в бою —</option>
-            {COMBAT_ROLES.map((role) => (
-              <option key={role} value={role}>
-                {COMBAT_ROLE_LABELS[role]}
-              </option>
-            ))}
-          </select>{' '}
-          <button type="button" onClick={save} disabled={busy || nickname.length < 2}>
-            Сохранить
-          </button>
+        <div className="mt-4">
+          <h3 className="mb-2 font-semibold text-primary">Редактирование</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              placeholder="Игровой ник"
+              minLength={2}
+              maxLength={40}
+            />
+            <Select value={combatRole} onChange={(e) => setCombatRole(e.target.value as CombatRole | '')}>
+              <option value="">роль в бою —</option>
+              {COMBAT_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {COMBAT_ROLE_LABELS[role]}
+                </option>
+              ))}
+            </Select>
+            <Button onClick={save} disabled={busy || nickname.length < 2}>
+              Сохранить
+            </Button>
+          </div>
         </div>
       )}
 
       {canChangeRank && (
-        <div className="member-edit">
-          <h3>Смена ранга</h3>
-          <select value={newRank} onChange={(e) => setNewRank(e.target.value as Rank)}>
-            {RANKS.map((rank) => (
-              <option key={rank} value={rank}>
-                {RANK_LABELS[rank]}
-              </option>
-            ))}
-          </select>{' '}
-          <input
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Комментарий (обязателен, попадёт в аудит)"
-            minLength={3}
-            maxLength={500}
-            style={{ width: 320 }}
-          />{' '}
-          <button
-            type="button"
-            onClick={changeRank}
-            disabled={busy || comment.length < 3 || newRank === row.rank}
-          >
-            Изменить ранг
-          </button>
+        <div className="mt-4">
+          <h3 className="mb-2 font-semibold text-primary">Смена ранга</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={newRank} onChange={(e) => setNewRank(e.target.value as Rank)}>
+              {RANKS.map((rank) => (
+                <option key={rank} value={rank}>
+                  {RANK_LABELS[rank]}
+                </option>
+              ))}
+            </Select>
+            <Input
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Комментарий (обязателен, попадёт в аудит)"
+              minLength={3}
+              maxLength={500}
+              className="w-80"
+            />
+            <Button
+              variant="danger"
+              onClick={changeRank}
+              disabled={busy || comment.length < 3 || newRank === row.rank}
+            >
+              Изменить ранг
+            </Button>
+          </div>
         </div>
       )}
 
-      {message && <p>{message}</p>}
-      <button type="button" onClick={onClose}>
+      {message && <p className="mt-3 text-sm text-primary">{message}</p>}
+      <Button className="mt-4" onClick={onClose}>
         Закрыть
-      </button>
-    </section>
+      </Button>
+    </Card>
   );
 }
