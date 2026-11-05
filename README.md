@@ -25,12 +25,15 @@ corepack enable          # если pnpm ещё не установлен
 pnpm install
 docker compose up -d     # PostgreSQL + Redis
 pnpm db:generate         # сгенерировать Prisma-клиент
+pnpm db:migrate          # применить миграции (создать таблицы)
+pnpm db:seed             # стартовые данные: гильдия, типы ивентов, настройки
 pnpm build               # собрать shared → api, web
 pnpm dev                 # web: http://localhost:3000, api: http://localhost:3001/health
 ```
 
-Переменные окружения — по образцу [.env.example](.env.example)
-(для этапа 0 не обязательны: API поднимается и без БД).
+Переменные окружения — по образцу [.env.example](.env.example).
+Для миграций и seed нужен `DATABASE_URL` (значения по умолчанию совпадают
+с docker-compose).
 
 ## Команды
 
@@ -40,7 +43,7 @@ pnpm dev                 # web: http://localhost:3000, api: http://localhost:300
 | `pnpm build` | сборка всех пакетов |
 | `pnpm lint` / `pnpm typecheck` / `pnpm test` | проверки по всему монорепо |
 | `pnpm format` | prettier |
-| `pnpm db:generate` / `pnpm db:migrate` | Prisma-клиент / миграции (миграции — с этапа 1) |
+| `pnpm db:generate` / `pnpm db:migrate` / `pnpm db:seed` | Prisma-клиент / миграции / стартовые данные |
 
 ## Разработка
 
