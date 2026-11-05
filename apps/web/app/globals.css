@@ -38,3 +38,63 @@ body {
 .user-menu button {
   margin-left: 4px;
 }
+
+.site-nav {
+  display: inline-flex;
+  gap: 16px;
+}
+
+.nav-link {
+  text-decoration: none;
+  color: inherit;
+  opacity: 0.75;
+}
+
+.nav-link.active {
+  opacity: 1;
+  font-weight: 600;
+}
+
+.roster-filters {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin: 12px 0;
+}
+
+.roster-table {
+  border-collapse: collapse;
+  width: 100%;
+  max-width: 760px;
+}
+
+.roster-table th,
+.roster-table td {
+  border: 1px solid #8884;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.roster-row {
+  cursor: pointer;
+}
+
+.roster-row:hover {
+  background: #3b82f61a;
+}
+
+.member-card {
+  max-width: 760px;
+}
+
+.member-edit {
+  margin: 8px 0;
+}
+
+.muted {
+  color: #888;
+}
+
+.error {
+  color: #d32f2f;
+}
