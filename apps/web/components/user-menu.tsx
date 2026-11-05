@@ -1,8 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import type { SessionUser } from '@dkp/shared';
-import { api } from '../lib/api';
+import { useSession } from './session-context';
 
 const RANK_LABELS: Record<string, string> = {
   GUILD_LEADER: 'Глава',
@@ -13,15 +11,7 @@ const RANK_LABELS: Record<string, string> = {
 
 /** Меню пользователя в шапке: вход через Discord / данные сессии / выход. */
 export function UserMenu() {
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api<{ user: SessionUser | null }>('/auth/me')
-      .then((data) => setUser(data.user))
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
-  }, []);
+  const { user, loading, reload } = useSession();
 
   if (loading) {
     return <span className="user-menu">…</span>;
@@ -29,7 +19,10 @@ export function UserMenu() {
 
   if (!user) {
     return (
-      <a className="user-menu login" href={`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/auth/discord`}>
+      <a
+        className="user-menu login"
+        href={`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/auth/discord`}
+      >
         Войти через Discord
       </a>
     );
@@ -48,9 +41,11 @@ export function UserMenu() {
       <button
         type="button"
         style={{ marginLeft: 8 }}
-        onClick={() =>
-          api('/auth/logout', { method: 'POST' }).finally(() => window.location.reload())
-        }
+        onClick={async () => {
+          const { api } = await import('../lib/api');
+          await api('/auth/logout', { method: 'POST' }).catch(() => {});
+          await reload();
+        }}
       >
         Выйти
       </button>

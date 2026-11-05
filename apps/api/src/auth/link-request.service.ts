@@ -10,7 +10,7 @@ export interface LinkRequestDb {
     }): Promise<{ id: string; member: { id: string } | null } | null>;
   };
   member: {
-    /** Member с таким игровым ником (ник уникален логически; уникальность в БД — задача #6). */
+    /** Member с таким игровым ником (ник уникален в БД с миграции задачи #6). */
     findFirst(args: { where: { nickname: string } }): Promise<{ id: string; userId: string | null } | null>;
     update(args: { where: { id: string }; data: { userId: string | null } }): Promise<unknown>;
     create(args: { data: { nickname: string; userId: string } }): Promise<{ id: string }>;

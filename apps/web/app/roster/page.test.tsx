@@ -1,0 +1,81 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import RosterPage from './page';
+
+/** Мокаем api-клиент и сессию: страница состава — чистый UI над /members. */
+vi.mock('../../lib/api', () => ({
+  api: vi.fn(),
+}));
+
+vi.mock('../../components/session-context', () => ({
+  useSession: vi.fn(),
+}));
+
+const { api } = await import('../../lib/api');
+const { useSession } = await import('../../components/session-context');
+
+function mockSession(user: Record<string, unknown> | null) {
+  vi.mocked(useSession).mockReturnValue({
+    user: user as never,
+    loading: false,
+    reload: vi.fn(),
+  });
+}
+
+describe('RosterPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSession({
+      userId: 'u1',
+      username: 'test-member',
+      memberId: 'm1',
+      rank: 'MEMBER',
+      isAdmin: false,
+    });
+  });
+
+  it('рядовой видит таблицу состава с фильтрами, но не форму добавления', async () => {
+    vi.mocked(api).mockResolvedValue([
+      { id: 'm-1', nickname: 'Alpha', rank: 'OFFICER', combatRole: 'HEALER', discord: 'alpha' },
+      { id: 'm-2', nickname: 'Beta', rank: 'MEMBER', combatRole: null, discord: null },
+    ]);
+
+    render(<RosterPage />);
+
+    expect(await screen.findByText('Alpha')).toBeDefined();
+    expect(screen.getByText('Beta')).toBeDefined();
+    expect(screen.getAllByText('Офицер').length).toBeGreaterThan(0); // фильтр + ячейка
+    expect(screen.getAllByText('Хил').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('—')).toHaveLength(2); // у Beta: роль и Discord не указаны
+    expect(screen.getByText('все ранги')).toBeDefined();
+    expect(screen.getByText('все роли')).toBeDefined();
+    expect(screen.queryByText('Добавить члена')).toBeNull();
+  });
+
+  it('офицер видит форму добавления', async () => {
+    mockSession({
+      userId: 'u2',
+      username: 'test-officer',
+      memberId: 'm-2',
+      rank: 'OFFICER',
+      isAdmin: false,
+    });
+    vi.mocked(api).mockResolvedValue([]);
+
+    render(<RosterPage />);
+
+    expect(await screen.findByText('Добавить члена')).toBeDefined();
+  });
+
+  it('не для членов гильдии — подсказка про привязку', async () => {
+    mockSession({ userId: 'u3', username: 'stranger', memberId: null, rank: null, isAdmin: false });
+    vi.mocked(api).mockResolvedValue([]);
+
+    render(<RosterPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/заявку на привязку ника/)).toBeDefined();
+    });
+    expect(api).not.toHaveBeenCalled();
+  });
+});
