@@ -14,6 +14,14 @@ export const COMBAT_ROLE_LABELS: Record<CombatRole, string> = {
 export const RANKS = ['GUILD_LEADER', 'ADMIN', 'OFFICER', 'MEMBER'] as const;
 export type Rank = (typeof RANKS)[number];
 
+/** Русские подписи рангов — единый источник для UI (язык интерфейса — русский). */
+export const RANK_LABELS: Record<Rank, string> = {
+  GUILD_LEADER: 'Глава',
+  ADMIN: 'Админ',
+  OFFICER: 'Офицер',
+  MEMBER: 'Рядовой',
+};
+
 export const EVENT_MODES = ['PVE', 'PVP'] as const;
 export type EventMode = (typeof EVENT_MODES)[number];
 

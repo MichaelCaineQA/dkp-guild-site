@@ -1,5 +1,6 @@
 import { COMBAT_ROLES, computeBalance, getGamePhase } from '@dkp/shared';
 import { CombatRoleBadge } from '../components/status-badge';
+import { Badge, Card, Muted, Page, PageHeader, SectionTitle } from '../components/ui';
 
 // Демо связки с @dkp/shared — реальные данные придут с API на этапе 1.
 // Якорь игрового времени в проде берётся из настроек гильдии (модель Setting).
@@ -14,25 +15,38 @@ export default function HomePage() {
   const phase = getGamePhase(new Date(), DEMO_GAME_CONFIG);
 
   return (
-    <main style={{ padding: 24 }}>
-      <h1>ДКП-система гильдии</h1>
-      <p>
-        Этап 0: каркас монорепо. Продуктовые экраны появятся на этапе 1 —
-        см. <a href="https://github.com/MichaelCaineQA/dkp-guild-site/blob/main/docs/PLAN.md">docs/PLAN.md</a>.
-      </p>
-      <div className="card">
-        <h2>Проверка ядра</h2>
-        <p>Баланс из журнала ДКП (10 − 4 + 10): {balance}</p>
-        <p>
+    <Page>
+      <PageHeader
+        title="ДКП-система гильдии"
+        subtitle="Расписание ивентов, посещение с чек-ин кодами, аукцион лута и статистика"
+      />
+      <Card>
+        <SectionTitle>Проверка ядра</SectionTitle>
+        <p className="mt-2 text-sm text-primary">
+          Баланс из журнала ДКП (10 − 4 + 10): <Badge tone="accent">{balance}</Badge>
+        </p>
+        <p className="mt-2 text-sm text-primary">
           Игровое время сейчас: {phase.phase === 'DAY' ? '☀ день' : '🌙 ночь'}
         </p>
-        <p>
+        <p className="mt-2 flex flex-wrap items-center gap-1 text-sm text-primary">
           Роли в бою:{' '}
           {COMBAT_ROLES.map((role) => (
             <CombatRoleBadge key={role} role={role} />
           ))}
         </p>
-      </div>
-    </main>
+        <p className="mt-3 text-sm">
+          <Muted>
+            Продуктовые экраны появляются по этапам плана — см.{' '}
+            <a
+              className="text-accent hover:underline"
+              href="https://github.com/MichaelCaineQA/dkp-guild-site/blob/main/docs/PLAN.md"
+            >
+              docs/PLAN.md
+            </a>
+            .
+          </Muted>
+        </p>
+      </Card>
+    </Page>
   );
 }

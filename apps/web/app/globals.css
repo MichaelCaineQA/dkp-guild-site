@@ -1,100 +1,124 @@
+/*
+ * Дизайн-токены сайта — ЕДИНСТВЕННОЕ место со стилевыми решениями.
+ *
+ * Правило редизайна (apps/web/README.md): страницы и компоненты не пишут
+ * цветов, отступов и радиусов напрямую — только семантические переменные
+ * из этого блока (var(--surface), bg-surface и т.п.). Смена дизайна =
+ * правка этого файла, вёрстка не трогается.
+ *
+ * Токены семантические, а не «синенькое/красненькое»: имя говорит о роли
+ * (--bg-page — фон страницы), а не о значении. Значения — плейсхолдеры
+ * стартового прототипа; финальную палитру выберет дизайнер и согласует
+ * с главой гильдии (issue «Дизайн: варианты и согласование»).
+ */
+@import 'tailwindcss';
+
+/* Семантические токены прототипа: светлая тема. */
 :root {
-  color-scheme: light dark;
+  /* Фоны */
+  --bg-page: #f5f6f8; /* фон страницы */
+  --surface: #ffffff; /* карточки, панели, шапка */
+  --surface-muted: #eceef1; /* приглушённые зоны: строки таблиц, чипы */
+
+  /* Текст */
+  --text-primary: #1c2430;
+  --text-secondary: #5b6675;
+  --text-disabled: #9aa3b0;
+
+  /* Линии и рамки */
+  --border: #d7dce2;
+  --border-strong: #b7bfc9;
+
+  /* Акцент — ссылки, активная навигация, основной цвет кнопок */
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-contrast: #ffffff; /* текст на акценте */
+  --accent-soft: #3b82f61a; /* лёгкая заливка: hover строк, свои бейджи */
+
+  /* Смысловые цвета: успех/ошибка/предупреждение */
+  --success: #15803d;
+  --success-soft: #16a34a1a;
+  --danger: #d32f2f;
+  --danger-soft: #d32f2f1a;
+  --warning: #b45309;
+  --warning-soft: #f59e0b1a;
+
+  /* Радиусы и тени */
+  --radius: 10px;
+  --radius-lg: 14px;
+  --shadow-card: 0 1px 3px rgb(28 36 48 / 0.08);
+
+  /* Шапка сайта */
+  --header-bg: var(--surface);
+  --header-border: var(--border);
+}
+
+/* Тёмная тема — те же семантические роли, другие значения. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-page: #14181f;
+    --surface: #1c222c;
+    --surface-muted: #262e3a;
+
+    --text-primary: #e8ecf1;
+    --text-secondary: #a2adbb;
+    --text-disabled: #64707f;
+
+    --border: #323b48;
+    --border-strong: #465364;
+
+    --accent: #4f8ff7;
+    --accent-hover: #6ba1f9;
+    --accent-contrast: #0e1420;
+    --accent-soft: #4f8ff726;
+
+    --success: #4ade80;
+    --success-soft: #4ade8026;
+    --danger: #f87171;
+    --danger-soft: #f8717126;
+    --warning: #fbbf24;
+    --warning-soft: #fbbf2426;
+
+    --shadow-card: 0 1px 3px rgb(0 0 0 / 0.4);
+  }
+}
+
+/*
+ * Сопоставляем токены с утилитарными классами Tailwind: в компонентах
+ * пишем bg-surface / text-secondary / border-line — и они следуют за
+ * токенами (в т.ч. за тёмной темой). Расширение набора — только здесь.
+ */
+@theme inline {
+  --color-page: var(--bg-page);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-disabled: var(--text-disabled);
+
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+
+  --radius-card: var(--radius);
+  --radius-panel: var(--radius-lg);
 }
 
 body {
   margin: 0;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-}
-
-.card {
-  border: 1px solid #8884;
-  border-radius: 12px;
-  padding: 16px 20px;
-  margin: 12px 0;
-  max-width: 560px;
-}
-
-.role-badge {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: #3b82f633;
-}
-
-.site-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 24px;
-  border-bottom: 1px solid #8884;
-}
-
-.site-title {
-  font-weight: 600;
-}
-
-.user-menu button {
-  margin-left: 4px;
-}
-
-.site-nav {
-  display: inline-flex;
-  gap: 16px;
-}
-
-.nav-link {
-  text-decoration: none;
-  color: inherit;
-  opacity: 0.75;
-}
-
-.nav-link.active {
-  opacity: 1;
-  font-weight: 600;
-}
-
-.roster-filters {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  margin: 12px 0;
-}
-
-.roster-table {
-  border-collapse: collapse;
-  width: 100%;
-  max-width: 760px;
-}
-
-.roster-table th,
-.roster-table td {
-  border: 1px solid #8884;
-  padding: 6px 10px;
-  text-align: left;
-}
-
-.roster-row {
-  cursor: pointer;
-}
-
-.roster-row:hover {
-  background: #3b82f61a;
-}
-
-.member-card {
-  max-width: 760px;
-}
-
-.member-edit {
-  margin: 8px 0;
-}
-
-.muted {
-  color: #888;
-}
-
-.error {
-  color: #d32f2f;
+  background: var(--bg-page);
+  color: var(--text-primary);
 }

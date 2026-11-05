@@ -15,10 +15,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="ru">
       <body>
         <SessionProvider>
-          <header className="site-header">
-            <span className="site-title">
-              <NavMenu />
-            </span>
+          <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-line bg-[var(--header-bg)] px-4 py-3 sm:px-6">
+            <NavMenu />
             <UserMenu />
           </header>
           {children}
