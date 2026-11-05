@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { GameTimeWidget } from '../components/game-time-widget';
 import { NavMenu } from '../components/nav-menu';
 import { SessionProvider } from '../components/session-context';
 import { UserMenu } from '../components/user-menu';
@@ -17,7 +18,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <SessionProvider>
           <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-line bg-surface px-4 py-3 sm:px-6">
             <NavMenu />
-            <UserMenu />
+            <span className="flex items-center gap-3">
+              <GameTimeWidget />
+              <UserMenu />
+            </span>
           </header>
           {children}
         </SessionProvider>
