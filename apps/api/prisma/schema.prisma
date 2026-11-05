@@ -191,9 +191,9 @@ model Event {
   status EventStatus @default(PLANNED)
   scope EventScope @default(GUILD)
   packId String?
-  pack Pack? @relation("EventPack")
+  pack Pack? @relation("EventPack", fields: [packId], references: [id])
   kpId String?
-  kp KP? @relation("EventKP")
+  kp KP? @relation("EventKP", fields: [kpId], references: [id])
   raidLeadId String
   raidLead Member @relation("EventRaidLead", fields: [raidLeadId], references: [id])
   startsAt DateTime

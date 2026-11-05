@@ -5,6 +5,7 @@ import { AppModule } from './app.module';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   app.enableCors();
+  app.enableShutdownHooks(); // чтобы PrismaService успевал корректно отключиться
   await app.listen(process.env.PORT ?? 3001);
 }
 void bootstrap();
