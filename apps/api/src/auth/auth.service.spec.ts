@@ -38,6 +38,14 @@ function makeDb(state: { users: UserRow[] }) {
 }
 
 describe('AuthService', () => {
+  it('повторное чтение тестового пользователя без Discord не повышает права', async () => {
+    const service = new AuthService(makeDb({ users: [{ id: 'test-user-id', username: 'test-member', discordId: null, member: { id: 'm1', rank: 'MEMBER' } }] }));
+    const first = await service.getSessionUser('test:test-member');
+    const second = await service.getSessionUser(first!.userId);
+    expect(first).toMatchObject({ rank: 'MEMBER', isAdmin: false });
+    expect(second).toMatchObject({ rank: 'MEMBER', isAdmin: false });
+    expect(await service.getSessionUser('admin:admin')).toMatchObject({ isAdmin: true, memberId: null });
+  });
   it('первый вошедший больше не Глава — bootstrap убран (решение владельца)', async () => {
     const state = { users: [] as UserRow[] };
     const service = new AuthService(makeDb(state));

@@ -127,7 +127,9 @@ export class AuthService {
       username: user.username,
       memberId: user.member?.id ?? null,
       rank: (user.member?.rank as SessionUser['rank']) ?? null,
-      isAdmin: user.discordId === null,
+      // Отсутствие Discord ID (например, у seed:test) не даёт прав админа.
+      // Резервный админ обрабатывается отдельно по сессии admin: выше.
+      isAdmin: false,
     };
   }
 }
