@@ -116,5 +116,10 @@ export function permissionsOf(actor: PermissionActor): Permission[] {
   return PERMISSIONS.filter((permission) => can(actor, permission));
 }
 
+/** Самостоятельное редактирование профиля требует своего Member. */
+export function canEditOwnProfile(actor: PermissionActor, memberId: string): boolean {
+  return actor.memberId === memberId && can(actor, 'profile.edit_own');
+}
+
 export type { Rank };
 export { RANKS };

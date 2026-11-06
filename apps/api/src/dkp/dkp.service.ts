@@ -16,7 +16,7 @@ export interface DkpDb {
         createdAt?: { gte?: Date; lte?: Date };
       };
       orderBy: { createdAt: 'desc' };
-      take: number;
+      take?: number;
       skip: number;
     }): Promise<
       Array<{
@@ -89,7 +89,6 @@ export class DkpService {
       this.db.dkpEntry.findMany({
         where: {},
         orderBy: { createdAt: 'desc' },
-        take: 10_000, // защитный потолок; журналы гильдии далеки от него
         skip: 0,
       }),
     ]);
@@ -111,7 +110,6 @@ export class DkpService {
     const entries = await this.db.dkpEntry.findMany({
       where: { memberId },
       orderBy: { createdAt: 'desc' },
-      take: 10_000,
       skip: 0,
     });
     return {

@@ -29,7 +29,7 @@ function makeDb(entries: Entry[] = []) {
         const matches = entries.filter(matchesWhere(where));
         return matches
           .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-          .slice(skip, skip + take);
+          .slice(skip, take === undefined ? undefined : skip + take);
       },
       count: async ({ where }) => entries.filter(matchesWhere(where)).length,
     },
@@ -102,6 +102,12 @@ describe('DkpService.list', () => {
 });
 
 describe('DkpService.balances / memberBalance', () => {
+  it('баланс включает весь журнал, даже после 10000 операций', async () => {
+    const { db } = makeDb(Array.from({ length: 10_001 }, (_, i) => entry({ id: `d-${i}`, amount: 1 })));
+    const service = new DkpService(db);
+    expect((await service.memberBalance('m-1')).balance).toBe(10_001);
+    expect((await service.balances()).find((row) => row.memberId === 'm-1')?.balance).toBe(10_001);
+  });
   it('баланс = сумма журнала, включая корректировки (acceptance #12)', async () => {
     const { db } = makeDb([
       entry({ id: 'd-1', amount: 5 }),

@@ -142,7 +142,7 @@ export default function RosterPage() {
           <tbody>
             {rows.map((row) => (
               <Table.Row key={row.id} onClick={() => setSelected(row)}>
-                <Table.Td className="font-medium">{row.nickname}</Table.Td>
+                <Table.Td className="font-medium"><a className="text-accent hover:underline" href={`/profiles/${encodeURIComponent(row.id)}`} onClick={(event) => event.stopPropagation()}>{row.nickname}</a></Table.Td>
                 <Table.Td>{RANK_LABELS[row.rank]}</Table.Td>
                 <Table.Td>
                   {row.combatRole ? <Badge tone="accent">{COMBAT_ROLE_LABELS[row.combatRole]}</Badge> : <Muted>—</Muted>}
