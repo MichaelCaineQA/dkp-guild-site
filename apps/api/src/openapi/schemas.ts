@@ -60,6 +60,7 @@ const generated = Object.fromEntries(
     if (weapons) {
       weapons.uniqueItems = true;
       weapons.description = 'Два разных оружия RU-сервера.';
+      weapons.example = [shared.WEAPONS[0], shared.WEAPONS[1]];
     }
     return [name, converted];
   }),
@@ -69,6 +70,7 @@ const role = nullable(enumeration(shared.COMBAT_ROLES));
 const weapons = {
   ...array(enumeration(shared.WEAPONS)),
   description: 'У старых записей возможен пустой массив.',
+  example: [shared.WEAPONS[0], shared.WEAPONS[1]],
 };
 const roster = { id: str, nickname: str, rank, combatRole: role, weapons, discord: nullable(str) };
 const event = {
@@ -234,9 +236,12 @@ export const schemas: Record<string, SchemaObject> = {
 };
 const manualAmount = schemas.ManualDkp.properties?.amount as SchemaObject;
 manualAmount.not = { enum: [0] };
+manualAmount.example = 1;
+(schemas.SubmitCheckIn.properties!.code as SchemaObject).example = '123';
 for (const name of ['CreateMember', 'ChangeRank']) {
   const assignedRank = schemas[name].properties?.rank as SchemaObject;
   assignedRank.enum = ['OFFICER', 'MEMBER'];
+  assignedRank.example = 'MEMBER';
 }
 
 const fieldDescriptions: Record<string, string> = {

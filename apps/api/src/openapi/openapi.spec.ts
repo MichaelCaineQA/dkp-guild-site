@@ -8,7 +8,7 @@ import type { OpenAPIObject, OperationObject, SchemaObject } from '@nestjs/swagg
 import { createApiDocument, setupOpenApi } from './openapi';
 import { contracts } from './contracts';
 import { schemas } from './schemas';
-import { WEAPONS } from '@dkp/shared';
+import { WEAPONS, weaponPairSchema } from '@dkp/shared';
 
 jest.mock('@nestjs/passport', () => ({ AuthGuard: () => class {} }));
 
@@ -83,6 +83,7 @@ describe('Контракт OpenAPI', () => {
 
   it('передаёт ограничения общей валидации и оружие RU', () => {
     const pair = schemas.UpdateOwnProfile.properties!.weapons as SchemaObject;
+    expect(weaponPairSchema.safeParse(pair.example).success).toBe(true);
     expect(pair).toMatchObject({
       minItems: 2,
       maxItems: 2,
