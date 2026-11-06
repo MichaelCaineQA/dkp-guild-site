@@ -9,9 +9,10 @@ import { CheckInModule } from './checkin/checkin.module';
 import { ConductModule } from './conduct/conduct.module';
 import { DkpModule } from './dkp/dkp.module';
 import { AbsencesModule } from './absences/absences.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, MembersModule, SettingsModule, EventsModule, CheckInModule, AbsencesModule, ConductModule, DkpModule],
+  imports: [PrismaModule, AuthModule, MembersModule, SettingsModule, EventsModule, CheckInModule, AbsencesModule, ConductModule, DkpModule, AuditModule],
   controllers: [AppController],
 })
 export class AppModule {}

@@ -197,12 +197,14 @@ describe('AbsencesService.cancel', () => {
 
 describe('AbsencesService.markSeen', () => {
   it('офицер ставит «Увидел» — идемпотентно, статус заявки не меняется', async () => {
-    const { db, seen, absences } = makeDb([{ id: 'a-1' }]);
+    const { db, seen, absences, audit } = makeDb([{ id: 'a-1' }]);
     const service = new AbsencesService(db, SETTINGS, clock);
 
     await expect(service.markSeen('a-1', OFFICER)).resolves.toEqual({ ok: true });
     await expect(service.markSeen('a-1', OFFICER)).resolves.toEqual({ ok: true }); // повтор — не ошибка
     expect(seen.has('a-1:m-off')).toBe(true);
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({ action: 'ABSENCE_SEEN', entityId: 'a-1', actorMemberId: 'm-off' });
     expect(absences[0]!.status).toBe('ACTIVE'); // «Увидел» на статус не влияет
   });
 
