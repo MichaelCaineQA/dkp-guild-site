@@ -242,7 +242,9 @@ export default function SchedulePage() {
   );
 
   function shiftMonth(delta: number) {
-    setMonthCursor((prev) => new Date(prev.getUTCFullYear(), prev.getUTCMonth() + delta, 1));
+    // UTC-конструктор: Date(год, месяц, 1) в локальной зоне даёт месяц,
+    // «съедаемый» при смене UTC-страницей вперёд (баг ревью владельца, п.7)
+    setMonthCursor((prev) => new Date(Date.UTC(prev.getUTCFullYear(), prev.getUTCMonth() + delta, 1)));
   }
 }
 

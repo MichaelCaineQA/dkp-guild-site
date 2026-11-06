@@ -53,31 +53,19 @@ export class AuthService {
 
   constructor(private readonly db: AuthDb) {}
 
-  /** Discord-вход: upsert пользователя + bootstrap первого Главы. */
+  /**
+   * Discord-вход: upsert пользователя. Главой первый вошедший больше
+   * не становится (решение владельца): единственный Глава — тестовый
+   * пользователь из db:seed:test (на проде назначается при инициализации);
+   * новые Discord-аккаунты ждут одобрения заявки главой/админом.
+   */
   async loginWithDiscord(profile: DiscordProfile): Promise<SessionUser> {
-    // Гонку «двое первых» не ловим: гильдия одна, bootstrap — разовое событие.
-    const isFirstUser = (await this.db.user.count()) === 0;
-
     const user = await this.db.user.upsert({
       where: { discordId: profile.discordId },
       create: { discordId: profile.discordId, username: profile.username },
       update: { username: profile.username },
       include: { member: { select: { id: true, rank: true } } },
     });
-
-    if (isFirstUser && !user.member) {
-      const member = await this.db.member.create({
-        data: { userId: user.id, nickname: profile.username, rank: 'GUILD_LEADER' },
-      });
-      this.logger.log(`Первый пользователь ${user.username} назначен Главой (bootstrap)`);
-      return {
-        userId: user.id,
-        username: user.username,
-        memberId: member.id,
-        rank: 'GUILD_LEADER',
-        isAdmin: false,
-      };
-    }
 
     return this.toSessionUser(user);
   }

@@ -43,6 +43,42 @@ export default function RosterPage() {
   const [roleFilter, setRoleFilter] = useState<CombatRole | ''>('');
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<RosterRow | null>(null);
+  // Сортировка столбцов + пагинация (ревью владельца, п.9)
+  const [sortKey, setSortKey] = useState<keyof RosterRow | null>(null);
+  const [sortAsc, setSortAsc] = useState(true);
+  const [pageOffset, setPageOffset] = useState(0);
+  const PAGE_SIZE = 20;
+
+  const RANK_ORDER_UI: Record<string, number> = { GUILD_LEADER: 3, ADMIN: 2, OFFICER: 1, MEMBER: 0 };
+
+  const sortedRows = useMemo(() => {
+    if (!sortKey) {
+      return rows;
+    }
+    return [...rows].sort((a, b) => {
+      const av = sortKey === 'rank' ? (RANK_ORDER_UI[a.rank] ?? 0) : (a[sortKey] ?? '');
+      const bv = sortKey === 'rank' ? (RANK_ORDER_UI[b.rank] ?? 0) : (b[sortKey] ?? '');
+      const cmp = String(av).localeCompare(String(bv), 'ru');
+      return sortAsc ? cmp : -cmp;
+    });
+  }, [rows, sortKey, sortAsc]);
+
+  function toggleSort(key: keyof RosterRow) {
+    if (sortKey === key) {
+      setSortAsc((v) => !v);
+    } else {
+      setSortKey(key);
+      setSortAsc(true);
+    }
+    setPageOffset(0);
+  }
+
+  function sortIndicator(key: keyof RosterRow) {
+    if (sortKey !== key) {
+      return '↕';
+    }
+    return sortAsc ? '↑' : '↓';
+  }
 
   const loadRoster = useCallback(async () => {
     const params = new URLSearchParams();
@@ -133,14 +169,22 @@ export default function RosterPage() {
         <Table className="p-5">
           <thead>
             <tr>
-              <Table.Th>Ник</Table.Th>
-              <Table.Th>Ранг</Table.Th>
-              <Table.Th>Роль в бою</Table.Th>
-              <Table.Th>Discord</Table.Th>
+              <Table.Th className="cursor-pointer select-none" onClick={() => toggleSort('nickname')}>
+                Ник {sortIndicator('nickname')}
+              </Table.Th>
+              <Table.Th className="cursor-pointer select-none" onClick={() => toggleSort('rank')}>
+                Ранг {sortIndicator('rank')}
+              </Table.Th>
+              <Table.Th className="cursor-pointer select-none" onClick={() => toggleSort('combatRole')}>
+                Роль в бою {sortIndicator('combatRole')}
+              </Table.Th>
+              <Table.Th className="cursor-pointer select-none" onClick={() => toggleSort('discord')}>
+                Discord {sortIndicator('discord')}
+              </Table.Th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {sortedRows.slice(pageOffset, pageOffset + PAGE_SIZE).map((row) => (
               <Table.Row key={row.id} onClick={() => setSelected(row)}>
                 <Table.Td className="font-medium">{row.nickname}</Table.Td>
                 <Table.Td>{RANK_LABELS[row.rank]}</Table.Td>
@@ -159,6 +203,24 @@ export default function RosterPage() {
             )}
           </tbody>
         </Table>
+        {rows.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between border-t border-line p-3 text-sm">
+            <Muted>
+              {pageOffset + 1}–{Math.min(pageOffset + PAGE_SIZE, rows.length)} из {rows.length}
+            </Muted>
+            <span className="flex gap-2">
+              <Button disabled={pageOffset === 0} onClick={() => setPageOffset(Math.max(0, pageOffset - PAGE_SIZE))}>
+                ←
+              </Button>
+              <Button
+                disabled={pageOffset + PAGE_SIZE >= rows.length}
+                onClick={() => setPageOffset(pageOffset + PAGE_SIZE)}
+              >
+                →
+              </Button>
+            </span>
+          </div>
+        )}
       </Card>
 
       {canManage && <CreateMemberForm onCreated={loadRoster} />}
@@ -332,7 +394,8 @@ function MemberCard({
           <h3 className="mb-2 font-semibold text-primary">Смена ранга</h3>
           <div className="flex flex-wrap items-center gap-2">
             <Select value={newRank} onChange={(e) => setNewRank(e.target.value as Rank)}>
-              {RANKS.map((rank) => (
+              {/* Глава и Админ не назначаются (решение владельца) */}
+              {RANKS.filter((rank) => rank !== 'GUILD_LEADER' && rank !== 'ADMIN').map((rank) => (
                 <option key={rank} value={rank}>
                   {RANK_LABELS[rank]}
                 </option>
