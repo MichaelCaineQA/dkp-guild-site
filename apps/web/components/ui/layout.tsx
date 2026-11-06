@@ -1,5 +1,10 @@
 import type { ReactNode } from 'react';
 
+/** Вертикальная группа блоков страницы или формы. */
+export function Stack({ children }: { children: ReactNode }) {
+  return <div className="flex min-w-0 flex-col gap-4">{children}</div>;
+}
+
 /**
  * UI-примитивы (components/ui) — ЕДИНСТВЕННОЕ место, где появляется вёрстка
  * и стили. Страницы собирают экраны из этих блоков и не пишут стилей сами —

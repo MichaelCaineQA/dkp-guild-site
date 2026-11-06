@@ -38,14 +38,16 @@ function makeDb(state: { users: UserRow[] }) {
 }
 
 describe('AuthService', () => {
-  it('первый вошедший Discord-пользователь становится Главой (bootstrap)', async () => {
+  it('первый вошедший больше не Глава — bootstrap убран (решение владельца)', async () => {
     const state = { users: [] as UserRow[] };
     const service = new AuthService(makeDb(state));
 
     const session = await service.loginWithDiscord({ discordId: '111', username: 'First' });
 
-    expect(session.rank).toBe('GUILD_LEADER');
-    expect(session.memberId).toBe('member-for-user-1');
+    // Аккаунт создаётся без Member и ранга: доступ только после одобрения
+    // заявки главой/админом; единственный Глава — тестовый юзер из seed:test
+    expect(session.rank).toBeNull();
+    expect(session.memberId).toBeNull();
     expect(session.isAdmin).toBe(false);
   });
 

@@ -35,9 +35,11 @@
   --warning-soft: #f59e0b1a;
 }
 
-/* Тёмная тема — те же роли, другие значения. */
+/* Тёмная тема — те же роли, другие значения.
+   Включается: системной настройкой ИЛИ классом .dark на <html>
+   (переключатель в шапке; выбранный вручную режим главнее системного). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
     --bg-page: #14181f;
     --surface: #1c222c;
     --surface-muted: #262e3a;
@@ -61,6 +63,32 @@
     --warning: #fbbf24;
     --warning-soft: #fbbf2426;
   }
+}
+
+/* Ручная тёмная тема (переключатель в шапке): класс сильнее системной. */
+html.dark {
+  --bg-page: #14181f;
+  --surface: #1c222c;
+  --surface-muted: #262e3a;
+
+  --text-primary: #e8ecf1;
+  --text-secondary: #a2adbb;
+  --text-disabled: #64707f;
+
+  --border: #323b48;
+  --border-strong: #465364;
+
+  --accent: #4f8ff7;
+  --accent-hover: #6ba1f9;
+  --accent-contrast: #0e1420;
+  --accent-soft: #4f8ff726;
+
+  --success: #4ade80;
+  --success-soft: #4ade8026;
+  --danger: #f87171;
+  --danger-soft: #f8717126;
+  --warning: #fbbf24;
+  --warning-soft: #fbbf2426;
 }
 
 /* Палитра как Tailwind-цвета: bg-surface, text-secondary, border-line и т.п. */

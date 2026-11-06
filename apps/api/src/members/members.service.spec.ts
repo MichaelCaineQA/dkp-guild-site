@@ -187,19 +187,24 @@ describe('MembersService.changeRank', () => {
     ).rejects.toThrow(ConflictException);
   });
 
-  it('второго Главу понизить можно', async () => {
+  it('Глава в OFFICER — можно, если есть другой Глава (самопонижение сценария нет: один Глава)', async () => {
     const { db } = makeDb([
       { id: 'm-1', nickname: 'boss1', rank: 'GUILD_LEADER', combatRole: null },
-      { id: 'm-2', nickname: 'boss2', rank: 'GUILD_LEADER', combatRole: null },
+      { id: 'm-2', nickname: 'off', rank: 'OFFICER', combatRole: null },
     ]);
     const service = new MembersService(db);
 
+    // Единственного Главу понизить нельзя
+    await expect(
+      service.changeRank('m-1', { rank: 'OFFICER', comment: 'передача' }, ACTOR),
+    ).rejects.toThrow(ConflictException);
+
     const member = await service.changeRank(
       'm-2',
-      { rank: 'ADMIN', comment: 'оставляем техническим админом' },
+      { rank: 'MEMBER', comment: 'понижение офицера' },
       ACTOR,
     );
-    expect(member.rank).toBe('ADMIN');
+    expect(member.rank).toBe('MEMBER');
   });
 
   it('тот же ранг — 409', async () => {
@@ -208,6 +213,35 @@ describe('MembersService.changeRank', () => {
 
     await expect(
       service.changeRank('m-1', { rank: 'MEMBER', comment: 'без изменений' }, ACTOR),
+    ).rejects.toThrow(ConflictException);
+  });
+});
+
+describe('Ранги ADMIN/GUILD_LEADER не назначаются (решение владельца)', () => {
+  it('changeRank на ADMIN — 409', async () => {
+    const { db } = makeDb([{ id: 'm-1', nickname: 'Игрок', rank: 'MEMBER', combatRole: null }]);
+    const service = new MembersService(db);
+
+    await expect(
+      service.changeRank('m-1', { rank: 'ADMIN', comment: 'попытка' }, ACTOR),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('changeRank на GUILD_LEADER — 409', async () => {
+    const { db } = makeDb([{ id: 'm-1', nickname: 'Игрок', rank: 'MEMBER', combatRole: null }]);
+    const service = new MembersService(db);
+
+    await expect(
+      service.changeRank('m-1', { rank: 'GUILD_LEADER', comment: 'попытка' }, ACTOR),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('create с рангом GUILD_LEADER — 409', async () => {
+    const { db } = makeDb([]);
+    const service = new MembersService(db);
+
+    await expect(
+      service.create({ nickname: 'Новый', rank: 'GUILD_LEADER' }, ACTOR),
     ).rejects.toThrow(ConflictException);
   });
 });
