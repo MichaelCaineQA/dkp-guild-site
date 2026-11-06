@@ -104,6 +104,8 @@ describe('SchedulePage', () => {
     expect(screen.getAllByText('→').length).toBeGreaterThan(0);
     expect(screen.queryByText('Начать ивент')).toBeNull();
     expect(screen.queryByText('Отменить')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Создать ивент' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Создать серию' })).toBeNull();
   });
 
   it('офицер открывает карточку и видит кнопки управления статусами', async () => {
@@ -120,6 +122,8 @@ describe('SchedulePage', () => {
     // Ждём загрузки списка, затем кликаем по «Гильдбосс» в ближайших.
     await screen.findByText('Ближайшие ивенты');
     await screen.findByText(/РЛ: РЛ · 10 ДКП/);
+    expect(screen.getByRole('button', { name: 'Создать ивент' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Создать серию' })).toBeDefined();
     const mentions = screen.getAllByText('Гильдбосс');
     mentions[mentions.length - 1]!.click();
     expect(await screen.findByText('Фазы игрового времени на длительность ивента:')).toBeDefined();
