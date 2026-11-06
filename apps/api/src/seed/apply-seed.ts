@@ -1,16 +1,35 @@
 import { EVENT_TYPE_NAMES, SEED_GUILD, SEED_SETTINGS, type SeedGuild } from './seed-data';
+import { RULES_SLUGS, RULES_TITLES } from '@dkp/shared';
 
 /**
  * Минимальный интерфейс Prisma-клиента, нужный seed'у, — чтобы логику можно
  * было проверить юнит-тестами на фейке, без БД.
  */
 export interface SeedDb {
+  rulesPage: {
+    upsert(args: {
+      where: { slug: string };
+      create: { slug: string; title: string; contentMd: string };
+      update: object;
+    }): Promise<{ slug: string; contentMd: string; version: number; updatedAt: Date }>;
+  };
+  rulesPageVersion: {
+    upsert(args: {
+      where: { pageSlug_version: { pageSlug: string; version: number } };
+      create: { pageSlug: string; contentMd: string; version: number; createdAt: Date };
+      update: object;
+    }): Promise<unknown>;
+  };
   guild: {
     findFirst(): Promise<{ id: string } | null>;
     create(args: { data: SeedGuild }): Promise<{ id: string }>;
   };
   eventType: {
-    upsert(args: { where: { name: string }; create: { name: string }; update: object }): Promise<unknown>;
+    upsert(args: {
+      where: { name: string };
+      create: { name: string };
+      update: object;
+    }): Promise<unknown>;
   };
   setting: {
     create(args: { data: { key: string; value: number } }): Promise<unknown>;
@@ -35,6 +54,28 @@ export async function applySeed(db: SeedDb): Promise<SeedResult> {
 
   for (const name of EVENT_TYPE_NAMES) {
     await db.eventType.upsert({ where: { name }, create: { name }, update: {} });
+  }
+
+  for (const slug of RULES_SLUGS) {
+    const page = await db.rulesPage.upsert({
+      where: { slug },
+      create: {
+        slug,
+        title: RULES_TITLES[slug],
+        contentMd: `# ${RULES_TITLES[slug]}\n\nПравила пока не опубликованы. Глава или администратор заполнит эту страницу.`,
+      },
+      update: {},
+    });
+    await db.rulesPageVersion.upsert({
+      where: { pageSlug_version: { pageSlug: slug, version: page.version } },
+      create: {
+        pageSlug: slug,
+        contentMd: page.contentMd,
+        version: page.version,
+        createdAt: page.updatedAt,
+      },
+      update: {},
+    });
   }
 
   let createdSettings = 0;
