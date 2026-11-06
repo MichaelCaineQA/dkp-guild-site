@@ -7,6 +7,7 @@ import { ProfilesController } from './profiles.controller';
 import { ProfilesService, type ProfilesDb, type ProfileTransaction } from './profiles.service';
 
 let role: CombatRole | null = 'DPS';
+let weapons: import('@dkp/shared').Weapon[] = ['STAFF', 'WAND'];
 let audit: Array<unknown> = [];
 let failAudit = false;
 let actor: SessionUser | undefined;
@@ -25,6 +26,7 @@ function member(id: string, combatRole: CombatRole | null) {
         nickname: 'Игрок',
         rank: 'MEMBER' as const,
         combatRole,
+        weapons,
         user: { username: 'discord-player' },
       }
     : null;
@@ -44,12 +46,17 @@ const db: ProfilesDb = {
   dkpEntry: { findMany: async () => entries },
   $transaction: async (work) => {
     let draftRole = role;
+    let draftWeapons = [...weapons];
     const draftAudit: unknown[] = [];
     const tx: ProfileTransaction = {
       member: {
-        findUnique: async ({ where }) => member(where.id, draftRole),
+        findUnique: async ({ where }) => {
+          const found = member(where.id, draftRole);
+          return found ? { ...found, weapons: draftWeapons } : null;
+        },
         update: async ({ data }) => {
           draftRole = data.combatRole;
+          draftWeapons = data.weapons;
           return {};
         },
       },
@@ -63,6 +70,7 @@ const db: ProfilesDb = {
     };
     const result = await work(tx);
     role = draftRole;
+    weapons = draftWeapons;
     audit.push(...draftAudit);
     return result;
   },
@@ -91,6 +99,7 @@ describe('профили через HTTP', () => {
   beforeEach(() => {
     actor = { userId: 'u1', username: 'Игрок', memberId: 'm1', rank: 'MEMBER', isAdmin: false };
     role = 'DPS';
+    weapons = ['STAFF', 'WAND'];
     audit = [];
     failAudit = false;
   });
@@ -122,15 +131,35 @@ describe('профили через HTTP', () => {
   });
 
   it('чужую роль менять нельзя, даже через собственный endpoint офицера', async () => {
-    expect((await patch('m2', { combatRole: 'HEALER', comment: 'Меняю роль' })).status).toBe(403);
+    expect(
+      (
+        await patch('m2', {
+          weapons: ['STAFF', 'WAND'],
+          combatRole: 'HEALER',
+          comment: 'Меняю роль',
+        })
+      ).status,
+    ).toBe(403);
     actor!.rank = 'OFFICER';
-    expect((await patch('m2', { combatRole: 'HEALER', comment: 'Меняю роль' })).status).toBe(403);
+    expect(
+      (
+        await patch('m2', {
+          weapons: ['STAFF', 'WAND'],
+          combatRole: 'HEALER',
+          comment: 'Меняю роль',
+        })
+      ).status,
+    ).toBe(403);
     expect(role).toBe('DPS');
     expect(audit).toHaveLength(0);
   });
 
   it('своя роль меняется вместе с одной записью аудита, повтор не дублируется', async () => {
-    const body = { combatRole: 'HEALER', comment: 'Перешёл на лечение' };
+    const body = {
+      weapons: ['STAFF', 'WAND'],
+      combatRole: 'HEALER',
+      comment: 'Перешёл на лечение',
+    };
     expect((await patch('m1', body)).status).toBe(200);
     expect((await patch('m1', body)).status).toBe(200);
     expect(role).toBe('HEALER');
@@ -143,11 +172,30 @@ describe('профили через HTTP', () => {
     });
   });
 
+  it('смена только пары оружий сохраняется и журналируется', async () => {
+    expect(
+      (
+        await patch('m1', {
+          combatRole: 'DPS',
+          weapons: ['SPEAR', 'DAGGERS'],
+          comment: 'Новая пара оружий',
+        })
+      ).status,
+    ).toBe(200);
+    expect(weapons).toEqual(['SPEAR', 'DAGGERS']);
+    expect(role).toBe('DPS');
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({ comment: expect.stringContaining('Копьё / Кинжалы') });
+  });
+
   it('чужие поля и пустой комментарий — 400 без изменений', async () => {
     for (const body of [
-      { combatRole: 'TANK', comment: '  ' },
-      { combatRole: 'TANK', comment: 'Новая роль', rank: 'ADMIN' },
-      { combatRole: null, comment: 'Новая роль' },
+      { weapons: ['STAFF', 'WAND'], combatRole: 'TANK', comment: '  ' },
+      { weapons: ['STAFF', 'WAND'], combatRole: 'TANK', comment: 'Новая роль', rank: 'ADMIN' },
+      { weapons: ['STAFF', 'WAND'], combatRole: null, comment: 'Новая роль' },
+      { weapons: ['STAFF', 'STAFF'], combatRole: 'DPS', comment: 'Дубли' },
+      { weapons: ['ORB', 'STAFF'], combatRole: 'DPS', comment: 'Не RU оружие' },
+      { combatRole: 'DPS', comment: 'Оружие не выбрано' },
     ]) {
       expect((await patch('m1', body)).status).toBe(400);
     }
@@ -157,7 +205,10 @@ describe('профили через HTTP', () => {
 
   it('ошибка аудита откатывает изменение роли', async () => {
     failAudit = true;
-    expect((await patch('m1', { combatRole: 'TANK', comment: 'Смена роли' })).status).toBe(500);
+    expect(
+      (await patch('m1', { weapons: ['STAFF', 'WAND'], combatRole: 'TANK', comment: 'Смена роли' }))
+        .status,
+    ).toBe(500);
     expect(role).toBe('DPS');
     expect(audit).toHaveLength(0);
   });
@@ -166,6 +217,9 @@ describe('профили через HTTP', () => {
     expect((await fetch(`${url}/profiles/missing`)).status).toBe(404);
     actor = { userId: 'admin:admin', username: 'Админ', memberId: null, rank: null, isAdmin: true };
     expect((await fetch(`${url}/profiles/m1`)).status).toBe(200);
-    expect((await patch('m1', { combatRole: 'TANK', comment: 'Новая роль' })).status).toBe(403);
+    expect(
+      (await patch('m1', { weapons: ['STAFF', 'WAND'], combatRole: 'TANK', comment: 'Новая роль' }))
+        .status,
+    ).toBe(403);
   });
 });

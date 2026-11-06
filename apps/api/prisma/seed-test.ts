@@ -10,10 +10,34 @@ import { PrismaClient } from '@prisma/client';
  * чтобы расписание не было пустым; идемпотентны по seriesId.
  */
 const TEST_USERS = [
-  { username: 'test-leader', nickname: 'ТестГлава', rank: 'GUILD_LEADER', combatRole: 'TANK' },
-  { username: 'test-officer', nickname: 'ТестОфицер', rank: 'OFFICER', combatRole: 'HEALER' },
-  { username: 'test-member', nickname: 'ТестРядовой', rank: 'MEMBER', combatRole: 'DPS' },
-  { username: 'test-member2', nickname: 'ТестРядовой2', rank: 'MEMBER', combatRole: 'DPS' },
+  {
+    username: 'test-leader',
+    nickname: 'ТестГлава',
+    rank: 'GUILD_LEADER',
+    combatRole: 'TANK',
+    weapons: ['SWORD_SHIELD', 'GREATSWORD'],
+  },
+  {
+    username: 'test-officer',
+    nickname: 'ТестОфицер',
+    rank: 'OFFICER',
+    combatRole: 'HEALER',
+    weapons: ['WAND', 'STAFF'],
+  },
+  {
+    username: 'test-member',
+    nickname: 'ТестРядовой',
+    rank: 'MEMBER',
+    combatRole: 'DPS',
+    weapons: ['LONGBOW', 'DAGGERS'],
+  },
+  {
+    username: 'test-member2',
+    nickname: 'ТестРядовой2',
+    rank: 'MEMBER',
+    combatRole: 'DPS',
+    weapons: ['SPEAR', 'CROSSBOW'],
+  },
 ] as const;
 
 /** Идентификатор тестовой серии: по нему seed отличает свои ивенты. */
@@ -40,7 +64,7 @@ async function main(): Promise<void> {
   let leaderMemberId: string | null = null;
   let officerMemberId: string | null = null;
 
-  for (const { username, nickname, rank, combatRole } of TEST_USERS) {
+  for (const { username, nickname, rank, combatRole, weapons } of TEST_USERS) {
     // username/nickname не уникальны в схеме — ищем, потом создаём/обновляем
     const user =
       (await prisma.user.findFirst({ where: { username } })) ??
@@ -48,11 +72,11 @@ async function main(): Promise<void> {
 
     const member =
       (await prisma.member.findFirst({ where: { nickname } })) ??
-      (await prisma.member.create({ data: { nickname } }));
+      (await prisma.member.create({ data: { nickname, rank, userId: user.id, combatRole, weapons: [...weapons] } }));
 
     await prisma.member.update({
       where: { id: member.id },
-      data: { rank, userId: user.id, combatRole },
+      data: { rank, userId: user.id, combatRole, weapons: [...weapons] },
     });
 
     if (rank === 'GUILD_LEADER') {
@@ -88,7 +112,9 @@ async function main(): Promise<void> {
   for (let week = 0; week < TEST_SERIES_WEEKS; week++) {
     for (const dayOffset of [0, 2]) {
       // вт + чт той же недели; endsAt через 2 часа
-      const startsAt = new Date(firstStart.getTime() + (week * 7 + dayOffset) * 24 * 60 * 60 * 1000);
+      const startsAt = new Date(
+        firstStart.getTime() + (week * 7 + dayOffset) * 24 * 60 * 60 * 1000,
+      );
       const endsAt = new Date(startsAt.getTime() + 2 * 60 * 60 * 1000);
       await prisma.event.create({
         data: {

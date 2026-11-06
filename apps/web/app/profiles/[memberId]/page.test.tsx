@@ -12,6 +12,7 @@ const profile = {
   discord: 'alister',
   rank: 'MEMBER',
   combatRole: 'DPS',
+  weapons: ['STAFF', 'WAND'],
   balance: 75,
   recentEntries: [],
 };
@@ -27,6 +28,26 @@ beforeEach(() => {
   );
 });
 afterEach(cleanup);
+
+it('старый профиль заполняет оружия без смены роли', async () => {
+  vi.mocked(api).mockResolvedValueOnce({ ...profile, weapons: [] });
+  render(<ProfilePage />);
+  await screen.findByText('Профиль: Алистер');
+  expect(screen.getByText(/Старые данные сохранены/)).toBeDefined();
+  fireEvent.change(screen.getByLabelText('Первое оружие'), { target: { value: 'SPEAR' } });
+  fireEvent.change(screen.getByLabelText('Второе оружие'), { target: { value: 'DAGGERS' } });
+  fireEvent.change(screen.getByLabelText('Комментарий'), { target: { value: 'Заполняю оружия' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить профиль' }));
+  expect(await screen.findByRole('status')).toHaveProperty('textContent', 'Профиль сохранён');
+  expect(api).toHaveBeenCalledWith('/profiles/m1', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      combatRole: 'DPS',
+      weapons: ['SPEAR', 'DAGGERS'],
+      comment: 'Заполняю оружия',
+    }),
+  });
+});
 
 it('непривязанному аккаунту не загружает профиль', () => {
   vi.mocked(useSession).mockReturnValue({
@@ -44,15 +65,19 @@ it('показывает профиль, баланс и сохраняет св
   expect(await screen.findByText('Профиль: Алистер')).toBeDefined();
   expect(screen.getByText('75')).toBeDefined();
   expect(screen.getByText('Операций пока нет')).toBeDefined();
-  fireEvent.change(screen.getByLabelText('Роль в бою'), { target: { value: 'HEALER' } });
+  fireEvent.change(screen.getByLabelText('Роль'), { target: { value: 'HEALER' } });
   fireEvent.change(screen.getByLabelText('Комментарий'), {
     target: { value: 'Перешёл на лечение' },
   });
-  fireEvent.click(screen.getByRole('button', { name: 'Сохранить роль' }));
-  expect(await screen.findByRole('status')).toHaveProperty('textContent', 'Роль в бою сохранена');
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить профиль' }));
+  expect(await screen.findByRole('status')).toHaveProperty('textContent', 'Профиль сохранён');
   expect(api).toHaveBeenCalledWith('/profiles/m1', {
     method: 'PATCH',
-    body: JSON.stringify({ combatRole: 'HEALER', comment: 'Перешёл на лечение' }),
+    body: JSON.stringify({
+      combatRole: 'HEALER',
+      weapons: ['STAFF', 'WAND'],
+      comment: 'Перешёл на лечение',
+    }),
   });
 });
 
@@ -64,7 +89,7 @@ it('в чужом профиле нет формы самостоятельно�
   });
   render(<ProfilePage />);
   await screen.findByText('Профиль: Алистер');
-  expect(screen.queryByText('Изменить свою роль в бою')).toBeNull();
+  expect(screen.queryByText('Изменить роль и оружия')).toBeNull();
 });
 
 it('показывает 404 и сохраняет поля при ошибке изменения роли', async () => {
@@ -75,9 +100,9 @@ it('показывает 404 и сохраняет поля при ошибке 
   render(<ProfilePage />);
   await screen.findByText('Профиль: Алистер');
   vi.mocked(api).mockRejectedValueOnce({ status: 500 });
-  fireEvent.change(screen.getByLabelText('Роль в бою'), { target: { value: 'TANK' } });
+  fireEvent.change(screen.getByLabelText('Роль'), { target: { value: 'TANK' } });
   fireEvent.change(screen.getByLabelText('Комментарий'), { target: { value: 'Новая роль' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Сохранить роль' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить профиль' }));
   await waitFor(() =>
     expect(screen.getByRole('alert').textContent).toContain('Не удалось сохранить'),
   );

@@ -14,7 +14,7 @@ import {
 import { AuthGuard as PassportAuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
-import { createLinkRequestSchema, type SessionUser } from '@dkp/shared';
+import { type SessionUser } from '@dkp/shared';
 import { AuthService } from './auth.service';
 import { AuthGuard, MinRank, type AuthedRequest } from './auth.guard';
 import { LinkRequestService } from './link-request.service';
@@ -46,8 +46,13 @@ export class AuthController {
   async discordCallback(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
     // req.user — SessionUser, собранный DiscordStrategy.validate
     const user = req.user as SessionUser;
-    await this.audit.record({ actorMemberId: user.memberId, action: 'LOGIN_DISCORD',
-      entityType: 'User', entityId: user.userId, comment: 'Вход через Discord' });
+    await this.audit.record({
+      actorMemberId: user.memberId,
+      action: 'LOGIN_DISCORD',
+      entityType: 'User',
+      entityId: user.userId,
+      comment: 'Вход через Discord',
+    });
     req.session!.user = user;
     void req.session!.save(() => res.redirect(`${WEB_URL}/`));
   }
@@ -74,10 +79,12 @@ export class AuthController {
   ): { ok: boolean } {
     const login = body.login ?? '';
     const password = body.password ?? '';
-    if (!this.authService.isAdminCredentials(login, password, {
-      login: process.env.ADMIN_LOGIN,
-      password: process.env.ADMIN_PASSWORD,
-    })) {
+    if (
+      !this.authService.isAdminCredentials(login, password, {
+        login: process.env.ADMIN_LOGIN,
+        password: process.env.ADMIN_PASSWORD,
+      })
+    ) {
       return { ok: false };
     }
     // Синтетическая сессия админа: без Member, isAdmin=true (высшие права в AuthGuard)
@@ -124,11 +131,14 @@ export class AuthController {
 
   /** Заявка на привязку своего Discord к нику члена гильдии. */
   @Post('link-request')
-  @AuditAction({ action: 'LINK_REQUEST_CREATE', entityType: 'User', comment: 'Заявка на привязку Discord' })
+  @AuditAction({
+    action: 'LINK_REQUEST_CREATE',
+    entityType: 'User',
+    comment: 'Заявка на привязку Discord',
+  })
   @UseGuards(AuthGuard)
   createLinkRequest(@Body() body: unknown, @Req() req: AuthedRequest) {
-    const input = createLinkRequestSchema.parse(body);
-    return this.linkRequests.create(req.session!.user!.userId, input);
+    return this.linkRequests.create(req.session!.user!.userId, body);
   }
 
   /** Очередь заявок — офицерам и выше. */
@@ -141,7 +151,11 @@ export class AuthController {
 
   /** Подтвердить заявку — офицерам и выше. */
   @Post('link-requests/:id/approve')
-  @AuditAction({ action: 'LINK_REQUEST_APPROVE', entityType: 'MemberLinkRequest', comment: 'Привязка Discord подтверждена' })
+  @AuditAction({
+    action: 'LINK_REQUEST_APPROVE',
+    entityType: 'MemberLinkRequest',
+    comment: 'Привязка Discord подтверждена',
+  })
   @MinRank('OFFICER')
   @UseGuards(AuthGuard)
   approveLinkRequest(@Param('id') id: string) {
@@ -150,7 +164,11 @@ export class AuthController {
 
   /** Отклонить заявку — офицерам и выше. */
   @Post('link-requests/:id/reject')
-  @AuditAction({ action: 'LINK_REQUEST_REJECT', entityType: 'MemberLinkRequest', comment: 'Привязка Discord отклонена' })
+  @AuditAction({
+    action: 'LINK_REQUEST_REJECT',
+    entityType: 'MemberLinkRequest',
+    comment: 'Привязка Discord отклонена',
+  })
   @MinRank('OFFICER')
   @UseGuards(AuthGuard)
   rejectLinkRequest(@Param('id') id: string) {

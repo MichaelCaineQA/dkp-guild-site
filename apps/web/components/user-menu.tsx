@@ -30,8 +30,8 @@ export function UserMenu() {
   }
 
   return (
-    <span className="flex items-center gap-2 text-sm text-primary">
-      {user.memberId ? <a aria-label="Мой профиль" className="text-accent hover:underline" href={`/profiles/${encodeURIComponent(user.memberId)}`}>{user.username}</a> : user.username}
+    <span className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-primary">
+      {user.memberId ? <a aria-label="Мой профиль" className="min-w-0 break-all text-accent hover:underline" href={`/profiles/${encodeURIComponent(user.memberId)}`}>{user.username}</a> : user.username}
       {user.rank && <Badge tone="accent">{RANK_LABELS[user.rank]}</Badge>}
       {user.isAdmin && <Badge>админ</Badge>}
       {!user.memberId && !user.isAdmin && (

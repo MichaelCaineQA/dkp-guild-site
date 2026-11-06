@@ -5,6 +5,7 @@ import { NavMenu } from '../components/nav-menu';
 import { SessionProvider } from '../components/session-context';
 import { ThemeToggle } from '../components/theme-toggle';
 import { UserMenu } from '../components/user-menu';
+import { SiteHeader } from '../components/ui/layout';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -23,14 +24,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <SessionProvider>
-          <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-line bg-surface px-4 py-3 sm:px-6">
-            <NavMenu />
-            <span className="flex items-center gap-3">
-              <GameTimeWidget />
-              <ThemeToggle />
-              <UserMenu />
-            </span>
-          </header>
+          <SiteHeader navigation={<NavMenu />}>
+            <GameTimeWidget />
+            <ThemeToggle />
+            <UserMenu />
+          </SiteHeader>
           {children}
         </SessionProvider>
       </body>

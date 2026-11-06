@@ -1,18 +1,23 @@
-import { UnauthorizedException } from '@nestjs/common';
-import {
-  LinkRequestService,
-  type LinkRequestDb,
-} from './link-request.service';
+import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { LinkRequestService, type LinkRequestDb } from './link-request.service';
 
 interface DbState {
   users: Array<{ id: string; username: string; member: { id: string } | null }>;
-  members: Array<{ id: string; nickname: string; userId: string | null }>;
+  members: Array<{
+    id: string;
+    nickname: string;
+    userId: string | null;
+    combatRole?: import('@dkp/shared').CombatRole;
+    weapons?: import('@dkp/shared').Weapon[];
+  }>;
   requests: Array<{
     id: string;
     userId: string;
     nickname: string;
     status: string;
     resolvedAt: Date | null;
+    combatRole?: import('@dkp/shared').CombatRole;
+    weapons?: import('@dkp/shared').Weapon[];
   }>;
 }
 
@@ -28,13 +33,12 @@ function makeDb(state: DbState): LinkRequestDb {
         ) ?? null,
       update: async ({ where, data }) => {
         const member = state.members.find((m) => m.id === where.id)!;
-        member.userId = data.userId;
+        Object.assign(member, data);
       },
       create: async ({ data }) => {
         const member = {
           id: `member-${state.members.length + 1}`,
-          nickname: data.nickname,
-          userId: data.userId,
+          ...data,
         };
         state.members.push(member);
         return member;
@@ -42,11 +46,20 @@ function makeDb(state: DbState): LinkRequestDb {
     },
     memberLinkRequest: {
       findUnique: async ({ where }) => state.requests.find((r) => r.id === where.id) ?? null,
-      create: async ({ data }) => {
+      upsert: async ({ create: data, update }) => {
+        const found = state.requests.find(
+          (r) => r.userId === data.userId && r.nickname === data.nickname,
+        );
+        if (found) {
+          Object.assign(found, update);
+          return;
+        }
         state.requests.push({
           id: `req-${state.requests.length + 1}`,
           userId: data.userId,
           nickname: data.nickname,
+          combatRole: data.combatRole,
+          weapons: data.weapons,
           status: 'PENDING',
           resolvedAt: null,
         });
@@ -81,11 +94,40 @@ function makeState(): DbState {
 }
 
 describe('LinkRequestService', () => {
+  it('старая заявка без пары не принимается; повторная подача заполняет её без дубля', async () => {
+    const state = makeState();
+    state.requests.push({
+      id: 'req-1',
+      userId: 'u2',
+      nickname: 'Игрок',
+      status: 'PENDING',
+      resolvedAt: null,
+    });
+    const service = new LinkRequestService(makeDb(state));
+    await expect(service.approve('req-1')).rejects.toThrow(ConflictException);
+    await service.reject('req-1');
+    await service.create('u2', {
+      nickname: 'Игрок',
+      combatRole: 'HEALER',
+      weapons: ['STAFF', 'WAND'],
+    });
+    expect(state.requests).toHaveLength(1);
+    await service.approve('req-1');
+    expect(state.members[1]).toMatchObject({
+      combatRole: 'HEALER',
+      weapons: ['STAFF', 'WAND'],
+      userId: 'u2',
+    });
+  });
   it('непривязанный пользователь подаёт заявку на ник', async () => {
     const state = makeState();
     const service = new LinkRequestService(makeDb(state));
 
-    const result = await service.create('u2', { nickname: 'Игрок' });
+    const result = await service.create('u2', {
+      nickname: 'Игрок',
+      combatRole: 'DPS',
+      weapons: ['STAFF', 'WAND'],
+    });
 
     expect(result).toEqual({ ok: true });
     expect(state.requests).toHaveLength(1);
@@ -96,9 +138,9 @@ describe('LinkRequestService', () => {
     const state = makeState();
     const service = new LinkRequestService(makeDb(state));
 
-    await expect(service.create('u1', { nickname: 'Игрок' })).rejects.toThrow(
-      UnauthorizedException,
-    );
+    await expect(
+      service.create('u1', { nickname: 'Игрок', combatRole: 'DPS', weapons: ['STAFF', 'WAND'] }),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it('approve привязывает существующего непривязанного Member по нику', async () => {
@@ -106,7 +148,11 @@ describe('LinkRequestService', () => {
     const service = new LinkRequestService(makeDb(state));
     // офицер заранее завёл Member «officer-made» без аккаунта
     state.members.push({ id: 'officer-made', nickname: 'officer-made', userId: null });
-    await service.create('u2', { nickname: 'officer-made' });
+    await service.create('u2', {
+      nickname: 'officer-made',
+      combatRole: 'DPS',
+      weapons: ['STAFF', 'WAND'],
+    });
 
     await service.approve('req-1');
 
@@ -117,7 +163,11 @@ describe('LinkRequestService', () => {
   it('approve создаёт нового Member, если такого ника нет', async () => {
     const state = makeState();
     const service = new LinkRequestService(makeDb(state));
-    await service.create('u2', { nickname: 'brand-new' });
+    await service.create('u2', {
+      nickname: 'brand-new',
+      combatRole: 'DPS',
+      weapons: ['STAFF', 'WAND'],
+    });
 
     await service.approve('req-1');
 
@@ -125,13 +175,19 @@ describe('LinkRequestService', () => {
       id: 'member-2',
       nickname: 'brand-new',
       userId: 'u2',
+      combatRole: 'DPS',
+      weapons: ['STAFF', 'WAND'],
     });
   });
 
   it('занятый другим аккаунтом ник не привязывается', async () => {
     const state = makeState();
     const service = new LinkRequestService(makeDb(state));
-    await service.create('u2', { nickname: 'linked' });
+    await service.create('u2', {
+      nickname: 'linked',
+      combatRole: 'DPS',
+      weapons: ['STAFF', 'WAND'],
+    });
 
     await expect(service.approve('req-1')).rejects.toThrow(UnauthorizedException);
   });
@@ -139,7 +195,11 @@ describe('LinkRequestService', () => {
   it('reject закрывает заявку без привязки', async () => {
     const state = makeState();
     const service = new LinkRequestService(makeDb(state));
-    await service.create('u2', { nickname: 'Игрок' });
+    await service.create('u2', {
+      nickname: 'Игрок',
+      combatRole: 'DPS',
+      weapons: ['STAFF', 'WAND'],
+    });
 
     await service.reject('req-1');
 
