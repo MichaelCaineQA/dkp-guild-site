@@ -1,4 +1,5 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import type { CheckInDb, Clock } from './checkin.service';
 import { CheckInService } from './checkin.service';
 
@@ -81,11 +82,12 @@ describe('CheckInService.raidLeadView', () => {
     expect(view.phase).toBe('START');
     expect(view.windowState).toBe('ACTIVE');
     expect(view.code).toMatch(/^\d{3}$/);
-    // В БД — только хэш, сам код не хранится
+    // Проверяем хэш с солью: случайные hex-строки могут содержать цифры кода.
     const stored = codes.get('e-1:START')!;
-    expect(stored.codeHash).not.toContain(view.code);
-    expect(stored.codeHash).toHaveLength(64); // sha256 hex
-    expect(stored.salt).not.toContain(view.code);
+    expect(stored.salt).toMatch(/^[a-f0-9]{32}$/);
+    expect(stored.codeHash).toBe(
+      createHash('sha256').update(`${stored.salt}:${view.code}`).digest('hex'),
+    );
   });
 
   it('рядовой-не-РЛ код не видит — 403', async () => {
@@ -115,7 +117,7 @@ describe('CheckInService.raidLeadView', () => {
     expect(second.code).toBe(first.code);
     // В БД код лежит зашифрованным — не открытым текстом
     const stored = codes.get('e-1:START')!;
-    expect(stored.codeEnc).not.toContain(first.code);
+    expect(stored.codeEnc).toMatch(/^v1:[a-f0-9]{24}:[a-f0-9]{32}:[a-f0-9]{6}$/);
     expect(stored.codeEnc.startsWith('v1:')).toBe(true);
   });
 
