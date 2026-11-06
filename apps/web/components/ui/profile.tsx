@@ -1,4 +1,4 @@
-import { COMBAT_ROLE_LABELS, RANK_LABELS, type PlayerProfile } from '@dkp/shared';
+import { COMBAT_ROLE_LABELS, RANK_LABELS, formatWeapons, type PlayerProfile } from '@dkp/shared';
 import { Card, Muted, SectionTitle } from './layout';
 import { Table } from './data';
 
@@ -20,8 +20,10 @@ export function ProfileDetails({ profile }: { profile: PlayerProfile }) {
         <dd className="break-all">{profile.discord ?? 'Не привязан'}</dd>
         <dt>Ранг</dt>
         <dd>{RANK_LABELS[profile.rank]}</dd>
-        <dt>Роль в бою</dt>
+        <dt>Роль</dt>
         <dd>{profile.combatRole ? COMBAT_ROLE_LABELS[profile.combatRole] : 'Не указана'}</dd>
+        <dt>Класс (оружия)</dt>
+        <dd>{formatWeapons(profile.weapons ?? [])}</dd>
         <dt>Баланс ДКП</dt>
         <dd className="text-xl font-semibold tabular-nums">{profile.balance}</dd>
       </dl>

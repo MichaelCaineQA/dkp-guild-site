@@ -3,8 +3,14 @@ import type { MembersDb, Actor } from './members.service';
 import { MembersService } from './members.service';
 
 /** In-memory БД для тестов: достаточно интерфейса MembersDb. */
-function makeDb(seed: Array<{ id: string; nickname: string; rank: string; combatRole: string | null }>) {
-  const members = seed.map((m) => ({ ...m, userId: null as string | null }));
+function makeDb(
+  seed: Array<{ id: string; nickname: string; rank: string; combatRole: string | null }>,
+) {
+  const members = seed.map((m) => ({
+    weapons: ['STAFF', 'WAND'] as import('@dkp/shared').Weapon[],
+    ...m,
+    userId: null as string | null,
+  }));
   const audit: Array<Record<string, string | null>> = [];
   const db: MembersDb = {
     member: {
@@ -13,6 +19,7 @@ function makeDb(seed: Array<{ id: string; nickname: string; rank: string; combat
         expect(include).toEqual({ user: { select: { username: true } } });
         return members
           .filter((m) => (where.rank ? m.rank === where.rank : true))
+          .filter((m) => (where.weapons ? m.weapons.includes(where.weapons.has) : true))
           .filter((m) => (where.combatRole ? m.combatRole === where.combatRole : true))
           .sort((a, b) => a.nickname.localeCompare(b.nickname))
           .map((m) => ({ ...m, user: m.userId ? { username: m.userId } : null }));
@@ -73,13 +80,15 @@ describe('MembersService.roster', () => {
     const service = new MembersService(db);
 
     expect((await service.roster({ rank: 'MEMBER' })).map((r) => r.nickname)).toEqual(['a', 'c']);
+    expect(await service.roster({ weapon: 'STAFF' })).toHaveLength(3);
+    expect(await service.roster({ weapon: 'SPEAR' })).toHaveLength(0);
     expect((await service.roster({ combatRole: 'HEALER' })).map((r) => r.nickname)).toEqual([
       'b',
       'c',
     ]);
-    expect((await service.roster({ rank: 'MEMBER', combatRole: 'HEALER' })).map((r) => r.id)).toEqual(
-      ['m-3'],
-    );
+    expect(
+      (await service.roster({ rank: 'MEMBER', combatRole: 'HEALER' })).map((r) => r.id),
+    ).toEqual(['m-3']);
   });
 });
 
@@ -89,10 +98,15 @@ describe('MembersService.create', () => {
     const service = new MembersService(db);
 
     const member = await service.create(
-      { nickname: 'NewGuy', combatRole: 'TANK', rank: 'OFFICER' },
+      { weapons: ['STAFF', 'WAND'], nickname: 'NewGuy', combatRole: 'TANK', rank: 'OFFICER' },
       ACTOR,
     );
-    expect(member).toMatchObject({ nickname: 'NewGuy', combatRole: 'TANK', rank: 'OFFICER' });
+    expect(member).toMatchObject({
+      weapons: ['STAFF', 'WAND'],
+      nickname: 'NewGuy',
+      combatRole: 'TANK',
+      rank: 'OFFICER',
+    });
     expect(audit).toHaveLength(1);
     expect(audit[0]).toMatchObject({
       actorMemberId: 'm-actor',
@@ -102,19 +116,24 @@ describe('MembersService.create', () => {
     });
   });
 
-  it('создаёт рядового без роли по умолчанию', async () => {
+  it('по умолчанию создаёт рядового с явно указанной ролью', async () => {
     const { db } = makeDb([]);
     const service = new MembersService(db);
 
-    const member = await service.create({ nickname: 'Plain' }, ACTOR);
-    expect(member).toMatchObject({ rank: 'MEMBER', combatRole: null });
+    const member = await service.create(
+      { weapons: ['STAFF', 'WAND'], nickname: 'Plain', combatRole: 'DPS' },
+      ACTOR,
+    );
+    expect(member).toMatchObject({ rank: 'MEMBER', combatRole: 'DPS' });
   });
 
   it('дубликат ника — 409', async () => {
     const { db } = makeDb([{ id: 'm-1', nickname: 'Taken', rank: 'MEMBER', combatRole: null }]);
     const service = new MembersService(db);
 
-    await expect(service.create({ nickname: 'Taken' }, ACTOR)).rejects.toThrow(ConflictException);
+    await expect(
+      service.create({ weapons: ['STAFF', 'WAND'], nickname: 'Taken', combatRole: 'DPS' }, ACTOR),
+    ).rejects.toThrow(ConflictException);
   });
 });
 
@@ -125,8 +144,17 @@ describe('MembersService.update', () => {
     ]);
     const service = new MembersService(db);
 
-    const member = await service.update('m-1', { nickname: 'New', combatRole: 'HEALER' }, ACTOR);
-    expect(member).toMatchObject({ nickname: 'New', combatRole: 'HEALER', rank: 'MEMBER' });
+    const member = await service.update(
+      'm-1',
+      { weapons: ['STAFF', 'WAND'], nickname: 'New', combatRole: 'HEALER' },
+      ACTOR,
+    );
+    expect(member).toMatchObject({
+      weapons: ['STAFF', 'WAND'],
+      nickname: 'New',
+      combatRole: 'HEALER',
+      rank: 'MEMBER',
+    });
     expect(audit[0]!.comment).toContain('ник «Old» → «New»');
     expect(audit[0]!.comment).toContain('роль в бою «DPS» → «HEALER»');
   });
@@ -139,7 +167,11 @@ describe('MembersService.update', () => {
     const service = new MembersService(db);
 
     await expect(
-      service.update('m-1', { nickname: 'Bb', combatRole: null }, ACTOR),
+      service.update(
+        'm-1',
+        { weapons: ['STAFF', 'WAND'], nickname: 'Bb', combatRole: 'DPS' },
+        ACTOR,
+      ),
     ).rejects.toThrow(ConflictException);
   });
 
@@ -148,7 +180,11 @@ describe('MembersService.update', () => {
     const service = new MembersService(db);
 
     await expect(
-      service.update('m-x', { nickname: 'Xx', combatRole: null }, ACTOR),
+      service.update(
+        'm-x',
+        { weapons: ['STAFF', 'WAND'], nickname: 'Xx', combatRole: 'DPS' },
+        ACTOR,
+      ),
     ).rejects.toThrow(NotFoundException);
   });
 });
@@ -241,7 +277,10 @@ describe('Ранги ADMIN/GUILD_LEADER не назначаются (решен�
     const service = new MembersService(db);
 
     await expect(
-      service.create({ nickname: 'Новый', rank: 'GUILD_LEADER' }, ACTOR),
+      service.create(
+        { weapons: ['STAFF', 'WAND'], nickname: 'Новый', combatRole: 'DPS', rank: 'GUILD_LEADER' },
+        ACTOR,
+      ),
     ).rejects.toThrow(ConflictException);
   });
 });

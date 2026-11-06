@@ -76,7 +76,7 @@ export default function DesignPage() {
         <div className="flex flex-wrap items-center gap-3">
           <Input placeholder="Игровой ник" />
           <Select defaultValue="">
-            <option value="">роль в бою —</option>
+            <option value="">роль —</option>
             <option>ДД</option>
             <option>Хил</option>
             <option>Танк</option>
@@ -105,7 +105,7 @@ export default function DesignPage() {
             <tr>
               <Table.Th>Ник</Table.Th>
               <Table.Th>Ранг</Table.Th>
-              <Table.Th>Роль в бою</Table.Th>
+              <Table.Th>Роль</Table.Th>
               <Table.Th>Баланс</Table.Th>
             </tr>
           </thead>

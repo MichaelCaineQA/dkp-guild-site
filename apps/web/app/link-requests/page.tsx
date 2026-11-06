@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { can } from '@dkp/shared';
+import { can, COMBAT_ROLE_LABELS, formatWeapons, type CombatRole, type Weapon } from '@dkp/shared';
 import { useSession } from '../../components/session-context';
 import { api } from '../../lib/api';
 import {
@@ -16,6 +16,8 @@ import {
 } from '../../components/ui';
 
 interface LinkRequest {
+  combatRole: CombatRole | null;
+  weapons: Weapon[];
   id: string;
   nickname: string;
   createdAt: string;
@@ -45,15 +47,23 @@ export default function LinkRequestsPage() {
   }, [sessionLoading, user, load]);
 
   const canReview =
-    user && can({ rank: user.rank, isAdmin: user.isAdmin, memberId: user.memberId }, 'link_requests.review');
+    user &&
+    can(
+      { rank: user.rank, isAdmin: user.isAdmin, memberId: user.memberId },
+      'link_requests.review',
+    );
 
   const resolve = async (id: string, action: 'approve' | 'reject') => {
     setBusyId(id);
     try {
       await api(`/auth/link-requests/${id}/${action}`, { method: 'POST' });
       await load();
-    } catch {
-      setError('Не удалось обработать заявку');
+    } catch (err) {
+      setError(
+        (err as { status?: number }).status === 409
+          ? 'В старой заявке нет роли или оружия. Отклоните её — игрок сможет подать новую.'
+          : 'Не удалось обработать заявку',
+      );
     } finally {
       setBusyId(null);
     }
@@ -85,6 +95,8 @@ export default function LinkRequestsPage() {
             <tr>
               <Table.Th>Discord</Table.Th>
               <Table.Th>Игровой ник</Table.Th>
+              <Table.Th>Роль</Table.Th>
+              <Table.Th>Класс (оружия)</Table.Th>
               <Table.Th>Подана</Table.Th>
               <Table.Th>Действия</Table.Th>
             </tr>
@@ -94,6 +106,10 @@ export default function LinkRequestsPage() {
               <tr key={request.id}>
                 <Table.Td>{request.user.username}</Table.Td>
                 <Table.Td className="font-medium">{request.nickname}</Table.Td>
+                <Table.Td>
+                  {request.combatRole ? COMBAT_ROLE_LABELS[request.combatRole] : 'Не указана'}
+                </Table.Td>
+                <Table.Td>{formatWeapons(request.weapons ?? [])}</Table.Td>
                 <Table.Td>{new Date(request.createdAt).toLocaleString('ru-RU')}</Table.Td>
                 <Table.Td>
                   <span className="flex gap-2">
@@ -116,7 +132,7 @@ export default function LinkRequestsPage() {
             ))}
             {requests.length === 0 && (
               <tr>
-                <Table.Td colSpan={4}>
+                <Table.Td colSpan={6}>
                   <Muted>Новых заявок нет</Muted>
                 </Table.Td>
               </tr>

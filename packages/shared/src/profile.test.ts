@@ -13,7 +13,11 @@ describe('самостоятельное редактирование профи
   });
 
   it('запрещает чужие поля, пустую роль и комментарий из пробелов', () => {
-    const valid = { combatRole: 'HEALER', comment: 'Меняю специализацию' };
+    const valid = {
+      weapons: ['STAFF', 'WAND'],
+      combatRole: 'HEALER',
+      comment: 'Меняю специализацию',
+    };
     expect(updateOwnProfileSchema.safeParse(valid).success).toBe(true);
     for (const body of [
       { ...valid, rank: 'ADMIN' },

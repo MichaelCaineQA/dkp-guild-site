@@ -30,6 +30,17 @@ enum CombatRole {
   TANK
 }
 
+enum Weapon {
+  SWORD_SHIELD
+  GREATSWORD
+  DAGGERS
+  CROSSBOW
+  LONGBOW
+  STAFF
+  WAND
+  SPEAR
+}
+
 enum EventMode {
   PVE
   PVP
@@ -152,6 +163,8 @@ model User {
 /// Заявка на привязку «Discord ↔ профиль члена гильдии» (план 2.9):
 /// вошедший без Member указывает свой игровой ник, офицер подтверждает.
 model MemberLinkRequest {
+  combatRole CombatRole?
+  weapons Weapon[] @default([])
   id String @id @default(cuid())
   userId String
   user User @relation(fields: [userId], references: [id])
@@ -177,6 +190,7 @@ model Member {
   nickname String @unique
   rank Rank @default(MEMBER)
   combatRole CombatRole?
+  weapons Weapon[] @default([])
   packId String?
   pack Pack? @relation("PackMembers", fields: [packId], references: [id])
   ledPacks Pack[] @relation("PackLeader")

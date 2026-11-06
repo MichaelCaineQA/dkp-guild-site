@@ -9,6 +9,7 @@ import {
   canEditOwnProfile,
   updateOwnProfileSchema,
   type CombatRole,
+  type Weapon,
   type PlayerProfile,
 } from '@dkp/shared';
 import { useSession } from '../../../components/session-context';
@@ -27,6 +28,7 @@ import {
   SectionTitle,
   Select,
   Stack,
+  WeaponPicker,
 } from '../../../components/ui';
 
 export default function ProfilePage() {
@@ -37,6 +39,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [error, setError] = useState('');
   const [role, setRole] = useState<CombatRole | ''>('');
+  const [weapons, setWeapons] = useState<Array<Weapon | ''>>([]);
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -55,6 +58,7 @@ export default function ProfilePage() {
         if (active) {
           setProfile(data);
           setRole(data.combatRole ?? '');
+          setWeapons(data.weapons ?? []);
         }
       })
       .catch((err: { status?: number }) => {
@@ -75,11 +79,11 @@ export default function ProfilePage() {
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
-    const input = updateOwnProfileSchema.safeParse({ combatRole: role, comment });
+    const input = updateOwnProfileSchema.safeParse({ combatRole: role, weapons, comment });
     setSaveError('');
     setMessage('');
     if (!input.success) {
-      setSaveError('Выберите роль и укажите комментарий от 3 до 500 символов');
+      setSaveError('Выберите роль, два разных оружия и укажите комментарий от 3 до 500 символов');
       return;
     }
     setBusy(true);
@@ -89,15 +93,17 @@ export default function ProfilePage() {
         body: JSON.stringify(input.data),
       });
       setProfile((current) =>
-        current?.id === memberId ? { ...current, combatRole: input.data.combatRole } : current,
+        current?.id === memberId
+          ? { ...current, combatRole: input.data.combatRole, weapons: input.data.weapons }
+          : current,
       );
       setComment('');
-      setMessage('Роль в бою сохранена');
+      setMessage('Профиль сохранён');
     } catch (err) {
       setSaveError(
         (err as { status?: number }).status === 403
-          ? 'Можно менять только свою роль в бою'
-          : 'Не удалось сохранить роль. Попробуйте ещё раз.',
+          ? 'Можно менять только свой профиль'
+          : 'Не удалось сохранить профиль. Попробуйте ещё раз.',
       );
     } finally {
       setBusy(false);
@@ -130,11 +136,17 @@ export default function ProfilePage() {
         <ProfileDetails profile={profile} />
         {canEditOwnProfile(actor, memberId) && (
           <Card>
-            <SectionTitle>Изменить свою роль в бою</SectionTitle>
+            <SectionTitle>Изменить роль и оружия</SectionTitle>
+            {(!profile.combatRole || (profile.weapons ?? []).length !== 2) && (
+              <Notice>
+                Заполните роль и два оружия. Старые данные сохранены, оружия автоматически не
+                назначались.
+              </Notice>
+            )}
             <form onSubmit={save}>
               <fieldset disabled={busy}>
                 <Stack>
-                  <Field label="Роль в бою">
+                  <Field label="Роль">
                     <Select
                       required
                       value={role}
@@ -150,6 +162,7 @@ export default function ProfilePage() {
                       ))}
                     </Select>
                   </Field>
+                  <WeaponPicker value={weapons} onChange={setWeapons} />
                   <Field label="Комментарий">
                     <Input
                       required
@@ -159,8 +172,15 @@ export default function ProfilePage() {
                       onChange={(e) => setComment(e.target.value)}
                     />
                   </Field>
-                  <Button type="submit" variant="primary" disabled={role === profile.combatRole}>
-                    {busy ? 'Сохранение…' : 'Сохранить роль'}
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={
+                      role === profile.combatRole &&
+                      JSON.stringify(weapons) === JSON.stringify(profile.weapons ?? [])
+                    }
+                  >
+                    {busy ? 'Сохранение…' : 'Сохранить профиль'}
                   </Button>
                 </Stack>
               </fieldset>

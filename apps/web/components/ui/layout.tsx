@@ -1,5 +1,21 @@
 import type { ReactNode } from 'react';
 
+/** Шапка переносит навигацию и блок пользователя на узком экране. */
+export function SiteHeader({
+  navigation,
+  children,
+}: {
+  navigation: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <header className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 border-b border-line bg-surface px-4 py-3 sm:px-6">
+      {navigation}
+      <div className="flex min-w-0 flex-wrap items-center gap-3">{children}</div>
+    </header>
+  );
+}
+
 /** Вертикальная группа блоков страницы или формы. */
 export function Stack({ children }: { children: ReactNode }) {
   return <div className="flex min-w-0 flex-col gap-4">{children}</div>;
@@ -14,13 +30,15 @@ export function Stack({ children }: { children: ReactNode }) {
  */
 
 /** Обёртка страницы: центрирует контент, задаёт поля и ширину. */
-export function Page({ children, width = 'regular' }: { children: ReactNode; width?: 'narrow' | 'regular' | 'wide' }) {
+export function Page({
+  children,
+  width = 'regular',
+}: {
+  children: ReactNode;
+  width?: 'narrow' | 'regular' | 'wide';
+}) {
   const max = width === 'narrow' ? 'max-w-xl' : width === 'wide' ? 'max-w-6xl' : 'max-w-3xl';
-  return (
-    <main className={`mx-auto w-full ${max} px-4 py-6 sm:px-6`}>
-      {children}
-    </main>
-  );
+  return <main className={`mx-auto w-full ${max} px-4 py-6 sm:px-6`}>{children}</main>;
 }
 
 /** Заголовок страницы + необязательное пояснение. */
@@ -48,7 +66,13 @@ export function SectionTitle({ children }: { children: ReactNode }) {
 }
 
 /** Строка состояния: приглашение войти, пояснение про доступ. */
-export function Notice({ tone = 'info', children }: { tone?: 'info' | 'success' | 'danger'; children: ReactNode }) {
+export function Notice({
+  tone = 'info',
+  children,
+}: {
+  tone?: 'info' | 'success' | 'danger';
+  children: ReactNode;
+}) {
   const tones = {
     info: 'border-line bg-surface-muted text-secondary',
     success: 'border-success/40 bg-success-soft text-success',

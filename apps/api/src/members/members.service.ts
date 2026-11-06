@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -9,6 +10,8 @@ import {
   createMemberSchema,
   rosterQuerySchema,
   updateMemberSchema,
+  formatWeapons,
+  type Weapon,
   type ChangeRankInput,
   type CreateMemberInput,
   type RosterQuery,
@@ -17,6 +20,7 @@ import {
 
 /** Строка состава для UI. */
 export interface RosterRow {
+  weapons: Weapon[];
   id: string;
   nickname: string;
   rank: string;
@@ -25,6 +29,7 @@ export interface RosterRow {
 }
 
 export interface MemberRow {
+  weapons?: Weapon[];
   id: string;
   nickname: string;
   rank: string;
@@ -48,7 +53,7 @@ export interface AuditWriter {
 export interface MembersDb {
   member: {
     findMany(args: {
-      where: { rank?: string; combatRole?: string };
+      where: { rank?: string; combatRole?: string; weapons?: { has: Weapon } };
       orderBy: { nickname: 'asc' };
       include: { user: { select: { username: true } } };
     }): Promise<
@@ -57,6 +62,7 @@ export interface MembersDb {
         nickname: string;
         rank: string;
         combatRole: string | null;
+        weapons?: Weapon[];
         user: { username: string } | null;
       }>
     >;
@@ -64,11 +70,11 @@ export interface MembersDb {
     findFirst(args: { where: { nickname: string } }): Promise<{ id: string } | null>;
     count(args: { where: { rank: string } }): Promise<number>;
     create(args: {
-      data: { nickname: string; rank: string; combatRole: string | null };
+      data: { nickname: string; rank: string; combatRole: string | null; weapons: Weapon[] };
     }): Promise<MemberRow>;
     update(args: {
       where: { id: string };
-      data: { nickname?: string; combatRole?: string | null; rank?: string };
+      data: { nickname?: string; combatRole?: string | null; rank?: string; weapons?: Weapon[] };
     }): Promise<MemberRow>;
   };
   auditLog: AuditWriter;
@@ -91,8 +97,11 @@ export class MembersService {
 
   /** Состав с фильтрами по рангу и роли в бою — всем членам гильдии. */
   async roster(query: unknown): Promise<RosterRow[]> {
-    const filters: RosterQuery = rosterQuerySchema.parse(query);
-    const where: { rank?: string; combatRole?: string } = {};
+    const parsed = rosterQuerySchema.safeParse(query);
+    if (!parsed.success) throw new BadRequestException('Некорректные фильтры состава');
+    const filters: RosterQuery = parsed.data;
+    const where: { rank?: string; combatRole?: string; weapons?: { has: Weapon } } = {};
+    if (filters.weapon) where.weapons = { has: filters.weapon };
     if (filters.rank) {
       where.rank = filters.rank;
     }
@@ -110,6 +119,7 @@ export class MembersService {
       nickname: m.nickname,
       rank: m.rank,
       combatRole: m.combatRole,
+      weapons: m.weapons ?? [],
       discord: m.user?.username ?? null,
     }));
   }
@@ -124,13 +134,16 @@ export class MembersService {
       nickname: member.nickname,
       rank: member.rank,
       combatRole: member.combatRole,
+      weapons: member.weapons ?? [],
       discord: null, // имя Discord достаём списком; в карточке не критично
     };
   }
 
   /** Создание члена (members.manage): до привязки Discord — «пустышка». */
   async create(body: unknown, actor: Actor): Promise<MemberRow> {
-    const input: CreateMemberInput = createMemberSchema.parse(body);
+    const parsed = createMemberSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('Укажите ник, роль и два разных оружия');
+    const input: CreateMemberInput = parsed.data;
 
     if (input.rank === 'ADMIN' || input.rank === 'GUILD_LEADER') {
       throw new ConflictException(
@@ -148,6 +161,7 @@ export class MembersService {
         nickname: input.nickname,
         rank: input.rank ?? 'MEMBER',
         combatRole: input.combatRole ?? null,
+        weapons: input.weapons,
       },
     });
     await this.audit(actor, 'MEMBER_CREATE', member.id, `Создан член «${member.nickname}»`);
@@ -156,7 +170,9 @@ export class MembersService {
 
   /** Редактирование ника/роли в бою (members.manage). */
   async update(id: string, body: unknown, actor: Actor): Promise<MemberRow> {
-    const input: UpdateMemberInput = updateMemberSchema.parse(body);
+    const parsed = updateMemberSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('Укажите ник, роль и два разных оружия');
+    const input: UpdateMemberInput = parsed.data;
 
     const existing = await this.mustExist(id);
     const clash = await this.db.member.findFirst({ where: { nickname: input.nickname } });
@@ -166,16 +182,18 @@ export class MembersService {
 
     const member = await this.db.member.update({
       where: { id },
-      data: { nickname: input.nickname, combatRole: input.combatRole },
+      data: { nickname: input.nickname, combatRole: input.combatRole, weapons: input.weapons },
     });
     const changes: string[] = [];
+    if (JSON.stringify(existing.weapons ?? []) !== JSON.stringify(member.weapons ?? []))
+      changes.push(
+        `оружия: ${formatWeapons(existing.weapons ?? [])} → ${formatWeapons(member.weapons ?? [])}`,
+      );
     if (existing.nickname !== member.nickname) {
       changes.push(`ник «${existing.nickname}» → «${member.nickname}»`);
     }
     if (existing.combatRole !== member.combatRole) {
-      changes.push(
-        `роль в бою «${existing.combatRole ?? '—'}» → «${member.combatRole ?? '—'}»`,
-      );
+      changes.push(`роль в бою «${existing.combatRole ?? '—'}» → «${member.combatRole ?? '—'}»`);
     }
     await this.audit(actor, 'MEMBER_UPDATE', member.id, changes.join('; ') || 'Без изменений');
     return member;
