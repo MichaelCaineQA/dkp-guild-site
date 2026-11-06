@@ -4,6 +4,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import session from 'express-session';
 import passport from 'passport';
 import { AppModule } from './app.module';
+import { setupOpenApi } from './openapi/openapi';
 
 async function bootstrap(): Promise<void> {
   // Тестовый вход (/auth/test-login) — только для dev/staging/e2e.
@@ -43,6 +44,7 @@ async function bootstrap(): Promise<void> {
     credentials: true,
   });
   app.enableShutdownHooks();
+  setupOpenApi(app);
   await app.listen(process.env.PORT ?? 3001);
 }
 void bootstrap();

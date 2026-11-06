@@ -85,6 +85,21 @@ pnpm dev                 # web: http://localhost:3000, api: http://localhost:300
 Переменные окружения — по образцу [.env.example](.env.example) (копируются
 в `apps/api/.env`). Для миграций и seed нужен `DATABASE_URL`.
 
+## Контракт API (Swagger / OpenAPI)
+
+При запущенном API интерактивная документация доступна на
+[http://localhost:3001/docs](http://localhost:3001/docs), JSON-контракт — на
+[http://localhost:3001/openapi.json](http://localhost:3001/openapi.json)
+(для Docker используйте свой `SITE_API_PORT`). JSON можно импортировать в Postman
+или генератор клиента. Документ строится из текущих маршрутов NestJS, схемы
+запросов — из общей Zod-валидации; описания ответов находятся в `apps/api/src/openapi`.
+
+Для **Try it out** сначала войдите в том же браузере через
+`/auth/discord` или выполните `POST /auth/admin/login` в Swagger.
+Браузер отправляет httpOnly-cookie `dkp.sid` автоматически. Успешность резервного
+входа проверяйте по `ok`, затем вызовите `GET /auth/me`. Действия меняют реальные
+данные текущего окружения. Тестовый вход описывается только при `AUTH_TEST_MODE=true`.
+
 ## Вход через Discord (OAuth2)
 
 1. Создайте приложение на <https://discord.com/developers/applications>.
