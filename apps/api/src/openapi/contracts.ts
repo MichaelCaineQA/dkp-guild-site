@@ -57,7 +57,7 @@ export const contracts: Record<string, Contract> = {
     body: 'AdminLogin',
     errors: [429],
     description:
-      'Устанавливает httpOnly-cookie dkp.sid. Неверные данные: HTTP 200, ok=false. Лимит: 5 запросов в минуту.',
+      'Устанавливает httpOnly-cookie dkp.sid. Неверные данные: HTTP 200, ok=false. Лимит: 5 запросов за 15 минут с одного IP-адреса, включая успешные входы.',
   }),
   Auth_logout: c('Завершить сессию', 'Ok', {
     public: true,

@@ -71,7 +71,7 @@ export class AuthController {
   /** Резервный вход администратора (login-пароль из env). */
   @Post('admin/login')
   @AuditAction({ action: 'LOGIN_ADMIN', entityType: 'User', comment: 'Вход администратора' })
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
   @HttpCode(200)
   adminLogin(
     @Body() body: { login?: string; password?: string },
