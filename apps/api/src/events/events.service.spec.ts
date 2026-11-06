@@ -93,6 +93,13 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
         }
         return { count: doomed.length };
       },
+      delete: async ({ where }) => {
+        const index = events.findIndex((e) => e.id === where.id);
+        if (index >= 0) {
+          events.splice(index, 1);
+        }
+        return {};
+      },
       count: async ({ where }) =>
         events.filter((e) => e.seriesId === where.seriesId && e.status !== 'PLANNED').length,
     },
@@ -273,5 +280,23 @@ describe('EventsService.list', () => {
 
     const pvp = await service.list({ mode: 'PVP' });
     expect(pvp.map((e) => e.id)).toEqual(['e-1']);
+  });
+});
+
+describe('EventsService.deleteOne', () => {
+  it('удаляет PLANNED-ивент с аудитом', async () => {
+    const { db, events, audit } = makeDb([{ id: 'e-1' }]);
+    const service = new EventsService(db);
+
+    await service.deleteOne('e-1', ACTOR);
+    expect(events).toHaveLength(0);
+    expect(audit[0]).toMatchObject({ action: 'EVENT_DELETE', entityId: 'e-1' });
+  });
+
+  it('не-PLANNED удалить нельзя — 409', async () => {
+    const { db } = makeDb([{ id: 'e-1', status: 'RUNNING' }]);
+    const service = new EventsService(db);
+
+    await expect(service.deleteOne('e-1', ACTOR)).rejects.toThrow(ConflictException);
   });
 });

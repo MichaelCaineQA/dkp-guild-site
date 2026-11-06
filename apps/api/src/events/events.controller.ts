@@ -59,6 +59,14 @@ export class EventsController {
     return this.events.deleteSeries(seriesId, { memberId: user.memberId, isAdmin: user.isAdmin });
   }
 
+  /** Удаление одиночного ивента — только PLANNED (офицеры+). */
+  @Delete(':id')
+  @RequirePermission('events.manage')
+  deleteOne(@Param('id') id: string, @Req() req: AuthedRequest) {
+    const user = req.session!.user!;
+    return this.events.deleteOne(id, { memberId: user.memberId, isAdmin: user.isAdmin });
+  }
+
   /**
    * Редактирование: guard пропускает офицеров+; РЛ-не-офицер тоже может —
    * точечная проверка в сервисе (механизм «РЛ ивента», план 2.6).
