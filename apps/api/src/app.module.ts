@@ -10,9 +10,10 @@ import { ConductModule } from './conduct/conduct.module';
 import { DkpModule } from './dkp/dkp.module';
 import { AbsencesModule } from './absences/absences.module';
 import { RulesModule } from './rules/rules.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, MembersModule, SettingsModule, EventsModule, CheckInModule, AbsencesModule, ConductModule, DkpModule, RulesModule],
+  imports: [PrismaModule, AuthModule, MembersModule, SettingsModule, EventsModule, CheckInModule, AbsencesModule, ConductModule, DkpModule, AuditModule, RulesModule],
   controllers: [AppController],
 })
 export class AppModule {}

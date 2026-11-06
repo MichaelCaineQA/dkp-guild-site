@@ -25,7 +25,7 @@ describe('generateCheckInCode', () => {
 describe('hashCheckInCode / isCodeCorrect', () => {
   it('хэш с солью стабилен и проверяем', () => {
     const { code, salt, codeHash } = newCodeWithHash();
-    expect(codeHash).not.toContain(code);
+    expect(codeHash).toMatch(/^[a-f0-9]{64}$/);
     expect(isCodeCorrect(code, salt, codeHash)).toBe(true);
     expect(isCodeCorrect(code === '999' ? '111' : '999', salt, codeHash)).toBe(false);
   });
@@ -44,7 +44,7 @@ describe('encryptCheckInCode / decryptCheckInCode', () => {
   it('шифрует и расшифровывает код', () => {
     const sealed = encryptCheckInCode('482', KEY);
     expect(sealed.startsWith('v1:')).toBe(true);
-    expect(sealed).not.toContain('482');
+    expect(sealed).toMatch(/^v1:[a-f0-9]{24}:[a-f0-9]{32}:[a-f0-9]{6}$/);
     expect(decryptCheckInCode(sealed, KEY)).toBe('482');
   });
 
