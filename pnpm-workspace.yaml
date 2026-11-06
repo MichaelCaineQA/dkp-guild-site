@@ -4,6 +4,7 @@ packages:
 
 # Разрешённые postinstall-скрипты (pnpm 12 по умолчанию блокирует все)
 allowBuilds:
+  "@scarf/scarf": false # Не запускаем необязательный telemetry postinstall Swagger UI
   "@prisma/client": true
   "@prisma/engines": true
   prisma: true
