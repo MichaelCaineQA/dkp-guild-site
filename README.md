@@ -18,7 +18,59 @@
 
 ## Быстрый старт
 
-Нужны Node.js ≥ 20, pnpm и Docker.
+### Вариант A — весь сайт в Docker одной командой
+
+Нужен только запущенный Docker Desktop (Windows/macOS). Собирает образы,
+поднимает web + api + PostgreSQL + Redis, применяет миграции и стартовые
+данные при запуске:
+
+```bash
+pnpm site:up     # web: http://localhost:3000, api: http://localhost:3001/health
+pnpm site:down   # остановить (данные БД сохраняются в томе)
+pnpm site:logs   # логи api и web
+```
+
+**Запуск Docker Desktop из терминала** — если иконка на рабочем столе
+не открывает окно (бывает после сбоев/зависших процессов):
+
+```bash
+# Windows, Git Bash:
+"/c/Program Files/Docker/Docker/Docker Desktop.exe" &
+# Windows, PowerShell:
+Start-Process 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
+# macOS:
+open -a Docker
+```
+
+Готовность движка (~30–60 сек) проверяется командой `docker info` —
+она должна вывести версию сервера, а не ошибку подключения. Если
+Docker «залип» (процессы есть, движок не отвечает): завершить все
+процессы Docker в диспетчере задач и запустить снова командой выше;
+при проблемах WSL помогает `wsl --shutdown`, затем старт Docker.
+
+Секреты (Discord, `SESSION_SECRET`, …) читаются из `apps/api/.env` —
+см. раздел «Вход через Discord» ниже. Без файла сайт поднимется с
+dev-дефолтами, но вход будет только через настроенный Discord OAuth
+(или резервный админ, если задан `ADMIN_PASSWORD`).
+
+**Если порты заняты/заблокированы** (на Windows после перезапуска Docker
+WinNAT может резервировать диапазоны — ошибка `ports are not available`
+или `EACCES`): задайте свои порты в **корневом** `.env`:
+
+```env
+SITE_WEB_PORT=3080
+SITE_API_PORT=3081
+NEXT_PUBLIC_API_URL=http://localhost:3081   # = SITE_API_PORT
+WEB_URL=http://localhost:3080               # = SITE_WEB_PORT
+```
+
+Проверить зарезервированные диапазоны:
+`netsh interface ipv4 show excludedportrange protocol=tcp` (Windows).
+Не забудьте также `DISCORD_CALLBACK_URL` — см. ниже.
+
+### Вариант B — обычная разработка (web/api локально)
+
+Нужны Node.js ≥ 20, pnpm и Docker:
 
 ```bash
 corepack enable          # если pnpm ещё не установлен
@@ -27,18 +79,41 @@ docker compose up -d     # PostgreSQL + Redis
 pnpm db:generate         # сгенерировать Prisma-клиент
 pnpm db:migrate          # применить миграции (создать таблицы)
 pnpm db:seed             # стартовые данные: гильдия, типы ивентов, настройки
-pnpm build               # собрать shared → api, web
 pnpm dev                 # web: http://localhost:3000, api: http://localhost:3001/health
 ```
 
-Переменные окружения — по образцу [.env.example](.env.example).
-Для миграций и seed нужен `DATABASE_URL` (значения по умолчанию совпадают
-с docker-compose).
+Переменные окружения — по образцу [.env.example](.env.example) (копируются
+в `apps/api/.env`). Для миграций и seed нужен `DATABASE_URL`.
+
+## Вход через Discord (OAuth2)
+
+1. Создайте приложение на <https://discord.com/developers/applications>.
+2. В **OAuth2 → Redirects** добавьте URI вида
+   `http://localhost:<порт API>/auth/discord/callback`
+   (порт тот, на котором API реально доступен из браузера:
+   `3001` для `pnpm dev`, `SITE_API_PORT` для Docker).
+3. В `apps/api/.env` заполните:
+   ```env
+   DISCORD_CLIENT_ID=...
+   DISCORD_CLIENT_SECRET=...
+   DISCORD_CALLBACK_URL=http://localhost:3001/auth/discord/callback
+   SESSION_SECRET=...   # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+4. **Первый вошедший пользователь становится Главой гильдии.** Остальные
+   входят как непривязанные аккаунты и отправляют заявку на привязку ника —
+   офицеры подтверждают её на странице «Заявки».
+5. Резервный вход админа (если Discord недоступен): `ADMIN_LOGIN` /
+   `ADMIN_PASSWORD` в том же `.env`.
+
+Если Discord после логина «не возвращает на сайт» — почти всегда это
+несовпадение `DISCORD_CALLBACK_URL` с фактическим портом API (проверьте
+адресную строку) или отсутствие этого URI в списке Redirects приложения.
 
 ## Команды
 
 | Команда | Что делает |
 |---|---|
+| `pnpm site:up` / `pnpm site:down` / `pnpm site:logs` | весь сайт в Docker / остановить / логи |
 | `pnpm dev` | dev-режим web + api |
 | `pnpm build` | сборка всех пакетов |
 | `pnpm lint` / `pnpm typecheck` / `pnpm test` | проверки по всему монорепо |
@@ -66,4 +141,5 @@ curl -b cookies.txt localhost:3001/auth/me # сессия с рангом OFFICE
 ## Разработка
 
 Процесс — в [CONTRIBUTING.md](CONTRIBUTING.md): ветки `feature/*`, PR в `main`,
-зелёный CI обязателен, ревью — по желанию.
+зелёный CI обязателен, ревью — по желанию. Правила проекта для людей
+и ИИ-ассистентов — [AGENTS.md](AGENTS.md).
