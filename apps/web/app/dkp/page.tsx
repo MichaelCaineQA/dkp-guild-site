@@ -217,7 +217,7 @@ export default function DkpPage() {
                     minute: '2-digit',
                   })}
                 </Table.Td>
-                <Table.Td className="font-medium">{row.memberName}</Table.Td>
+                <Table.Td className="font-medium"><a className="text-accent hover:underline" href={`/profiles/${encodeURIComponent(row.memberId)}`}>{row.memberName}</a></Table.Td>
                 <Table.Td>
                   <Badge tone={row.type === 'ADJUSTMENT' ? 'warning' : 'neutral'}>
                     {TYPE_LABELS[row.type] ?? row.type}
