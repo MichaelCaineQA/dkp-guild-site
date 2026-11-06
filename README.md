@@ -30,6 +30,24 @@ pnpm site:down   # остановить (данные БД сохраняютс�
 pnpm site:logs   # логи api и web
 ```
 
+**Запуск Docker Desktop из терминала** — если иконка на рабочем столе
+не открывает окно (бывает после сбоев/зависших процессов):
+
+```bash
+# Windows, Git Bash:
+"/c/Program Files/Docker/Docker/Docker Desktop.exe" &
+# Windows, PowerShell:
+Start-Process 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
+# macOS:
+open -a Docker
+```
+
+Готовность движка (~30–60 сек) проверяется командой `docker info` —
+она должна вывести версию сервера, а не ошибку подключения. Если
+Docker «залип» (процессы есть, движок не отвечает): завершить все
+процессы Docker в диспетчере задач и запустить снова командой выше;
+при проблемах WSL помогает `wsl --shutdown`, затем старт Docker.
+
 Секреты (Discord, `SESSION_SECRET`, …) читаются из `apps/api/.env` —
 см. раздел «Вход через Discord» ниже. Без файла сайт поднимется с
 dev-дефолтами, но вход будет только через настроенный Discord OAuth
