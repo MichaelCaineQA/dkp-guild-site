@@ -30,7 +30,7 @@ const EXPECTED: Partial<Record<Permission, Rank[]>> = {
   'events.manage': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
   'events.conduct': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
   'attendance.manual': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
-  'absence.see': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
+  'absence.see': ['GUILD_LEADER', 'ADMIN'],
   'dkp.penalty': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
   'items.manage': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
   'auction.bid': ALL_RANKS,
@@ -73,7 +73,7 @@ describe('can: права «РЛ ивента»', () => {
     const rl = actor({ rank: 'MEMBER' });
     expect(can(rl, 'events.conduct', event)).toBe(true);
     expect(can(rl, 'attendance.manual', event)).toBe(true);
-    expect(can(rl, 'absence.see', event)).toBe(true);
+    expect(can(rl, 'absence.see', event)).toBe(false); // «Увидел» — больше не право РЛ (решение владельца)
     expect(can(rl, 'events.manage', event)).toBe(false);
     expect(can(rl, 'members.manage', event)).toBe(false);
   });

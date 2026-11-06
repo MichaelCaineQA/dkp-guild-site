@@ -40,7 +40,7 @@ const MIN_RANK: Record<Permission, Rank> = {
   'events.manage': 'OFFICER',
   'events.conduct': 'OFFICER',
   'attendance.manual': 'OFFICER',
-  'absence.see': 'OFFICER',
+  'absence.see': 'GUILD_LEADER', // «Увидел»: Глава/Админ; лидеры КП/пачки — этап 3 (issue #38)
   'dkp.penalty': 'OFFICER',
   'items.manage': 'OFFICER',
   'auction.bid': 'MEMBER',
@@ -70,7 +70,8 @@ export interface PermissionActor {
 export const RAID_LEAD_ACTIONS: ReadonlySet<Permission> = new Set([
   'events.conduct',
   'attendance.manual',
-  'absence.see',
+  // absence.see исключён (решение владельца): «Увидел» — Глава/Админ
+  // (+ лидеры КП/пачки человека с этапа 3, issue #38)
 ]);
 
 /** Цель действия: ивент (или другое) с назначенным РЛ, если применимо. */

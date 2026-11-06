@@ -86,12 +86,12 @@ describe('AbsencesPage', () => {
     expect(api).not.toHaveBeenCalledWith('/absences');
   });
 
-  it('офицер видит и список всех заявок с кнопкой «Увидел»', async () => {
+  it('глава видит и список всех заявок с кнопкой «Увидел» (офицер — нет, решение владельца)', async () => {
     mockSession({
-      userId: 'u2',
-      username: 'test-officer',
+      userId: 'u1',
+      username: 'test-leader',
       memberId: 'm-off',
-      rank: 'OFFICER',
+      rank: 'GUILD_LEADER',
       isAdmin: false,
     });
 
@@ -100,7 +100,7 @@ describe('AbsencesPage', () => {
     expect(await screen.findByText('Все заявки гильдии')).toBeDefined();
     expect(screen.getByText('Работа')).toBeDefined();
     expect(screen.getByText('Увидел')).toBeDefined(); // непросмотренная заявка
-    expect(screen.getByText('✓ Увидено')).toBeDefined(); // уже видел свою… чужую? a-1 видел m-off
+    expect(screen.getByText('✓ Увидено')).toBeDefined(); // уже видел
   });
 
   it('непривязанному — подсказка про привязку', async () => {
