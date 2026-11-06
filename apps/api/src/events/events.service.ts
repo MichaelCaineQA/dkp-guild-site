@@ -93,6 +93,7 @@ export interface EventsDb {
       data: Record<string, unknown>;
     }): Promise<{ id: string }>;
     deleteMany(args: { where: { seriesId: string; status: string } }): Promise<{ count: number }>;
+    delete(args: { where: { id: string } }): Promise<unknown>;
     count(args: { where: { seriesId: string; status: { not: string } } }): Promise<number>;
   };
   auditLog: AuditWriter;
@@ -226,6 +227,22 @@ export class EventsService {
       `Удалена серия целиком (${result.count} ивентов)`,
     );
     return { deleted: result.count };
+  }
+
+  /** Удаление одиночного ивента — только PLANNED (CRUD-полнота, план 2.1). */
+  async deleteOne(id: string, actor: EventsActor): Promise<{ ok: true }> {
+    const event = await this.mustExist(id);
+    if (event.status !== 'PLANNED') {
+      throw new ConflictException('Удалить можно только запланированный ивент');
+    }
+    await this.db.event.delete({ where: { id } });
+    await this.audit(
+      actor,
+      'EVENT_DELETE',
+      id,
+      `Удалён ивент ${event.startsAt.toISOString()}`,
+    );
+    return { ok: true };
   }
 
   /**
