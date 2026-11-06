@@ -132,6 +132,12 @@ export class MembersService {
   async create(body: unknown, actor: Actor): Promise<MemberRow> {
     const input: CreateMemberInput = createMemberSchema.parse(body);
 
+    if (input.rank === 'ADMIN' || input.rank === 'GUILD_LEADER') {
+      throw new ConflictException(
+        'Роли «Админ» и «Глава» не создаются вручную (решение владельца)',
+      );
+    }
+
     const clash = await this.db.member.findFirst({ where: { nickname: input.nickname } });
     if (clash) {
       throw new ConflictException('Член с таким ником уже есть');
@@ -177,17 +183,27 @@ export class MembersService {
 
   /**
    * Смена ранга (members.change_rank, Глава/Админ): комментарий обязателен
-   * (zod), уходит в AuditLog. Последнего Главу понизить нельзя — гильдия
-   * без Главы ломает bootstrap-сценарии.
+   * (zod), уходит в AuditLog. Роли ADMIN и GUILD_LEADER назначать нельзя
+   * (решение владельца): админ — один профиль только по кредам без Discord,
+   * Глава — единственный и не назначается через сайт. Последнего Главу
+   * понизить тоже нельзя.
    */
   async changeRank(id: string, body: unknown, actor: Actor): Promise<MemberRow> {
     const input: ChangeRankInput = changeRankSchema.parse(body);
+
+    if (input.rank === 'ADMIN' || input.rank === 'GUILD_LEADER') {
+      throw new ConflictException(
+        'Роли «Админ» и «Глава» не назначаются: админ входит только по кредам, глава — единственный',
+      );
+    }
 
     const member = await this.mustExist(id);
     if (member.rank === input.rank) {
       throw new ConflictException('У члена уже этот ранг');
     }
-    if (member.rank === 'GUILD_LEADER' && input.rank !== 'GUILD_LEADER') {
+    // Единственного Главу понизить нельзя — даже если ранг пришёл легитимным
+    // путём (защита не зависит от guard'а выше)
+    if (member.rank === 'GUILD_LEADER') {
       const leaders = await this.db.member.count({ where: { rank: 'GUILD_LEADER' } });
       if (leaders <= 1) {
         throw new ConflictException('Нельзя понизить последнего Главу гильдии');

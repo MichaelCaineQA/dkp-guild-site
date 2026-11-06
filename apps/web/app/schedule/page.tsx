@@ -13,6 +13,7 @@ import { useSession } from '../../components/session-context';
 import { api } from '../../lib/api';
 import { CheckInPanel, RaidLeadCodePanel } from '../../components/checkin-panels';
 import { AbsentMembersPanel } from '../../components/absent-members-panel';
+import { CreateEventDialog } from '../../components/create-event-dialog';
 import {
   Badge,
   Button,
@@ -64,6 +65,8 @@ export default function SchedulePage() {
   const [gameTime, setGameTime] = useState<GamePhaseConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<EventRow | null>(null);
+  const [creating, setCreating] = useState<'single' | 'series' | null>(null);
+  const [createdMessage, setCreatedMessage] = useState('');
 
   // Месяц календаря: первый день просматриваемого месяца.
   const [monthCursor, setMonthCursor] = useState(() => {
@@ -111,7 +114,7 @@ export default function SchedulePage() {
   }, [monthCursor, typeFilter, modeFilter]);
 
   useEffect(() => {
-    if (!sessionLoading && user?.memberId) {
+    if (!sessionLoading && (user?.memberId || user?.isAdmin)) {
       void load();
     }
   }, [sessionLoading, user, load]);
@@ -146,6 +149,19 @@ export default function SchedulePage() {
   return (
     <Page width="wide">
       <PageHeader title="Расписание ивентов" />
+      {canManage && <div className="mb-4 flex flex-wrap gap-2">
+        <Button variant="primary" onClick={() => setCreating('single')}>Создать ивент</Button>
+        <Button onClick={() => setCreating('series')}>Создать серию</Button>
+      </div>}
+      {createdMessage && <p role="status">{createdMessage}</p>}
+      {canManage && creating && <CreateEventDialog series={creating === 'series'}
+        onClose={() => setCreating(null)} onCreated={(startsAt, message) => {
+          setCreating(null);
+          setCreatedMessage(message);
+          setTypeFilter('');
+          setModeFilter('');
+          setMonthCursor(new Date(Date.UTC(startsAt.getUTCFullYear(), startsAt.getUTCMonth(), 1)));
+        }} />}
       {error && <ErrorText>{error}</ErrorText>}
 
       <Card className="mb-4">
@@ -236,13 +252,13 @@ export default function SchedulePage() {
         />
       )}
 
-      <div className="mt-4" />
-      {canManage && <Muted>Создание ивентов и серий — отдельный экран создания (скоро)</Muted>}
     </Page>
   );
 
   function shiftMonth(delta: number) {
-    setMonthCursor((prev) => new Date(prev.getUTCFullYear(), prev.getUTCMonth() + delta, 1));
+    // UTC-конструктор: Date(год, месяц, 1) в локальной зоне даёт месяц,
+    // «съедаемый» при смене UTC-страницей вперёд (баг ревью владельца, п.7)
+    setMonthCursor((prev) => new Date(Date.UTC(prev.getUTCFullYear(), prev.getUTCMonth() + delta, 1)));
   }
 }
 
