@@ -3,7 +3,11 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 export function RulesLayout({ children }: { children: ReactNode }) {
-  return <div className="flex min-w-0 flex-col gap-4">{children}</div>;
+  return (
+    <div className="flex min-w-0 flex-col gap-4 [&_label]:flex-wrap [&_input]:max-w-full [&_select]:max-w-full">
+      {children}
+    </div>
+  );
 }
 
 /** Без raw HTML; стандартная URL-фильтрация react-markdown сохранена. */

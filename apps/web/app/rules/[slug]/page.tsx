@@ -125,15 +125,21 @@ export default function RulesPage() {
       setComment('');
       setSelected('');
       setMessage(`Опубликована версия ${current.version}`);
-      setHistory(await api<RulesVersionSummary[]>(`${path}/versions`));
+      await api<RulesVersionSummary[]>(`${path}/versions`)
+        .then(setHistory)
+        .catch(() => {
+          setError('Правила опубликованы, но историю обновить не удалось. Обновите страницу.');
+        });
     } catch (err) {
       if ((err as { status?: number }).status === 409) {
         setError(
-          'Правила уже изменились. Черновик сохранён в редакторе. Сравните его с актуальным текстом выше.',
+          restore
+            ? 'Правила уже изменились. Проверьте актуальный текст перед повторным восстановлением.'
+            : 'Правила уже изменились. Черновик сохранён в редакторе. Сравните его с актуальным текстом выше.',
         );
         try {
           setPage(await api<RulesPageDto>(path));
-          setConflict(true);
+          setConflict(!restore);
         } catch {
           setError('Правила изменились. Скопируйте черновик перед обновлением страницы.');
         }
