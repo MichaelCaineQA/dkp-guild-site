@@ -12,6 +12,8 @@ const NAV_ITEMS: Array<{ href: string; label: string; permission?: Permission }>
   { href: '/roster', label: 'Состав', permission: 'members.view_roster' },
   { href: '/absences', label: 'Отсутствия', permission: 'members.view_roster' },
   { href: '/dkp', label: 'Журнал', permission: 'members.view_roster' },
+  { href: '/rules/guild-rules', label: 'Правила гильдии', permission: 'members.view_roster' },
+  { href: '/rules/site-rules', label: 'Правила сайта', permission: 'members.view_roster' },
   { href: '/audit', label: 'Аудит', permission: 'audit.view' },
   { href: '/link-requests', label: 'Заявки', permission: 'link_requests.review' },
   { href: '/settings', label: 'Настройки', permission: 'items.manage' },

@@ -2,6 +2,8 @@ import { applySeed, type SeedDb } from './apply-seed';
 import { EVENT_TYPE_NAMES, SEED_SETTINGS } from './seed-data';
 
 interface FakeDbState {
+  rules: Map<string, { slug: string; contentMd: string; version: number; updatedAt: Date }>;
+  versions: Map<string, string>;
   guilds: { id: string; data?: unknown }[];
   eventTypes: Map<string, number>;
   settings: Map<string, number>;
@@ -9,12 +11,33 @@ interface FakeDbState {
 
 function makeFakeDb(): { db: SeedDb; state: FakeDbState } {
   const state: FakeDbState = {
+    rules: new Map(),
+    versions: new Map(),
     guilds: [],
     eventTypes: new Map(),
     settings: new Map(),
   };
 
   const db: SeedDb = {
+    rulesPage: {
+      upsert: async ({ where, create }) => {
+        if (!state.rules.has(where.slug))
+          state.rules.set(where.slug, {
+            slug: create.slug,
+            contentMd: create.contentMd,
+            version: 1,
+            updatedAt: new Date(),
+          });
+        return state.rules.get(where.slug)!;
+      },
+    },
+    rulesPageVersion: {
+      upsert: async ({ create }) => {
+        const key = `${create.pageSlug}:${create.version}`;
+        if (!state.versions.has(key)) state.versions.set(key, create.contentMd);
+        return {};
+      },
+    },
     guild: {
       findFirst: async () => state.guilds[0] ?? null,
       create: async ({ data }) => {
@@ -46,6 +69,16 @@ function makeFakeDb(): { db: SeedDb; state: FakeDbState } {
 }
 
 describe('applySeed (идемпотентность)', () => {
+  it('создаёт две страницы и историю, повторный seed не затирает публикации', async () => {
+    const { db, state } = makeFakeDb();
+    await applySeed(db);
+    expect(state.rules.size).toBe(2);
+    expect(state.versions.size).toBe(2);
+    state.rules.get('guild-rules')!.contentMd = 'Опубликованные правила';
+    await applySeed(db);
+    expect(state.rules.get('guild-rules')!.contentMd).toBe('Опубликованные правила');
+    expect(state.versions.size).toBe(2);
+  });
   it('первый прогон создаёт гильдию, все типы ивентов и все настройки', async () => {
     const { db, state } = makeFakeDb();
     const result = await applySeed(db);

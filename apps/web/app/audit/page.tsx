@@ -18,6 +18,8 @@ import {
 } from '../../components/ui';
 
 const ACTION_LABELS: Record<string, string> = {
+  RULES_UPDATE: 'Публикация правил',
+  RULES_RESTORE: 'Восстановление правил',
   LOGIN_DISCORD: 'Вход через Discord',
   LOGIN_ADMIN: 'Вход администратора',
   LOGIN_TEST: 'Тестовый вход',
@@ -47,6 +49,7 @@ const ACTION_LABELS: Record<string, string> = {
   ABSENCE_AUTO_MARK: 'Автоматическая отметка отсутствия',
 };
 const ENTITY_LABELS: Record<string, string> = {
+  RulesPage: 'Страница правил',
   User: 'Аккаунт',
   Member: 'Участник',
   Event: 'Ивент',
