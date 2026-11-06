@@ -9,6 +9,7 @@ import {
   Req,
   Res,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { AuthGuard as PassportAuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
@@ -18,14 +19,18 @@ import { AuthService } from './auth.service';
 import { AuthGuard, MinRank, type AuthedRequest } from './auth.guard';
 import { LinkRequestService } from './link-request.service';
 import { performTestLogin } from './test-login';
+import { AuditService } from '../audit/audit.service';
+import { AuditAction, AuditInterceptor } from '../audit/audit.interceptor';
 
 const WEB_URL = process.env.WEB_URL ?? 'http://localhost:3000';
 
 @Controller('auth')
+@UseInterceptors(AuditInterceptor)
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly linkRequests: LinkRequestService,
+    private readonly audit: AuditService,
   ) {}
 
   /** Запуск Discord OAuth2 — редирект на discord.com. */
@@ -38,9 +43,12 @@ export class AuthController {
   /** Возврат с Discord: стратегия уже прогнала логику входа, кладём в сессию. */
   @Get('discord/callback')
   @UseGuards(PassportAuthGuard('discord'))
-  discordCallback(@Req() req: AuthedRequest, @Res() res: Response): void {
+  async discordCallback(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
     // req.user — SessionUser, собранный DiscordStrategy.validate
-    req.session!.user = req.user as SessionUser;
+    const user = req.user as SessionUser;
+    await this.audit.record({ actorMemberId: user.memberId, action: 'LOGIN_DISCORD',
+      entityType: 'User', entityId: user.userId, comment: 'Вход через Discord' });
+    req.session!.user = user;
     void req.session!.save(() => res.redirect(`${WEB_URL}/`));
   }
 
@@ -57,6 +65,7 @@ export class AuthController {
 
   /** Резервный вход администратора (login-пароль из env). */
   @Post('admin/login')
+  @AuditAction({ action: 'LOGIN_ADMIN', entityType: 'User', comment: 'Вход администратора' })
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(200)
   adminLogin(
@@ -96,6 +105,7 @@ export class AuthController {
    * иначе ручка отвечает 404, как будто её нет.
    */
   @Post('test-login')
+  @AuditAction({ action: 'LOGIN_TEST', entityType: 'User', comment: 'Тестовый вход' })
   @HttpCode(200)
   testLogin(
     @Body() body: { username?: string },
@@ -114,6 +124,7 @@ export class AuthController {
 
   /** Заявка на привязку своего Discord к нику члена гильдии. */
   @Post('link-request')
+  @AuditAction({ action: 'LINK_REQUEST_CREATE', entityType: 'User', comment: 'Заявка на привязку Discord' })
   @UseGuards(AuthGuard)
   createLinkRequest(@Body() body: unknown, @Req() req: AuthedRequest) {
     const input = createLinkRequestSchema.parse(body);
@@ -130,6 +141,7 @@ export class AuthController {
 
   /** Подтвердить заявку — офицерам и выше. */
   @Post('link-requests/:id/approve')
+  @AuditAction({ action: 'LINK_REQUEST_APPROVE', entityType: 'MemberLinkRequest', comment: 'Привязка Discord подтверждена' })
   @MinRank('OFFICER')
   @UseGuards(AuthGuard)
   approveLinkRequest(@Param('id') id: string) {
@@ -138,6 +150,7 @@ export class AuthController {
 
   /** Отклонить заявку — офицерам и выше. */
   @Post('link-requests/:id/reject')
+  @AuditAction({ action: 'LINK_REQUEST_REJECT', entityType: 'MemberLinkRequest', comment: 'Привязка Discord отклонена' })
   @MinRank('OFFICER')
   @UseGuards(AuthGuard)
   rejectLinkRequest(@Param('id') id: string) {

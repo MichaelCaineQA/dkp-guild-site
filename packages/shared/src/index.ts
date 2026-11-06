@@ -10,4 +10,5 @@ export * from './checkin';
 export * from './absences';
 export * from './conduct';
 export * from './dkp';
+export * from './audit';
 export * from './profile';

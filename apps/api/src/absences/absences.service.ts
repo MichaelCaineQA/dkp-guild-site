@@ -201,6 +201,7 @@ export class AbsencesService {
       return { ok: true }; // идемпотентно: повторный клик не ошибка
     }
     await this.db.absenceSeen.create({ data: { absenceId: id, seenById: actor.memberId } });
+    await this.audit(actor, 'ABSENCE_SEEN', id, 'Информация об отсутствии принята к сведению');
     return { ok: true };
   }
 
