@@ -42,6 +42,14 @@ jobs:
       - name: Validate migrations on test database
         run: pnpm --filter @dkp/api exec prisma migrate deploy
 
+      # До typecheck/build: shared/dist ещё нет в свежем checkout.
+      - name: Seed fresh test database
+        env:
+          NODE_ENV: test
+        run: |
+          pnpm db:seed
+          pnpm db:seed:test
+
       - name: Lint
         run: pnpm lint
 

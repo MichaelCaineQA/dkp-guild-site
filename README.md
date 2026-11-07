@@ -85,6 +85,11 @@ pnpm dev                 # web: http://localhost:3000, api: http://localhost:300
 Переменные окружения — по образцу [.env.example](.env.example) (копируются
 в `apps/api/.env`). Для миграций и seed нужен `DATABASE_URL`.
 
+Команды `pnpm db:seed` и `pnpm db:seed:test` сами собирают `@dkp/shared`
+и генерируют Prisma-клиент. `pnpm db:migrate` также предварительно собирает
+общий пакет, чтобы автоматический seed новой БД мог импортировать его.
+Каталог `packages/shared/dist` генерируется локально и не хранится в Git.
+
 ## Контракт API (Swagger / OpenAPI)
 
 При запущенном API интерактивная документация доступна на
