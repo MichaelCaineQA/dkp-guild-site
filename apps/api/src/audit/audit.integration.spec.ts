@@ -130,20 +130,13 @@ describe('аудит через HTTP: права, фильтры, ровно о�
     expect(record).not.toHaveBeenCalled();
   });
 
-  it('подтверждение привязки Главой пишет одну запись, чтение — ни одной', async () => {
+  it('приём делегирует аудит транзакционному сервису и не дублирует интерцептором', async () => {
     actor!.rank = 'GUILD_LEADER';
     expect(
       (await fetch(`${url}/auth/link-requests/link1/approve`, { method: 'POST' })).status,
     ).toBe(201);
-    expect(record).toHaveBeenCalledTimes(1);
-    expect(record).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        action: 'LINK_REQUEST_APPROVE',
-        entityId: 'link1',
-        actorMemberId: 'm1',
-      }),
-    });
-    record.mockClear();
+    expect(approve).toHaveBeenCalledWith('link1', 'm1');
+    expect(record).not.toHaveBeenCalled();
     await fetch(`${url}/audit`);
     expect(record).not.toHaveBeenCalled();
   });

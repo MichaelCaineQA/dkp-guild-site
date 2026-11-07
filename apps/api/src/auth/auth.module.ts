@@ -1,3 +1,5 @@
+import { ScreenshotsController } from './screenshots.controller';
+import { ScreenshotsService, type ScreenshotDb } from './screenshots.service';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -16,7 +18,7 @@ import { LinkRequestService, type LinkRequestDb } from './link-request.service';
     // Грубый глобальный троттлинг; на вход админа — свой @Throttle в контроллере
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, ScreenshotsController],
   providers: [
     // Сервисы работают с минимальными интерфейсами БД — юнит-тесты без Prisma.
     {
@@ -28,6 +30,12 @@ import { LinkRequestService, type LinkRequestDb } from './link-request.service';
       provide: LinkRequestService,
       useFactory: (prisma: PrismaService) =>
         new LinkRequestService(prisma as unknown as LinkRequestDb),
+      inject: [PrismaService],
+    },
+    {
+      provide: ScreenshotsService,
+      useFactory: (prisma: PrismaService) =>
+        new ScreenshotsService(prisma as unknown as ScreenshotDb),
       inject: [PrismaService],
     },
     { provide: AUTH_SERVICE, useExisting: AuthService },

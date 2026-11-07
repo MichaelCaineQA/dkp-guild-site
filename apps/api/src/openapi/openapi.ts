@@ -63,7 +63,14 @@ export function createApiDocument(
         [success]: {
           description: success === 302 ? 'Перенаправление' : 'Успешный ответ',
           ...(contract.response
-            ? { content: { 'application/json': { schema: contract.response } } }
+            ? {
+                content: Object.fromEntries(
+                  (contract.responseTypes ?? ['application/json']).map((type) => [
+                    type,
+                    { schema: contract.response },
+                  ]),
+                ),
+              }
             : {}),
           ...(success === 302
             ? {
@@ -85,6 +92,7 @@ export function createApiDocument(
         401: 'Требуется вход или недостаточный ранг',
         403: 'Недостаточно прав',
         404: 'Ресурс не найден или метод отключён',
+        413: 'Файл слишком большой',
         409: 'Конфликт состояния или нарушение ограничений',
         429: 'Превышен лимит запросов',
         500: 'Ошибка сервера (в том числе необработанная ошибка валидации)',
@@ -97,7 +105,7 @@ export function createApiDocument(
       if (contract.body)
         operation.requestBody = {
           required: true,
-          content: { 'application/json': { schema: ref(contract.body) } },
+          content: { [contract.bodyType ?? 'application/json']: { schema: ref(contract.body) } },
         };
       const parameters = (operation.parameters ?? []) as ParameterObject[];
       for (const param of parameters) {

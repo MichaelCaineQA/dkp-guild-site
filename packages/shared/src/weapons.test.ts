@@ -25,6 +25,8 @@ describe('оружия RU-сервера', () => {
       combatRole: 'DPS',
       weapons: ['LONGBOW', 'DAGGERS'],
       comment: 'Меняю специализацию',
+      gearScore: 1,
+      screenshotIds: ['11111111-1111-4111-8111-111111111111'],
     };
     for (const schema of [createMemberSchema, createLinkRequestSchema]) {
       expect(schema.safeParse(input).success).toBe(true);

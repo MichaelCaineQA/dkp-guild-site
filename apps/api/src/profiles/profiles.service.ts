@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   canEditOwnProfile,
+  canViewProfileGearScore,
   computeBalance,
   updateOwnProfileSchema,
   type CombatRole,
@@ -48,6 +49,12 @@ export interface ProfileTransaction {
   };
 }
 export interface ProfilesDb extends ProfileTransaction {
+  gearScoreRecord: {
+    findFirst(args: {
+      where: { memberId: string; NOT: { screenshotIds: { isEmpty: true } } };
+      orderBy: Array<{ createdAt?: 'desc'; id?: 'desc' }>;
+    }): Promise<{ value: number; screenshotIds: string[]; createdAt: Date } | null>;
+  };
   dkpEntry: {
     findMany(args: {
       where: { memberId: string };
@@ -70,14 +77,32 @@ export interface ProfilesDb extends ProfileTransaction {
 export class ProfilesService {
   constructor(private readonly db: ProfilesDb) {}
 
-  async get(id: string): Promise<PlayerProfile> {
+  async get(id: string, actor?: PermissionActor): Promise<PlayerProfile> {
     const member = await this.mustExist(this.db, id);
     // Баланс по всему append-only журналу, без потолка по количеству записей.
     const entries = await this.db.dkpEntry.findMany({
       where: { memberId: id },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
+    const gs =
+      actor && canViewProfileGearScore(actor, id)
+        ? await this.db.gearScoreRecord.findFirst({
+            where: { memberId: id, NOT: { screenshotIds: { isEmpty: true } } },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          })
+        : undefined;
     return {
+      ...(gs === undefined
+        ? {}
+        : {
+            gearScore: gs
+              ? {
+                  value: gs.value,
+                  screenshotIds: gs.screenshotIds,
+                  createdAt: gs.createdAt.toISOString(),
+                }
+              : null,
+          }),
       id: member.id,
       nickname: member.nickname,
       discord: member.user?.username ?? null,

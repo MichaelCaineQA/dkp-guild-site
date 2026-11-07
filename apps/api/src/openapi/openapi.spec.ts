@@ -55,17 +55,34 @@ describe('Контракт OpenAPI', () => {
           ([status]) => Number(status) < 400,
         )!;
         expect(success).toBeDefined();
-        if (Number(success[0]) !== 302)
-          expect(success[1]).toHaveProperty('content.application/json.schema');
         const contract = contracts[operation.operationId!];
+        if (Number(success[0]) !== 302)
+          expect(success[1]).toHaveProperty(
+            `content.${contract.responseTypes?.[0] ?? 'application/json'}.schema`,
+          );
         if (contract.body)
           expect(operation.requestBody).toHaveProperty(
-            'content.application/json.schema.$ref',
+            `content.${contract.bodyType ?? 'application/json'}.schema.$ref`,
             `#/components/schemas/${contract.body}`,
           );
       }
     }
     expect(ids.sort()).toEqual(Object.keys(contracts).sort());
+  });
+
+  it('контракт анкеты описывает приватные файлы и удалённые ручные операции', () => {
+    expect(document.paths['/screenshots'].post!.requestBody).toHaveProperty(
+      'content.multipart/form-data.schema',
+    );
+    expect(document.paths['/screenshots/{id}'].get!.responses['200']).toHaveProperty(
+      'content.image/png.schema.format',
+      'binary',
+    );
+    expect(document.paths['/members'].post).toBeUndefined();
+    expect(document.paths['/auth/link-requests/{id}/reject']).toBeUndefined();
+    expect(schemas.CreateLinkRequest.required).toEqual(
+      expect.arrayContaining(['gearScore', 'screenshotIds']),
+    );
   });
 
   it('все ссылки на схемы разрешаются', () => {

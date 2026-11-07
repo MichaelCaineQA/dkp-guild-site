@@ -16,11 +16,11 @@ services:
       POSTGRES_PASSWORD: dkp
       POSTGRES_DB: dkp
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dkp -d dkp"]
+      test: ['CMD-SHELL', 'pg_isready -U dkp -d dkp']
       interval: 5s
       timeout: 3s
       retries: 10
@@ -28,12 +28,12 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - '6379:6379'
     volumes:
       - redis-data:/data
 
   api:
-    profiles: ["app"]
+    profiles: ['app']
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -46,14 +46,17 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://dkp:dkp@db:5432/dkp?schema=public
       REDIS_URL: redis://redis:6379
-      PORT: "3001"
+      SCREENSHOT_DIR: /app/uploads/screenshots
+      PORT: '3001'
       WEB_URL: ${WEB_URL:-http://localhost:3000}
       # Локальный запуск по http://localhost — cookie без Secure-флага
-      COOKIE_SECURE: "false"
+      COOKIE_SECURE: 'false'
+    volumes:
+      - screenshot-data:/app/uploads
     ports:
       # Хостовые порты настраиваются в корневом .env (SITE_API_PORT/SITE_WEB_PORT):
       # на Windows WinNAT может резервировать диапазоны и блокировать 3000/3001
-      - "${SITE_API_PORT:-3001}:3001"
+      - '${SITE_API_PORT:-3001}:3001'
     depends_on:
       db:
         condition: service_healthy
@@ -61,7 +64,7 @@ services:
         condition: service_started
 
   web:
-    profiles: ["app"]
+    profiles: ['app']
     build:
       context: .
       dockerfile: apps/web/Dockerfile
@@ -70,7 +73,7 @@ services:
         # в корневом .env или переменной окружения при сборке
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
     ports:
-      - "${SITE_WEB_PORT:-3000}:3000"
+      - '${SITE_WEB_PORT:-3000}:3000'
     depends_on:
       api:
         condition: service_started
@@ -78,3 +81,4 @@ services:
 volumes:
   db-data:
   redis-data:
+  screenshot-data:

@@ -1,0 +1,14 @@
+ALTER TABLE "MemberLinkRequest" ADD COLUMN "gearScore" DOUBLE PRECISION,
+ADD COLUMN "screenshotIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE "GearScoreRecord" ADD COLUMN "screenshotIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[], ALTER COLUMN "value" TYPE DOUBLE PRECISION;
+CREATE TABLE "Screenshot" (
+ "id" TEXT NOT NULL, "userId" TEXT NOT NULL, "mime" TEXT NOT NULL,
+ "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ CONSTRAINT "Screenshot_pkey" PRIMARY KEY ("id"),
+ CONSTRAINT "Screenshot_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+CREATE INDEX "Screenshot_userId_idx" ON "Screenshot"("userId");
+
+-- Исторические анкеты не должны занимать ник при редактировании текущей.
+DROP INDEX "MemberLinkRequest_userId_nickname_key";
+CREATE INDEX "MemberLinkRequest_userId_status_idx" ON "MemberLinkRequest"("userId", "status");

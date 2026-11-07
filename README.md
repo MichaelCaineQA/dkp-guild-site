@@ -158,3 +158,14 @@ curl -b cookies.txt localhost:3001/auth/me # сессия с рангом OFFICE
 Процесс — в [CONTRIBUTING.md](CONTRIBUTING.md): ветки `feature/*`, PR в `main`,
 зелёный CI обязателен, ревью — по желанию. Правила проекта для людей
 и ИИ-ассистентов — [AGENTS.md](AGENTS.md).
+
+### Приватные скриншоты профиля
+
+Файлы PNG, JPG/JPEG и WebP до 10 МБ загружаются через `POST /screenshots`
+(`multipart/form-data`, поле `file`). Доступ к `GET /screenshots/:id` проверяется
+по сессии: владелец, Глава или Админ. Статической публичной раздачи нет.
+В обычной разработке каталог — `apps/api/uploads/screenshots` (или `SCREENSHOT_DIR`).
+При `pnpm site:up` файлы сохраняются в отдельном томе `screenshot-data`;
+его нужно включать в резервную копию вместе с PostgreSQL.
+После обновления схемы примените миграции к локальной БД перед запуском API.
+В CI миграции и конкурентные сценарии приёма проверяются на отдельной PostgreSQL `dkp_test`.

@@ -9,8 +9,8 @@ export class ProfilesController {
   constructor(private readonly profiles: ProfilesService) {}
   @Get(':id')
   @RequirePermission('profile.view')
-  get(@Param('id') id: string) {
-    return this.profiles.get(id);
+  get(@Param('id') id: string, @Req() req: AuthedRequest) {
+    return this.profiles.get(id, req.session!.user!);
   }
 
   @Patch(':id')

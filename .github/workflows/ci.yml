@@ -9,6 +9,20 @@ jobs:
   ci:
     name: lint + typecheck + test + build
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dkp
+          POSTGRES_PASSWORD: dkp
+          POSTGRES_DB: dkp_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U dkp -d dkp_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://dkp:dkp@127.0.0.1:5432/dkp_test?schema=public
+      ONBOARDING_TEST_DATABASE_URL: postgresql://dkp:dkp@127.0.0.1:5432/dkp_test?schema=public
     steps:
       - uses: actions/checkout@v4
 
@@ -25,6 +39,9 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm --filter @dkp/api db:generate
+
+      - name: Validate migrations on test database
+        run: pnpm --filter @dkp/api exec prisma migrate deploy
 
       - name: Lint
         run: pnpm lint

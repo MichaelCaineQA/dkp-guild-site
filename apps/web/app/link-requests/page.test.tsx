@@ -26,7 +26,7 @@ it.each(['MEMBER', 'OFFICER'] as const)(
     render(<LinkRequestsPage />);
     expect(await screen.findByText('Раздел доступен Главе и Админу.')).toBeDefined();
     expect(api).not.toHaveBeenCalled();
-    expect(screen.queryByText('Подтвердить')).toBeNull();
+    expect(screen.queryByText('Принять в гильдию')).toBeNull();
   },
 );
 it.each([false, true])('Глава/резервный Админ загружает очередь, isAdmin=%s', async (isAdmin) => {

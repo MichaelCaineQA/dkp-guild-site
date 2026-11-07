@@ -22,7 +22,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const load = async () => {
     const { api } = await import('../lib/api');
-    api<{ user: SessionUser | null }>('/auth/me')
+    await api<{ user: SessionUser | null }>('/auth/me')
       .then((data) => setUser(data.user))
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
