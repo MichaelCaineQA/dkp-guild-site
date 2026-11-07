@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildEventSummary,
+  resolveAttendanceStatus,
+  applyEventSummarySchema,
+  previewSummaryStatus,
   manualCheckInSchema,
   manualDkpSchema,
   setAttendanceSchema,
@@ -47,10 +50,20 @@ describe('manualCheckInSchema', () => {
 describe('manualDkpSchema', () => {
   it('ручное начисление и корректировка с комментарием', () => {
     expect(
-      manualDkpSchema.parse({ memberId: 'm-1', type: 'MANUAL_EARN', amount: 5, comment: 'Помог с сбором' }),
+      manualDkpSchema.parse({
+        memberId: 'm-1',
+        type: 'MANUAL_EARN',
+        amount: 5,
+        comment: 'Помог с сбором',
+      }),
     ).toMatchObject({ type: 'MANUAL_EARN', amount: 5 });
     expect(
-      manualDkpSchema.parse({ memberId: 'm-1', type: 'ADJUSTMENT', amount: -3, comment: 'Ошибка прошлого начисления' }),
+      manualDkpSchema.parse({
+        memberId: 'm-1',
+        type: 'ADJUSTMENT',
+        amount: -3,
+        comment: 'Ошибка прошлого начисления',
+      }),
     ).toMatchObject({ type: 'ADJUSTMENT', amount: -3 });
   });
 
@@ -59,13 +72,23 @@ describe('manualDkpSchema', () => {
       manualDkpSchema.parse({ memberId: 'm-1', type: 'CHECKIN_EARN', amount: 5, comment: 'Обход' }),
     ).toThrow();
     expect(() =>
-      manualDkpSchema.parse({ memberId: 'm-1', type: 'AUCTION_SPEND', amount: -5, comment: 'Обход' }),
+      manualDkpSchema.parse({
+        memberId: 'm-1',
+        type: 'AUCTION_SPEND',
+        amount: -5,
+        comment: 'Обход',
+      }),
     ).toThrow();
   });
 
   it('нулевая сумма — ошибка', () => {
     expect(() =>
-      manualDkpSchema.parse({ memberId: 'm-1', type: 'MANUAL_EARN', amount: 0, comment: 'Ноль очков' }),
+      manualDkpSchema.parse({
+        memberId: 'm-1',
+        type: 'MANUAL_EARN',
+        amount: 0,
+        comment: 'Ноль очков',
+      }),
     ).toThrow();
   });
 });
@@ -100,12 +123,82 @@ describe('buildEventSummary', () => {
       checkinStart: 'PASSED',
       dkpEarned: 10,
     });
-    expect(summary[1]).toMatchObject({ memberName: 'Опоздавший', checkinStart: 'MANUAL', dkpEarned: 5 });
-    expect(summary[2]).toMatchObject({ memberName: 'Пропущенный', attendanceStatus: null, dkpEarned: 0 });
+    expect(summary[1]).toMatchObject({
+      memberName: 'Опоздавший',
+      checkinStart: 'MANUAL',
+      dkpEarned: 5,
+    });
+    expect(summary[2]).toMatchObject({
+      memberName: 'Пропущенный',
+      attendanceStatus: 'NO_SHOW',
+      dkpEarned: 0,
+    });
   });
 
   it('без посещений все PENDING и ноль ДКП', () => {
     const summary = buildEventSummary(members, [], [], 'e-1');
-    expect(summary.every((row) => row.checkinStart === 'PENDING' && row.dkpEarned === 0)).toBe(true);
+    expect(summary.every((row) => row.checkinStart === 'PENDING' && row.dkpEarned === 0)).toBe(
+      true,
+    );
+  });
+});
+
+describe('Автостатусы и пакет итогов', () => {
+  it.each([
+    ['PASSED', 'PASSED', false, 'PRESENT'],
+    ['MANUAL', 'PASSED', true, 'PRESENT'],
+    ['MANUAL', 'FAILED', true, 'LEFT_EARLY'],
+    ['EXPIRED', 'MANUAL', true, 'LATE'],
+    ['FAILED', 'PENDING', true, 'EXCUSED_ABSENCE'],
+    ['EXPIRED', 'FAILED', false, 'NO_SHOW'],
+  ] as const)('%s / %s, отсутствие %s → %s', (start, end, excused, expected) => {
+    expect(resolveAttendanceStatus(start, end, excused)).toBe(expected);
+  });
+  it('уважительная не скрывает полученный код; ручной статус сохраняется отдельно', () => {
+    const rows = buildEventSummary(
+      [
+        { id: 'a', nickname: 'А' },
+        { id: 'b', nickname: 'Б' },
+      ],
+      [
+        { memberId: 'a', status: 'EXCUSED_ABSENCE', checkinStart: 'MANUAL', checkinEnd: 'PENDING' },
+        { memberId: 'b', status: 'LATE', checkinStart: 'PASSED', checkinEnd: 'PASSED' },
+      ],
+      [],
+      'e',
+      ['a'],
+    );
+    expect(rows[0]).toMatchObject({
+      attendanceStatus: 'LEFT_EARLY',
+      automaticStatus: 'LEFT_EARLY',
+      statusIsManual: false,
+    });
+    expect(rows[1]).toMatchObject({
+      attendanceStatus: 'LATE',
+      automaticStatus: 'PRESENT',
+      statusIsManual: true,
+    });
+  });
+  it('без кодов оформленное отсутствие даёт уважительную; черновик не меняет исходную строку', () => {
+    const row = buildEventSummary([{ id: 'a', nickname: 'А' }], [], [], 'e', ['a'])[0]!;
+    expect(row.attendanceStatus).toBe('EXCUSED_ABSENCE');
+    expect(
+      previewSummaryStatus(row, [
+        { kind: 'CHECKIN', memberId: 'a', phase: 'END', comment: 'Был в конце' },
+      ]),
+    ).toBe('LATE');
+    expect(row.checkinEnd).toBe('PENDING');
+  });
+  it('не принимает повтор фазы/статуса, пустые причины и нулевую или дробную ДКП', () => {
+    const action = { kind: 'CHECKIN', memberId: 'a', phase: 'START', comment: 'Причина' };
+    const requestId = '00000000-0000-4000-8000-000000000000';
+    expect(applyEventSummarySchema.safeParse({ requestId, actions: [action] }).success).toBe(true);
+    for (const actions of [
+      [action, action],
+      [{ kind: 'EXCUSE', memberId: 'a', reason: ' ' }],
+      [{ kind: 'DKP', memberId: 'a', amount: 0, comment: 'Причина' }],
+      [{ kind: 'DKP', memberId: 'a', amount: 1.5, comment: 'Причина' }],
+    ])
+      expect(applyEventSummarySchema.safeParse({ requestId, actions }).success).toBe(false);
   });
 });

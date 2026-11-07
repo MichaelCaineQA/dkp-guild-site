@@ -23,6 +23,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   EVENT_TYPE_CREATE: 'Создание типа ивента',
   EVENT_TYPE_UPDATE: 'Изменение типа ивента',
   EVENT_TYPE_DELETE: 'Удаление типа ивента',
+  EVENT_SUMMARY_APPLY: 'Применение итогов ивента',
   MANUAL_ATTENDANCE: 'Ручная отметка посещения',
   MANUAL_CHECKIN: 'Ручной чек-ин',
   MANUAL_DKP: 'Ручное изменение ДКП',

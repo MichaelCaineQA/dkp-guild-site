@@ -5,15 +5,19 @@ export async function serializable<TDb, T>(
   db: {
     $transaction<R>(
       work: (tx: TDb) => Promise<R>,
-      options: { isolationLevel: 'Serializable' },
+      options: { isolationLevel: 'Serializable'; timeout?: number },
     ): Promise<R>;
   },
   work: (tx: TDb) => Promise<T>,
   retryUnique = false,
+  timeoutMs?: number,
 ): Promise<T> {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      return await db.$transaction(work, { isolationLevel: 'Serializable' });
+      return await db.$transaction(work, {
+        isolationLevel: 'Serializable',
+        ...(timeoutMs ? { timeout: timeoutMs } : {}),
+      });
     } catch (error) {
       const retry =
         error instanceof Prisma.PrismaClientKnownRequestError &&

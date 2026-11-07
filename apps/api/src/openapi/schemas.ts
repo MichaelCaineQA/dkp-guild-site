@@ -39,6 +39,7 @@ const inputs: Record<string, unknown> = {
   SetAttendance: shared.setAttendanceSchema,
   ManualCheckIn: shared.manualCheckInSchema,
   ManualDkp: shared.manualDkpSchema,
+  ApplyEventSummary: shared.applyEventSummarySchema,
   CreateAbsence: shared.createAbsenceSchema,
   DkpQuery: shared.dkpQuerySchema,
   AuditQuery: shared.auditQuerySchema,
@@ -207,7 +208,14 @@ export const schemas: Record<string, SchemaObject> = {
   PlayerCheckIn: object({ ...window, choices: array(str), status: str }),
   RaidLeadCheckIn: object({ ...window, code: str, windowOpensAt: date, windowClosesAt: date }),
   CheckInResult: object({ result: enumeration(['PASSED', 'FAILED']) }),
+  EventSummaryApplied: object({
+    ok: { type: 'boolean', enum: [true] },
+    applied: num,
+    repeated: { type: 'boolean' },
+  }),
   ChecklistRow: object({
+    automaticStatus: enumeration(shared.ATTENDANCE_STATUSES),
+    statusIsManual: { type: 'boolean' },
     memberId: str,
     memberName: str,
     attendanceStatus: nullable(str),
