@@ -75,7 +75,16 @@ const weapons = {
   description: 'У старых записей возможен пустой массив.',
   example: [shared.WEAPONS[0], shared.WEAPONS[1]],
 };
-const roster = { id: str, nickname: str, rank, combatRole: role, weapons, discord: nullable(str) };
+const roster = {
+  id: str,
+  nickname: str,
+  rank,
+  combatRole: role,
+  weapons,
+  discord: nullable(str),
+  avatar: nullable(enumeration(shared.AVATARS)),
+  avatarColor: nullable(enumeration(shared.AVATAR_COLORS)),
+};
 const event = {
   name: str,
   id: str,
@@ -118,6 +127,21 @@ export const schemas: Record<string, SchemaObject> = {
     attendingCount: num,
     canDecline: { type: 'boolean' },
   }),
+  EventRosterMember: object({
+    id: str,
+    avatar: nullable(enumeration(shared.AVATARS)),
+    avatarColor: nullable(enumeration(shared.AVATAR_COLORS)),
+    nickname: str,
+    rank: enumeration(shared.RANKS),
+    weapons: array(enumeration(shared.WEAPONS)),
+    combatRole: nullable(enumeration(shared.COMBAT_ROLES)),
+    packId: nullable(str),
+    packName: nullable(str),
+    kpId: nullable(str),
+    kpName: nullable(str),
+    gearScore: nullable({ type: 'number' }),
+    attending: { type: 'boolean' },
+  }),
   Participation: object({
     invited: { type: 'boolean' },
     attending: { type: 'boolean' },
@@ -129,6 +153,8 @@ export const schemas: Record<string, SchemaObject> = {
   DashboardTeamMember: object(
     {
       id: str,
+      avatar: nullable(enumeration(shared.AVATARS)),
+      avatarColor: nullable(enumeration(shared.AVATAR_COLORS)),
       nickname: str,
       rank,
       combatRole: role,

@@ -60,6 +60,7 @@ describe('SchedulePage', () => {
     };
     vi.clearAllMocks();
     vi.mocked(api).mockImplementation(async (path: string) => {
+      if (path.endsWith('/roster')) return [];
       if (path.endsWith('/participation'))
         return {
           invited: true,

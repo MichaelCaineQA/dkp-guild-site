@@ -11,7 +11,12 @@ import {
   type CombatRole,
   type Weapon,
   type PlayerProfile,
+  AVATARS,
+  AVATAR_COLORS,
+  type AvatarColor,
+  type Avatar as AvatarId,
 } from '@dkp/shared';
+import { Avatar, avatarLabel, AVATAR_PALETTE } from '../../../components/avatar';
 import { useSession } from '../../../components/session-context';
 import { ScreenshotLinks } from '../../../components/onboarding';
 import { api } from '../../../lib/api';
@@ -40,6 +45,8 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [error, setError] = useState('');
   const [role, setRole] = useState<CombatRole | ''>('');
+  const [avatar, setAvatar] = useState<AvatarId | null>(null);
+  const [avatarColor, setAvatarColor] = useState<AvatarColor | null>(null);
   const [weapons, setWeapons] = useState<Array<Weapon | ''>>([]);
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
@@ -58,6 +65,8 @@ export default function ProfilePage() {
       .then((data) => {
         if (active) {
           setProfile(data);
+          setAvatar(data.avatar ?? null);
+          setAvatarColor(data.avatarColor ?? null);
           setRole(data.combatRole ?? '');
           setWeapons(data.weapons ?? []);
         }
@@ -80,7 +89,13 @@ export default function ProfilePage() {
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
-    const input = updateOwnProfileSchema.safeParse({ combatRole: role, weapons, comment });
+    const input = updateOwnProfileSchema.safeParse({
+      combatRole: role,
+      weapons,
+      avatar,
+      avatarColor,
+      comment,
+    });
     setSaveError('');
     setMessage('');
     if (!input.success) {
@@ -95,10 +110,17 @@ export default function ProfilePage() {
       });
       setProfile((current) =>
         current?.id === memberId
-          ? { ...current, combatRole: input.data.combatRole, weapons: input.data.weapons }
+          ? {
+              ...current,
+              combatRole: input.data.combatRole,
+              weapons: input.data.weapons,
+              avatar: input.data.avatar,
+              avatarColor: input.data.avatarColor,
+            }
           : current,
       );
       setComment('');
+      window.dispatchEvent(new Event('profile:changed'));
       setMessage('Профиль сохранён');
     } catch (err) {
       setSaveError(
@@ -146,7 +168,7 @@ export default function ProfilePage() {
         )}
         {canEditOwnProfile(actor, memberId) && (
           <Card>
-            <SectionTitle>Изменить роль и оружия</SectionTitle>
+            <SectionTitle>Изменить профиль</SectionTitle>
             {(!profile.combatRole || (profile.weapons ?? []).length !== 2) && (
               <Notice>
                 Заполните роль и два оружия. Старые данные сохранены, оружия автоматически не
@@ -156,6 +178,102 @@ export default function ProfilePage() {
             <form onSubmit={save}>
               <fieldset disabled={busy}>
                 <Stack>
+                  <fieldset>
+                    <legend className="mb-2 font-medium">Аватар</legend>
+                    <p className="mb-3 text-sm text-secondary">
+                      Выберите иконку — {AVATARS.length} варианта
+                    </p>
+                    <div className="grid max-h-[28rem] grid-cols-3 gap-2 overflow-y-auto p-1 sm:grid-cols-4 lg:grid-cols-6">
+                      {AVATARS.map((value) => (
+                        <label
+                          key={value}
+                          className={`relative flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 p-2 text-xs transition hover:bg-accent-soft has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${avatar === value ? 'border-accent bg-accent-soft' : 'border-transparent'}`}
+                        >
+                          <input
+                            type="radio"
+                            className="sr-only"
+                            name="avatar"
+                            checked={avatar === value}
+                            onChange={() => setAvatar(value)}
+                            aria-label={avatarLabel(value)}
+                          />
+                          <Avatar
+                            avatar={value}
+                            avatarColor={avatarColor}
+                            nickname={profile.nickname}
+                            size="large"
+                          />
+                          {avatar === value && (
+                            <span
+                              aria-hidden="true"
+                              className="absolute right-1 top-1 rounded-full bg-accent px-1 text-white"
+                            >
+                              ✓
+                            </span>
+                          )}
+                          {avatarLabel(value)}
+                        </label>
+                      ))}
+                      <label
+                        className={`flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 p-2 text-center text-xs has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${avatar === null ? 'border-accent bg-accent-soft' : 'border-transparent'}`}
+                      >
+                        <input
+                          type="radio"
+                          className="sr-only"
+                          name="avatar"
+                          checked={avatar === null}
+                          onChange={() => setAvatar(null)}
+                        />
+                        <Avatar avatar={null} nickname={profile.nickname} size="large" />
+                        По умолчанию
+                      </label>
+                    </div>
+                  </fieldset>
+                  <fieldset>
+                    <legend className="mb-2 font-medium">Цвет фона</legend>
+                    <div className="flex flex-wrap gap-2">
+                      {AVATAR_COLORS.map((value) => (
+                        <label
+                          key={value}
+                          className={`relative cursor-pointer rounded-xl border-2 p-1 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${avatarColor === value ? 'border-accent' : 'border-transparent'}`}
+                          title={AVATAR_PALETTE[value].label}
+                        >
+                          <input
+                            type="radio"
+                            className="sr-only"
+                            name="avatarColor"
+                            aria-label={AVATAR_PALETTE[value].label}
+                            checked={avatarColor === value}
+                            onChange={() => setAvatarColor(value)}
+                          />
+                          <span
+                            className="flex h-10 w-10 items-center justify-center rounded-lg text-white"
+                            style={{ backgroundColor: AVATAR_PALETTE[value].color }}
+                          >
+                            {avatarColor === value ? '✓' : ''}
+                          </span>
+                        </label>
+                      ))}
+                      <label className="flex cursor-pointer items-center gap-2 p-2 text-sm">
+                        <input
+                          type="radio"
+                          name="avatarColor"
+                          checked={avatarColor === null}
+                          onChange={() => setAvatarColor(null)}
+                        />
+                        Автоматически
+                      </label>
+                    </div>
+                    <div className="mt-3 flex items-center gap-3">
+                      <Avatar
+                        avatar={avatar}
+                        avatarColor={avatarColor}
+                        nickname={profile.nickname}
+                        size="profile"
+                      />
+                      <span className="text-sm text-secondary">Предпросмотр</span>
+                    </div>
+                  </fieldset>
                   <Field label="Роль">
                     <Select
                       required
@@ -187,6 +305,8 @@ export default function ProfilePage() {
                     variant="primary"
                     disabled={
                       role === profile.combatRole &&
+                      avatar === (profile.avatar ?? null) &&
+                      avatarColor === (profile.avatarColor ?? null) &&
                       JSON.stringify(weapons) === JSON.stringify(profile.weapons ?? [])
                     }
                   >

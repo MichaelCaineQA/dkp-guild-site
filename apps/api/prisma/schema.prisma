@@ -191,6 +191,8 @@ model Member {
   userId String? @unique
   user User? @relation(fields: [userId], references: [id])
   nickname String @unique
+  avatar String?
+  avatarColor String?
   rank Rank @default(MEMBER)
   combatRole CombatRole?
   weapons Weapon[] @default([])

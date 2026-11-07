@@ -20,6 +20,8 @@ import {
 
 /** Строка состава для UI. */
 export interface RosterRow {
+  avatar: string | null;
+  avatarColor: string | null;
   weapons: Weapon[];
   id: string;
   nickname: string;
@@ -29,6 +31,8 @@ export interface RosterRow {
 }
 
 export interface MemberRow {
+  avatar?: string | null;
+  avatarColor?: string | null;
   weapons?: Weapon[];
   id: string;
   nickname: string;
@@ -58,6 +62,8 @@ export interface MembersDb {
       include: { user: { select: { username: true } } };
     }): Promise<
       Array<{
+        avatar?: string | null;
+        avatarColor?: string | null;
         id: string;
         nickname: string;
         rank: string;
@@ -116,6 +122,8 @@ export class MembersService {
     });
     return members.map((m) => ({
       id: m.id,
+      avatar: m.avatar ?? null,
+      avatarColor: m.avatarColor ?? null,
       nickname: m.nickname,
       rank: m.rank,
       combatRole: m.combatRole,
@@ -131,6 +139,8 @@ export class MembersService {
     }
     return {
       id: member.id,
+      avatar: member.avatar ?? null,
+      avatarColor: member.avatarColor ?? null,
       nickname: member.nickname,
       rank: member.rank,
       combatRole: member.combatRole,

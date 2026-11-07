@@ -15,9 +15,13 @@ import {
   type PlayerProfile,
   type Rank,
   type PermissionActor,
+  type Avatar,
+  type AvatarColor,
 } from '@dkp/shared';
 
 interface ProfileMember {
+  avatar?: Avatar | null;
+  avatarColor?: AvatarColor | null;
   weapons?: Weapon[];
   id: string;
   nickname: string;
@@ -33,7 +37,12 @@ export interface ProfileTransaction {
     }): Promise<ProfileMember | null>;
     update(args: {
       where: { id: string };
-      data: { combatRole: CombatRole; weapons: Weapon[] };
+      data: {
+        combatRole: CombatRole;
+        weapons: Weapon[];
+        avatar?: Avatar | null;
+        avatarColor?: AvatarColor | null;
+      };
     }): Promise<unknown>;
   };
   auditLog: {
@@ -104,6 +113,8 @@ export class ProfilesService {
               : null,
           }),
       id: member.id,
+      avatar: member.avatar ?? null,
+      avatarColor: member.avatarColor ?? null,
       nickname: member.nickname,
       discord: member.user?.username ?? null,
       rank: member.rank,
@@ -134,12 +145,19 @@ export class ProfilesService {
       const member = await this.mustExist(tx, id);
       if (
         member.combatRole === input.combatRole &&
-        JSON.stringify(member.weapons ?? []) === JSON.stringify(input.weapons)
+        JSON.stringify(member.weapons ?? []) === JSON.stringify(input.weapons) &&
+        (input.avatar === undefined || (member.avatar ?? null) === input.avatar) &&
+        (input.avatarColor === undefined || (member.avatarColor ?? null) === input.avatarColor)
       )
         return;
       await tx.member.update({
         where: { id },
-        data: { combatRole: input.combatRole, weapons: input.weapons },
+        data: {
+          combatRole: input.combatRole,
+          weapons: input.weapons,
+          ...(input.avatar !== undefined ? { avatar: input.avatar } : {}),
+          ...(input.avatarColor !== undefined ? { avatarColor: input.avatarColor } : {}),
+        },
       });
       await tx.auditLog.create({
         data: {
@@ -147,7 +165,7 @@ export class ProfilesService {
           action: 'MEMBER_UPDATE',
           entityType: 'Member',
           entityId: id,
-          comment: `Роль: ${member.combatRole ?? 'не указана'} → ${input.combatRole}; оружия: ${formatWeapons(member.weapons ?? [])} → ${formatWeapons(input.weapons)}. ${input.comment}`,
+          comment: `Роль: ${member.combatRole ?? 'не указана'} → ${input.combatRole}; оружия: ${formatWeapons(member.weapons ?? [])} → ${formatWeapons(input.weapons)}; аватар: ${member.avatar ?? 'не выбран'} → ${input.avatar === undefined ? (member.avatar ?? 'не выбран') : (input.avatar ?? 'не выбран')}; фон: ${member.avatarColor ?? 'автоматически'} → ${input.avatarColor === undefined ? (member.avatarColor ?? 'автоматически') : (input.avatarColor ?? 'автоматически')}. ${input.comment}`,
         },
       });
     });

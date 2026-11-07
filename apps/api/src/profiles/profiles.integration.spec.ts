@@ -8,6 +8,8 @@ import { ProfilesService, type ProfilesDb, type ProfileTransaction } from './pro
 
 let role: CombatRole | null = 'DPS';
 let weapons: import('@dkp/shared').Weapon[] = ['STAFF', 'WAND'];
+let avatar: import('@dkp/shared').Avatar | null = null;
+let avatarColor: import('@dkp/shared').AvatarColor | null = null;
 let audit: Array<unknown> = [];
 let failAudit = false;
 let actor: SessionUser | undefined;
@@ -27,6 +29,8 @@ function member(id: string, combatRole: CombatRole | null) {
         rank: 'MEMBER' as const,
         combatRole,
         weapons,
+        avatar,
+        avatarColor,
         user: { username: 'discord-player' },
       }
     : null;
@@ -54,16 +58,27 @@ const db: ProfilesDb = {
   $transaction: async (work) => {
     let draftRole = role;
     let draftWeapons = [...weapons];
+    let draftAvatar = avatar;
+    let draftAvatarColor = avatarColor;
     const draftAudit: unknown[] = [];
     const tx: ProfileTransaction = {
       member: {
         findUnique: async ({ where }) => {
           const found = member(where.id, draftRole);
-          return found ? { ...found, weapons: draftWeapons } : null;
+          return found
+            ? {
+                ...found,
+                weapons: draftWeapons,
+                avatar: draftAvatar,
+                avatarColor: draftAvatarColor,
+              }
+            : null;
         },
         update: async ({ data }) => {
           draftRole = data.combatRole;
           draftWeapons = data.weapons;
+          if (data.avatar !== undefined) draftAvatar = data.avatar;
+          if (data.avatarColor !== undefined) draftAvatarColor = data.avatarColor;
           return {};
         },
       },
@@ -78,6 +93,8 @@ const db: ProfilesDb = {
     const result = await work(tx);
     role = draftRole;
     weapons = draftWeapons;
+    avatar = draftAvatar;
+    avatarColor = draftAvatarColor;
     audit.push(...draftAudit);
     return result;
   },
@@ -107,6 +124,8 @@ describe('профили через HTTP', () => {
     actor = { userId: 'u1', username: 'Игрок', memberId: 'm1', rank: 'MEMBER', isAdmin: false };
     role = 'DPS';
     weapons = ['STAFF', 'WAND'];
+    avatar = null;
+    avatarColor = null;
     audit = [];
     failAudit = false;
   });
@@ -214,6 +233,39 @@ describe('профили через HTTP', () => {
     expect(role).toBe('DPS');
     expect(audit).toHaveLength(1);
     expect(audit[0]).toMatchObject({ comment: expect.stringContaining('Копьё / Кинжалы') });
+  });
+
+  it('смена аватара сохраняется с аудитом и отклоняет неизвестные значения', async () => {
+    const body = {
+      combatRole: 'DPS',
+      weapons: ['STAFF', 'WAND'],
+      avatar: 'OCEAN',
+      comment: 'Новый аватар',
+    };
+    expect((await patch('m1', body)).status).toBe(200);
+    expect((await patch('m1', body)).status).toBe(200);
+    expect(avatar).toBe('OCEAN');
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({ comment: expect.stringContaining('OCEAN') });
+    expect((await patch('m1', { ...body, avatar: 'INVALID' })).status).toBe(400);
+  });
+  it('цвет меняется независимо от картинки, проверяется и журналируется', async () => {
+    const body = {
+      combatRole: 'DPS',
+      weapons: ['STAFF', 'WAND'],
+      avatar: 'FOX',
+      avatarColor: 'BLUE',
+      comment: 'Синий фон',
+    };
+    expect((await patch('m1', body)).status).toBe(200);
+    expect((await patch('m1', body)).status).toBe(200);
+    expect(avatar).toBe('FOX');
+    expect(avatarColor).toBe('BLUE');
+    expect(audit).toHaveLength(1);
+    expect((await patch('m1', { ...body, avatarColor: 'RED' })).status).toBe(200);
+    expect(avatar).toBe('FOX');
+    expect(avatarColor).toBe('RED');
+    expect((await patch('m1', { ...body, avatarColor: 'INVALID' })).status).toBe(400);
   });
 
   it('чужие поля и пустой комментарий — 400 без изменений', async () => {

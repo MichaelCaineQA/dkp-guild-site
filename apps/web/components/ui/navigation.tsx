@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, type ReactNode } from 'react';
 import Link from 'next/link';
+import { Avatar } from '../avatar';
 export interface NavItemView {
   href: string;
   label: string;
@@ -179,11 +180,15 @@ export function HeaderIdentity({
   name,
   memberId,
   balance,
+  avatar,
+  avatarColor,
   children,
 }: {
   name: string;
   memberId: string | null;
   balance: number | null;
+  avatar?: string | null;
+  avatarColor?: string | null;
   children: ReactNode;
 }) {
   return (
@@ -198,12 +203,7 @@ export function HeaderIdentity({
           href={`/profiles/${encodeURIComponent(memberId)}`}
           className="flex min-w-0 items-center gap-2 text-accent hover:underline"
         >
-          <span
-            aria-hidden="true"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs"
-          >
-            {Array.from(name).slice(0, 2).join('')}
-          </span>
+          <Avatar avatar={avatar} avatarColor={avatarColor} nickname={name} />
           <span className="max-w-28 truncate">{name}</span>
         </Link>
       ) : (

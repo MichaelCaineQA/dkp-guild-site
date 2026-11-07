@@ -15,6 +15,8 @@ async function bootstrap(): Promise<void> {
   }
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // За Caddy доверяем только непосредственно подключённому прокси.
+  if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
 
   // httpOnly-cookie сессия: единая для API и SSR-страниц Next (план 2.9).
   app.use(

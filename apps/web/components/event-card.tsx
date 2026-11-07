@@ -12,6 +12,7 @@ import type { DashboardEvent as EventRow } from '@dkp/shared';
 import { api } from '../lib/api';
 import { CheckInPanel, RaidLeadCodePanel } from './checkin-panels';
 import { AbsentMembersPanel } from './absent-members-panel';
+import { EventRoster } from './event-roster';
 import { Badge, Button, Card, Modal } from './ui';
 const MODE_LABELS: Record<EventMode, string> = { PVE: 'PvE', PVP: 'PvP' };
 const STATUS_LABELS: Record<string, string> = {
@@ -40,6 +41,7 @@ export function EventCard({
 }) {
   const { user } = useSession();
   const [busy, setBusy] = useState(false);
+  const [rosterVersion, setRosterVersion] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
 
   const changeStatus = async (status: string) => {
@@ -134,7 +136,14 @@ export function EventCard({
       </dl>
 
       {user?.memberId && (
-        <EventParticipation key={event.id} eventId={event.id} onChanged={onChanged} />
+        <EventParticipation
+          key={event.id}
+          eventId={event.id}
+          onChanged={() => {
+            setRosterVersion((v) => v + 1);
+            onChanged();
+          }}
+        />
       )}
 
       {/* Чек-ин кодами (план 2.2): игрок отмечается, РЛ видит код */}
@@ -147,6 +156,7 @@ export function EventCard({
 
       {/* Оформленно отсутствующие (план 2.3): всем, авто-отметка при закрытии */}
       <AbsentMembersPanel eventId={event.id} eventStartsAt={event.startsAt} />
+      <EventRoster key={`${event.id}:${rosterVersion}`} eventId={event.id} />
 
       {canConduct && event.status === 'PLANNED' && (
         <div className="mt-3 flex gap-2">

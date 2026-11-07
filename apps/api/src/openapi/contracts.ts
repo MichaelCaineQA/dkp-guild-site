@@ -32,6 +32,10 @@ const c = (
 
 /** Ключи привязаны к методам контроллеров; пути и HTTP-статусы сканирует Nest. */
 export const contracts: Record<string, Contract> = {
+  Participation_roster: c('Получить состав события', list('EventRosterMember'), {
+    errors: [404],
+    description: 'Приглашённые по области события и их участие; GS доступен только Главе и Админу.',
+  }),
   Participation_get: c('Получить своё участие в событии', 'Participation', {
     access: 'Участник с привязанным Member.',
     errors: [404],

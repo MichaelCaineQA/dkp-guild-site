@@ -1,6 +1,7 @@
 import { COMBAT_ROLE_LABELS, RANK_LABELS, formatWeapons, type PlayerProfile } from '@dkp/shared';
 import { Card, Muted, SectionTitle } from './layout';
 import { Table } from './data';
+import { Avatar } from '../avatar';
 
 const ENTRY_LABELS: Record<string, string> = {
   CHECKIN_EARN: 'Чек-ин',
@@ -13,6 +14,14 @@ export function ProfileDetails({ profile }: { profile: PlayerProfile }) {
   return (
     <Card>
       <SectionTitle>Об игроке</SectionTitle>
+      <div className="mb-4">
+        <Avatar
+          avatar={profile.avatar}
+          avatarColor={profile.avatarColor}
+          nickname={profile.nickname}
+          size="profile"
+        />
+      </div>
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
         <dt>Ник</dt>
         <dd className="break-all">{profile.nickname}</dd>
