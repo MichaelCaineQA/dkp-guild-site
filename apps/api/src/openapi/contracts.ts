@@ -40,6 +40,7 @@ export const contracts: Record<string, Contract> = {
     public: true,
     description: 'При недоступности БД HTTP 200 и db=down.',
   }),
+  App_getGuild: c('Получить название гильдии', object({ name: str })),
   App_getCombatRoles: c('Получить названия боевых ролей', 'CombatRoles', { public: true }),
   Auth_discordLogin: {
     summary: 'Войти через Discord',

@@ -1,58 +1,74 @@
 'use client';
-
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { can, type Permission } from '@dkp/shared';
 import { useSession } from './session-context';
-
-/** Пункт навигации: показывается всем либо требует права (матрица 2.6). */
-const NAV_ITEMS: Array<{ href: string; label: string; permission?: Permission }> = [
-  { href: '/', label: 'Главная' },
-  { href: '/schedule', label: 'Расписание', permission: 'members.view_roster' },
-  { href: '/roster', label: 'Состав', permission: 'members.view_roster' },
-  { href: '/absences', label: 'Отсутствия', permission: 'members.view_roster' },
-  { href: '/dkp', label: 'Журнал', permission: 'members.view_roster' },
-  { href: '/rules/guild-rules', label: 'Правила гильдии', permission: 'members.view_roster' },
-  { href: '/rules/site-rules', label: 'Правила сайта', permission: 'members.view_roster' },
-  { href: '/audit', label: 'Аудит', permission: 'audit.view' },
-  { href: '/link-requests', label: 'Заявки', permission: 'link_requests.review' },
-  { href: '/settings', label: 'Настройки', permission: 'settings.manage' },
-  { href: '/design', label: 'Дизайн', permission: 'members.view_roster' },
+import {
+  MobileMenuButton,
+  MobileNavigation,
+  NavigationLinks,
+  NavigationToggle,
+  SidebarFrame,
+} from './ui';
+const NAV_ITEMS: Array<{ href: string; label: string; icon: string; permission: Permission }> = [
+  { href: '/', label: 'Дашборд', icon: 'home', permission: 'members.view_roster' },
+  { href: '/schedule', label: 'Расписание', icon: 'calendar', permission: 'members.view_roster' },
+  { href: '/roster', label: 'Состав гильдии', icon: 'users', permission: 'members.view_roster' },
+  { href: '/absences', label: 'Отсутствия', icon: 'clock', permission: 'members.view_roster' },
+  { href: '/dkp', label: 'Журнал ДКП', icon: 'book', permission: 'members.view_roster' },
+  {
+    href: '/rules/guild-rules',
+    label: 'Правила гильдии',
+    icon: 'shield',
+    permission: 'members.view_roster',
+  },
+  {
+    href: '/rules/site-rules',
+    label: 'Правила сайта',
+    icon: 'book',
+    permission: 'members.view_roster',
+  },
+  { href: '/audit', label: 'Лог действий', icon: 'audit', permission: 'audit.view' },
+  { href: '/settings', label: 'Настройки', icon: 'settings', permission: 'settings.manage' },
+  { href: '/design', label: 'Витрина дизайна', icon: 'design', permission: 'settings.manage' },
 ];
-
-/** Навигация по сайту: ссылки видимы по правам сессии. */
 export function NavMenu() {
   const { user, loading } = useSession();
   const pathname = usePathname();
-
-  if (loading || !user) {
-    return <span className="text-sm font-semibold text-primary">ДКП-система гильдии</span>;
-  }
-
-  const items = NAV_ITEMS.filter(
-    (item) =>
-      !item.permission ||
-      can({ rank: user.rank, isAdmin: user.isAdmin, memberId: user.memberId }, item.permission),
-  );
-
+  const [expanded, setExpanded] = useState(false);
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    try {
+      setExpanded(localStorage.getItem('dkp.navigation.expanded') === 'true');
+    } catch {}
+  }, []);
+  if (loading || !user || !can(user, 'members.view_roster')) return null;
+  const items = NAV_ITEMS.filter((item) => can(user, item.permission)).map((item) => ({
+    ...item,
+    active:
+      pathname === item.href ||
+      (item.href === '/roster' &&
+        (pathname === '/link-requests' || pathname.startsWith('/applications/'))),
+  }));
+  const toggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    try {
+      localStorage.setItem('dkp.navigation.expanded', String(next));
+    } catch {}
+  };
   return (
-    <nav className="flex flex-wrap items-center gap-1">
-      {items.map((item) => {
-        const active = pathname === item.href;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`rounded-lg px-3 py-1.5 text-sm ${
-              active
-                ? 'bg-accent-soft font-semibold text-accent'
-                : 'text-secondary hover:bg-surface-muted hover:text-primary'
-            }`}
-          >
-            {item.label}
-          </Link>
-        );
-      })}
-    </nav>
+    <>
+      <SidebarFrame expanded={expanded}>
+        <NavigationToggle expanded={expanded} onClick={toggle} />
+        <NavigationLinks items={items} collapsed={!expanded} />
+      </SidebarFrame>
+      <MobileMenuButton onClick={() => setMobile(true)} />
+      {mobile && (
+        <MobileNavigation onClose={() => setMobile(false)}>
+          <NavigationLinks items={items} collapsed={false} onNavigate={() => setMobile(false)} />
+        </MobileNavigation>
+      )}
+    </>
   );
 }

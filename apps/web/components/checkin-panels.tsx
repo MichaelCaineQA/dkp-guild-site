@@ -49,6 +49,7 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
         body: JSON.stringify({ code: picked }),
       });
       setResult(data.result);
+      if (data.result === 'PASSED') window.dispatchEvent(new Event('dkp:changed'));
       setPicked(null);
       await load();
     } catch (err) {
