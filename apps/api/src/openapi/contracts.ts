@@ -215,7 +215,18 @@ export const contracts: Record<string, Contract> = {
     description:
       'Без тела запроса. 5 запросов в минуту. Код и факт запуска в аудите создаются атомарно, сам код не журналируется.',
   }),
-  Conduct_checklist: c('Получить чек-лист посещения', list('ChecklistRow'), { errors: [404] }),
+  Conduct_applySummary: c('Применить подготовленные итоги ивента', 'EventSummaryApplied', {
+    access: rl,
+    body: 'ApplyEventSummary',
+    errors: [400, 404, 409],
+    description:
+      'CHECKIN, EXCUSE, DKP и ATTENDANCE применяются одной serializable-транзакцией с аудитом. EXCUSE оформляет отсутствие на конкретный ивент с обязательной причиной, в том числе после завершения. Плата за ручной код берётся из Setting. Существующие ledger-записи не меняются. Отменённый ивент доступен только для чтения, включая повторное получение ранее выданной квитанции. requestId — UUID; точный повтор тем же автором возвращает repeated=true без повторных начислений. При неизвестном результате повторять тот же requestId и payload; изменение payload/автора/ивента под тем же ID даёт 409. Не более 1000 действий за запрос (технический предел). Участники проверяются по текущему составу GUILD/KP/PACK.',
+  }),
+  Conduct_checklist: c('Получить чек-лист посещения', list('ChecklistRow'), {
+    errors: [404],
+    description:
+      'Текущий состав согласно GUILD/KP/PACK, без GS. automaticStatus вычисляется по PASSED/MANUAL кодам и оформленным отсутствиям; attendanceStatus учитывает ранее сохранённый ручной статус, statusIsManual отличает его от автоматического. Уважительная без кодов не приносит очков. dkpEarned — сумма существующих записей ledger, а не расчёт по статусу.',
+  }),
   Conduct_setAttendance: c('Отметить посещение вручную', 'Ok', {
     access: rl,
     body: 'SetAttendance',

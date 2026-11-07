@@ -251,6 +251,7 @@ model Event {
   place String?
   notes String?
 
+  summaryBatches EventSummaryBatch[]
   absences Absence[]
   checkInCodes CheckInCode[]
   attendance Attendance[]
@@ -501,4 +502,16 @@ model RulesPageVersion {
 model Setting {
   key String @id
   value Json
+}
+
+/// Квитанция применения итогов: повтор одного запроса не выдаёт ДКП заново.
+model EventSummaryBatch {
+  id String @id
+  eventId String
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  actorKey String
+  payloadHash String
+  actionCount Int
+  createdAt DateTime @default(now())
+  @@index([eventId])
 }

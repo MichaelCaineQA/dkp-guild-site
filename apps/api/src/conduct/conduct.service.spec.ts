@@ -36,15 +36,46 @@ function makeDb() {
     comment: string;
   }> = [];
   const audit: Array<Record<string, string | null>> = [];
+  const receipts = new Map<
+    string,
+    { eventId: string; actorKey: string; payloadHash: string; actionCount: number }
+  >();
+  const absences: {
+    id: string;
+    memberId: string;
+    eventId: string | null;
+    dateFrom: Date;
+    dateTo: Date;
+    reason: string;
+  }[] = [];
   const db: ConductDb = {
+    eventSummaryBatch: {
+      findUnique: async ({ where }) => receipts.get(where.id) ?? null,
+      create: async ({ data }) => {
+        receipts.set(data.id, data);
+      },
+    },
+    absence: {
+      findMany: async () => absences,
+      create: async ({ data }) => {
+        const value = { id: 'absence-' + absences.length, ...data };
+        absences.push(value);
+        return value;
+      },
+    },
     setting: { findMany: async () => [] },
     $transaction: async (work) => {
+      const oldReceipts = structuredClone([...receipts]);
+      const oldAbsences = structuredClone(absences);
       const previousAttendance = structuredClone([...attendance]);
       const previousDkp = structuredClone(dkp);
       const previousAudit = structuredClone(audit);
       try {
         return await work(db);
       } catch (error) {
+        receipts.clear();
+        oldReceipts.forEach(([key, value]) => receipts.set(key, value));
+        absences.splice(0, absences.length, ...oldAbsences);
         attendance.clear();
         for (const [key, value] of previousAttendance) attendance.set(key, value);
         dkp.splice(0, dkp.length, ...previousDkp);
@@ -86,7 +117,7 @@ function makeDb() {
       },
     },
   };
-  return { db, attendance, dkp, audit };
+  return { db, attendance, dkp, audit, receipts, absences };
 }
 
 describe('ConductService.setAttendance', () => {
@@ -308,5 +339,115 @@ describe('Атомарность ручного чек-ина', () => {
     );
     expect(dkp.map((e) => e.amount)).toEqual([2, 3]);
     expect(settings).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Пакет итогов', () => {
+  const requestId = '00000000-0000-4000-8000-000000000001';
+  it('применяет коды, уважительную и ДКП вместе, точный повтор ничего не добавляет', async () => {
+    const { db, dkp, absences, audit } = makeDb();
+    const service = new ConductService(db, SETTINGS);
+    const body = {
+      requestId,
+      actions: [
+        { kind: 'CHECKIN', memberId: 'm-1', phase: 'START', comment: 'Был на старте' },
+        { kind: 'CHECKIN', memberId: 'm-1', phase: 'END', comment: 'Был до конца' },
+        { kind: 'EXCUSE', memberId: 'm-2', reason: 'Работа' },
+        { kind: 'DKP', memberId: 'm-1', amount: -2, comment: 'Коррекция ошибки' },
+      ],
+    };
+    expect(await service.applySummary('e-1', body, RL, 'MEMBER')).toEqual({
+      ok: true,
+      applied: 4,
+      repeated: false,
+    });
+    expect(dkp.map((row) => row.amount)).toEqual([5, 5, -2]);
+    expect(absences).toHaveLength(1);
+    const rows = await service.checklist('e-1');
+    expect(rows.find((row) => row.memberId === 'm-1')).toMatchObject({
+      attendanceStatus: 'PRESENT',
+      dkpEarned: 8,
+    });
+    expect(rows.find((row) => row.memberId === 'm-2')).toMatchObject({
+      attendanceStatus: 'EXCUSED_ABSENCE',
+      dkpEarned: 0,
+    });
+    const auditCount = audit.length;
+    expect((await service.applySummary('e-1', body, RL, 'MEMBER')).repeated).toBe(true);
+    expect(dkp).toHaveLength(3);
+    expect(audit).toHaveLength(auditCount);
+    await expect(
+      service.applySummary('e-1', { ...body, actions: body.actions.slice(0, 1) }, RL, 'MEMBER'),
+    ).rejects.toThrow(ConflictException);
+    await expect(service.applySummary('e-1', body, LEADER, 'GUILD_LEADER')).rejects.toThrow(
+      ConflictException,
+    );
+  });
+  it('конфликт в последнем действии откатывает предыдущие записи и квитанцию', async () => {
+    const { db, attendance, dkp, receipts, audit } = makeDb();
+    attendance.set('m-1', {
+      memberId: 'm-1',
+      status: null,
+      checkinStart: 'PASSED',
+      checkinEnd: 'PENDING',
+    });
+    await expect(
+      new ConductService(db, SETTINGS).applySummary(
+        'e-1',
+        {
+          requestId,
+          actions: [
+            { kind: 'DKP', memberId: 'm-2', amount: 10, comment: 'Помог рейду' },
+            { kind: 'CHECKIN', memberId: 'm-1', phase: 'START', comment: 'Повтор старта' },
+          ],
+        },
+        RL,
+        'MEMBER',
+      ),
+    ).rejects.toThrow(ConflictException);
+    expect(dkp).toHaveLength(0);
+    expect(receipts.size).toBe(0);
+    expect(audit).toHaveLength(0);
+    expect(attendance.get('m-1')!.checkinStart).toBe('PASSED');
+  });
+  it('Рядовой и Офицер без назначения не применяют пакет', async () => {
+    const { db, dkp } = makeDb();
+    const body = {
+      requestId,
+      actions: [{ kind: 'DKP', memberId: 'm-1', amount: 5, comment: 'Бонус' }],
+    };
+    for (const rank of ['MEMBER', 'OFFICER'])
+      await expect(
+        new ConductService(db, SETTINGS).applySummary('e-1', body, MEMBER, rank),
+      ).rejects.toThrow(ForbiddenException);
+    expect(dkp).toHaveLength(0);
+  });
+  it('завершённый ивент допускает корректировки, отменённый — нет; состав обязателен', async () => {
+    const { db, absences } = makeDb();
+    db.event.findUnique = async () => ({ ...EVENT, status: 'FINISHED' });
+    const body = { requestId, actions: [{ kind: 'EXCUSE', memberId: 'm-2', reason: 'Работа' }] };
+    await new ConductService(db, SETTINGS).applySummary('e-1', body, RL, 'MEMBER');
+    expect(absences).toHaveLength(1);
+    db.event.findUnique = async () => ({ ...EVENT, status: 'CANCELLED' });
+    expect(
+      (await new ConductService(db, SETTINGS).applySummary('e-1', body, RL, 'MEMBER')).repeated,
+    ).toBe(true);
+    await expect(
+      new ConductService(db, SETTINGS).applySummary(
+        'e-1',
+        { ...body, requestId: '00000000-0000-4000-8000-000000000003' },
+        RL,
+        'MEMBER',
+      ),
+    ).rejects.toThrow(ConflictException);
+    db.event.findUnique = async () => ({ ...EVENT, scope: 'PACK', packId: 'other' });
+    await expect(
+      new ConductService(db, SETTINGS).applySummary(
+        'e-1',
+        { ...body, requestId: '00000000-0000-4000-8000-000000000002' },
+        RL,
+        'MEMBER',
+      ),
+    ).rejects.toThrow('Участник не входит');
   });
 });

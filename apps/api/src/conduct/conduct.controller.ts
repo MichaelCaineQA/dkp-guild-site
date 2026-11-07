@@ -19,6 +19,22 @@ export class ConductController {
     return this.conduct.checklist(eventId);
   }
 
+  @Post('summary')
+  @RequirePermission('members.view_roster')
+  applySummary(
+    @Param('eventId') eventId: string,
+    @Body() body: unknown,
+    @Req() req: AuthedRequest,
+  ) {
+    const user = req.session!.user!;
+    return this.conduct.applySummary(
+      eventId,
+      body,
+      { memberId: user.memberId, isAdmin: user.isAdmin },
+      user.rank,
+    );
+  }
+
   /** Ручная отметка посещения (был/опоздал/ушёл/неявка). */
   @Post('attendance')
   @RequirePermission('members.view_roster')

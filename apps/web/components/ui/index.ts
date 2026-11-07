@@ -15,3 +15,5 @@ export * from './schedule';
 export * from './audit';
 
 export * from './absences';
+
+export * from './event-summary';
