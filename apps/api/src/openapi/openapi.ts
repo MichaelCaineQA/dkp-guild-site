@@ -141,6 +141,7 @@ function tagFor(path: string): string {
   if (path.includes('/checkin')) return 'Чек-ин';
   if (path.includes('/conduct')) return 'Проведение ивента';
   const tags: Record<string, string> = {
+    dashboard: 'Дашборд',
     auth: 'Авторизация и привязка Discord',
     members: 'Состав гильдии',
     events: 'Расписание',

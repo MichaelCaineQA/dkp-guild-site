@@ -32,6 +32,10 @@ const c = (
 
 /** Ключи привязаны к методам контроллеров; пути и HTTP-статусы сканирует Nest. */
 export const contracts: Record<string, Contract> = {
+  Dashboard_get: c('Получить четыре виджета главной', 'Dashboard', {
+    description:
+      'День — по Москве; максимум 5 событий. Команда — свой пак, GS только Главе/Админу. audit=null у рядового, иначе 10 последних записей. auction=null до этапа 2.',
+  }),
   App_getHealth: c('Проверить состояние API и БД', 'Health', {
     public: true,
     description: 'При недоступности БД HTTP 200 и db=down.',

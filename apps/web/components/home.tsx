@@ -1,19 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { OnboardingScreen } from './onboarding';
-import type { DkpBalanceRow } from '@dkp/shared';
+import { DashboardScreen } from './dashboard';
 import { useSession } from './session-context';
 import { api } from '../lib/api';
-import { Badge, Card, Muted, Page, PageHeader, SectionTitle, Modal } from './ui';
-
-interface UpcomingEvent {
-  id: string;
-  eventTypeName: string;
-  mode: string;
-  startsAt: string;
-  raidLeadName: string;
-}
+import { Page, Modal } from './ui';
 
 /**
  * Главная (ревью владельца, п.1): гостям — welcome-экран со входом
@@ -33,7 +25,7 @@ export default function HomePage() {
 
   if (!user.memberId && !user.isAdmin) return <OnboardingScreen />;
 
-  return <DashboardScreen memberId={user.memberId} />;
+  return <DashboardScreen />;
 }
 
 /** Гостевой экран: приветствие + вход через Discord + вход для админа. */
@@ -132,81 +124,6 @@ function WelcomeScreen() {
           </Modal>
         )}
       </div>
-    </Page>
-  );
-}
-
-/** Дашборд вошедшего: баланс, ближайшие ивенты, игровой цикл (каркас). */
-function DashboardScreen({ memberId }: { memberId: string | null }) {
-  const [balance, setBalance] = useState<number | null>(null);
-  const [upcoming, setUpcoming] = useState<UpcomingEvent[]>([]);
-
-  useEffect(() => {
-    // Непривязанный аккаунт (ждёт одобрения) — без запросов дашборда
-    if (!memberId) {
-      return;
-    }
-    api<DkpBalanceRow[]>(`/dkp/balances`)
-      .then((rows) => setBalance(rows.find((r) => r.memberId === memberId)?.balance ?? 0))
-      .catch(() => setBalance(null));
-    const now = new Date().toISOString();
-    api<UpcomingEvent[]>(`/events?from=${now}`)
-      .then((events) => setUpcoming(events.slice(0, 5)))
-      .catch(() => setUpcoming([]));
-  }, [memberId]);
-
-  return (
-    <Page>
-      <PageHeader
-        title="Дашборд гильдии"
-        subtitle="Сводка: баланс, ближайшие ивенты, игровое время."
-      />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card>
-          <SectionTitle>Ваш баланс</SectionTitle>
-          {memberId === null ? (
-            <Muted>Аккаунт ждёт одобрения главой гильдии или админом</Muted>
-          ) : balance === null ? (
-            <Muted>Загрузка…</Muted>
-          ) : (
-            <p className="text-3xl font-bold tabular-nums">{balance} ДКП</p>
-          )}
-        </Card>
-        <Card>
-          <SectionTitle>Ближайшие ивенты</SectionTitle>
-          {upcoming.length === 0 ? (
-            <Muted>Запланированных ивентов нет</Muted>
-          ) : (
-            <ul className="flex flex-col gap-2 text-sm">
-              {upcoming.map((event) => (
-                <li key={event.id} className="flex flex-wrap items-center gap-2">
-                  <Badge tone="accent">{event.eventTypeName}</Badge>
-                  <Badge>{event.mode === 'PVE' ? 'PvE' : 'PvP'}</Badge>
-                  <span className="font-medium">
-                    {new Date(event.startsAt).toLocaleString('ru-RU', {
-                      weekday: 'short',
-                      day: 'numeric',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                  <Muted>РЛ: {event.raidLeadName}</Muted>
-                </li>
-              ))}
-            </ul>
-          )}
-          <a href="/schedule" className="mt-3 inline-block text-sm text-accent hover:underline">
-            Всё расписание →
-          </a>
-        </Card>
-      </div>
-      <Card className="mt-4">
-        <SectionTitle>Игровое время</SectionTitle>
-        <p className="text-sm text-secondary">
-          Текущая фаза и обратный отсчёт до смены день/ночь — в шапке сайта.
-        </p>
-      </Card>
     </Page>
   );
 }

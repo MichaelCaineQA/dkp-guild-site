@@ -33,7 +33,9 @@ const GAME_TIME = {
 function eventFixture(overrides: Record<string, unknown> = {}) {
   // Дата в текущем месяце, чтобы попала в календарь и «ближайшие».
   const now = new Date();
-  const startsAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), Math.min(now.getUTCDate() + 1, 27), 17));
+  const startsAt = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), Math.min(now.getUTCDate() + 1, 27), 17),
+  );
   return {
     id: 'e-1',
     eventTypeId: 'et-1',
@@ -53,6 +55,9 @@ function eventFixture(overrides: Record<string, unknown> = {}) {
 
 describe('SchedulePage', () => {
   beforeEach(() => {
+    HTMLDialogElement.prototype.showModal = function () {
+      this.setAttribute('open', '');
+    };
     vi.clearAllMocks();
     vi.mocked(api).mockImplementation(async (path: string) => {
       if (path.startsWith('/events') && path.endsWith('/checkin/me')) {
@@ -143,14 +148,18 @@ describe('SchedulePage', () => {
     expect(api).not.toHaveBeenCalled();
   });
 
-  it.each(['MEMBER', 'OFFICER'])('назначенный РЛ с рангом %s видит проведение своего ивента', async rank => {
-    mockSession({ userId:'rl', username:'РЛ', memberId:'m-rl', rank, isAdmin:false });
-    render(<SchedulePage />);
-    await screen.findByText(/РЛ: РЛ · 10 ДКП/);
-    const mentions = screen.getAllByText('Гильдбосс');
-    mentions[mentions.length - 1]!.click();
-    expect(await screen.findByText('Начать ивент')).toBeDefined();
-    await waitFor(() => expect(api).toHaveBeenCalledWith('/events/e-1/checkin/code'));
-    if (rank === 'MEMBER') expect(screen.queryByRole('button', { name: 'Создать ивент' })).toBeNull();
-  });
+  it.each(['MEMBER', 'OFFICER'])(
+    'назначенный РЛ с рангом %s видит проведение своего ивента',
+    async (rank) => {
+      mockSession({ userId: 'rl', username: 'РЛ', memberId: 'm-rl', rank, isAdmin: false });
+      render(<SchedulePage />);
+      await screen.findByText(/РЛ: РЛ · 10 ДКП/);
+      const mentions = screen.getAllByText('Гильдбосс');
+      mentions[mentions.length - 1]!.click();
+      expect(await screen.findByText('Начать ивент')).toBeDefined();
+      await waitFor(() => expect(api).toHaveBeenCalledWith('/events/e-1/checkin/code'));
+      if (rank === 'MEMBER')
+        expect(screen.queryByRole('button', { name: 'Создать ивент' })).toBeNull();
+    },
+  );
 });

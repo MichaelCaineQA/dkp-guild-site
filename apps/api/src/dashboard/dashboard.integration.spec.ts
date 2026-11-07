@@ -1,0 +1,127 @@
+import 'reflect-metadata';
+import { Module, type INestApplication } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import type { Request, Response, NextFunction } from 'express';
+import type { DashboardData, SessionUser } from '@dkp/shared';
+import { DashboardController } from './dashboard.controller';
+import { DashboardService, type DashboardDb } from './dashboard.service';
+import { AuditService } from '../audit/audit.service';
+let actor: SessionUser | undefined;
+const member = jest.fn(async () => ({ packId: 'own-pack' }));
+const pack = jest.fn(async () => ({
+  id: 'own-pack',
+  name: 'Звёзды',
+  leaderId: 'self',
+  members: [
+    {
+      id: 'self',
+      nickname: 'Лидер',
+      rank: 'OFFICER',
+      combatRole: 'HEALER',
+      weapons: ['STAFF', 'WAND'],
+      createdAt: new Date('2026-01-01'),
+      packJoinedAt: null,
+    },
+  ],
+}));
+const scores = jest.fn(async () => [{ memberId: 'self', value: 4242 }]);
+const events = jest.fn(async () => []);
+const list = jest.fn(async () => ({
+  entries: [
+    {
+      id: 'log',
+      actorMemberId: 'head',
+      action: 'EVENT_CREATE',
+      entityType: 'Event',
+      entityId: 'event',
+      comment: 'Создан ивент',
+      createdAt: new Date(),
+      actorName: 'Глава',
+    },
+  ],
+  total: 1,
+}));
+const db = {
+  member: { findUnique: member },
+  pack: { findUnique: pack },
+  event: { findMany: events },
+  guild: { findFirst: async () => null },
+  gearScoreRecord: { findMany: scores },
+};
+@Module({
+  controllers: [DashboardController],
+  providers: [
+    {
+      provide: DashboardService,
+      useValue: new DashboardService(
+        db as unknown as DashboardDb,
+        { list } as unknown as AuditService,
+      ),
+    },
+  ],
+})
+class TestModule {}
+describe('Дашборд через HTTP', () => {
+  let app: INestApplication;
+  let url: string;
+  beforeAll(async () => {
+    app = await NestFactory.create(TestModule, { logger: false });
+    app.use((req: Request, _res: Response, next: NextFunction) => {
+      Object.assign(req, { session: { user: actor } });
+      next();
+    });
+    await app.listen(0, '127.0.0.1');
+    url = await app.getUrl();
+  });
+  afterAll(async () => {
+    await app?.close();
+  });
+  beforeEach(() => {
+    jest.clearAllMocks();
+    actor = { userId: 'u', username: 'Игрок', memberId: 'self', rank: 'MEMBER', isAdmin: false };
+  });
+  it('аноним получает 401, ожидающий приёма — 403, запросов данных нет', async () => {
+    actor = undefined;
+    expect((await fetch(url + '/dashboard')).status).toBe(401);
+    actor = { userId: 'new', username: 'Новый', memberId: null, rank: null, isAdmin: false };
+    expect((await fetch(url + '/dashboard')).status).toBe(403);
+    expect(events).not.toHaveBeenCalled();
+    expect(member).not.toHaveBeenCalled();
+  });
+  it('рядовой не получает аудит и GS, даже будучи лидером пака; нельзя запросить чужой пак', async () => {
+    const response = await fetch(url + '/dashboard?memberId=other&rank=ADMIN');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    const body = (await response.json()) as DashboardData;
+    expect(body.team!.id).toBe('own-pack');
+    expect(body.team!.members[0].leader).toBe(true);
+    expect(body.team!.members[0]).not.toHaveProperty('gearScore');
+    expect(body.audit).toBeNull();
+    expect(list).not.toHaveBeenCalled();
+    expect(scores).not.toHaveBeenCalled();
+    expect(member).toHaveBeenCalledWith({ where: { id: 'self' }, select: { packId: true } });
+  });
+  it('Офицер видит аудит, но не GS своего пака', async () => {
+    actor!.rank = 'OFFICER';
+    const body = (await (await fetch(url + '/dashboard')).json()) as DashboardData;
+    expect(body.audit![0].actorName).toBe('Глава');
+    expect(list).toHaveBeenCalledWith({ limit: 10 });
+    expect(scores).not.toHaveBeenCalled();
+    expect(body.team!.members[0]).not.toHaveProperty('gearScore');
+  });
+  it('Глава видит GS участников своего пака без идентификаторов скриншотов', async () => {
+    actor!.rank = 'GUILD_LEADER';
+    const body = (await (await fetch(url + '/dashboard')).json()) as DashboardData;
+    expect(body.team!.members[0].gearScore).toBe(4242);
+    expect(scores).toHaveBeenCalledTimes(1);
+    expect(body.team!.members[0]).not.toHaveProperty('screenshotIds');
+  });
+  it('резервный Админ без Member получает события/аудит и пустую команду', async () => {
+    actor = { userId: 'admin:a', username: 'a', memberId: null, rank: null, isAdmin: true };
+    const body = (await (await fetch(url + '/dashboard')).json()) as DashboardData;
+    expect(body.team).toBeNull();
+    expect(body.audit).toHaveLength(1);
+    expect(member).not.toHaveBeenCalled();
+    expect(events).toHaveBeenCalledTimes(1);
+  });
+});

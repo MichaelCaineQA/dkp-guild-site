@@ -1,3 +1,4 @@
+import { DashboardModule } from './dashboard/dashboard.module';
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { PrismaModule } from './prisma/prisma.module';
@@ -14,7 +15,21 @@ import { AuditModule } from './audit/audit.module';
 import { ProfilesModule } from './profiles/profiles.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, MembersModule, SettingsModule, EventsModule, CheckInModule, AbsencesModule, ConductModule, DkpModule, AuditModule, ProfilesModule, RulesModule],
+  imports: [
+    DashboardModule,
+    PrismaModule,
+    AuthModule,
+    MembersModule,
+    SettingsModule,
+    EventsModule,
+    CheckInModule,
+    AbsencesModule,
+    ConductModule,
+    DkpModule,
+    AuditModule,
+    ProfilesModule,
+    RulesModule,
+  ],
   controllers: [AppController],
 })
 export class AppModule {}

@@ -194,6 +194,7 @@ model Member {
   rank Rank @default(MEMBER)
   combatRole CombatRole?
   weapons Weapon[] @default([])
+  packJoinedAt DateTime?
   packId String?
   pack Pack? @relation("PackMembers", fields: [packId], references: [id])
   ledPacks Pack[] @relation("PackLeader")
@@ -225,6 +226,7 @@ model EventType {
 }
 
 model Event {
+  name String @default("")
   id String @id @default(cuid())
   eventTypeId String
   eventType EventType @relation(fields: [eventTypeId], references: [id])

@@ -7,7 +7,9 @@ vi.mock('../lib/api', () => ({ api: vi.fn() }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+  HTMLDialogElement.prototype.showModal = function () {
+    this.setAttribute('open', '');
+  };
   vi.mocked(api).mockImplementation(async (path) => {
     if (path === '/event-types') return [{ id: 'type-1', name: 'Гильдбосс' }];
     if (path === '/members') return [{ id: 'member-1', nickname: 'Рейд-лид' }];
@@ -21,6 +23,7 @@ async function fillForm() {
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Создать' }).hasAttribute('disabled')).toBe(false),
   );
+  fireEvent.change(screen.getByLabelText('Название'), { target: { value: 'Сбор гильдии' } });
   fireEvent.change(screen.getByLabelText('Тип ивента'), { target: { value: 'type-1' } });
   fireEvent.change(screen.getByLabelText('Рейд-лид'), { target: { value: 'member-1' } });
   fireEvent.change(screen.getByLabelText('Начало'), { target: { value: '2026-11-10T20:00' } });
@@ -39,6 +42,7 @@ describe('создание ивента', () => {
     const body = JSON.parse(call[1]!.body as string);
     expect(body.startsAt).toBe(new Date('2026-11-10T20:00').toISOString());
     expect(new Date(body.endsAt).getTime() - new Date(body.startsAt).getTime()).toBe(3_600_000);
+    expect(body.name).toBe('Сбор гильдии');
     expect(body.dkpReward).toBe(10);
     expect(body.raidLeadId).toBe('member-1');
   });

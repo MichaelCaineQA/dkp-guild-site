@@ -5,15 +5,14 @@ import {
   EVENT_MODES,
   can,
   canManageEvent,
-  isEventEditable,
   splitIntoPhaseSegments,
+  type DashboardEvent as EventRow,
   type EventMode,
   type GamePhaseConfig,
 } from '@dkp/shared';
 import { useSession } from '../../components/session-context';
 import { api } from '../../lib/api';
-import { CheckInPanel, RaidLeadCodePanel } from '../../components/checkin-panels';
-import { AbsentMembersPanel } from '../../components/absent-members-panel';
+import { EventCard } from '../../components/event-card';
 import { CreateEventDialog } from '../../components/create-event-dialog';
 import {
   Badge,
@@ -27,21 +26,6 @@ import {
   Select,
   SectionTitle,
 } from '../../components/ui';
-
-interface EventRow {
-  id: string;
-  eventTypeId: string;
-  eventTypeName: string;
-  mode: EventMode;
-  status: string;
-  startsAt: string;
-  endsAt: string;
-  dkpReward: number;
-  raidLeadId: string;
-  raidLeadName: string;
-  place: string | null;
-  notes: string | null;
-}
 
 interface EventTypeRow {
   id: string;
@@ -79,7 +63,8 @@ export default function SchedulePage() {
 
   const canManage = useMemo(
     () =>
-      user && can({ rank: user.rank, isAdmin: user.isAdmin, memberId: user.memberId }, 'events.manage'),
+      user &&
+      can({ rank: user.rank, isAdmin: user.isAdmin, memberId: user.memberId }, 'events.manage'),
     [user],
   );
 
@@ -150,19 +135,30 @@ export default function SchedulePage() {
   return (
     <Page width="wide">
       <PageHeader title="Расписание ивентов" />
-      {canManage && <div className="mb-4 flex flex-wrap gap-2">
-        <Button variant="primary" onClick={() => setCreating('single')}>Создать ивент</Button>
-        <Button onClick={() => setCreating('series')}>Создать серию</Button>
-      </div>}
+      {canManage && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          <Button variant="primary" onClick={() => setCreating('single')}>
+            Создать ивент
+          </Button>
+          <Button onClick={() => setCreating('series')}>Создать серию</Button>
+        </div>
+      )}
       {createdMessage && <p role="status">{createdMessage}</p>}
-      {canManage && creating && <CreateEventDialog series={creating === 'series'}
-        onClose={() => setCreating(null)} onCreated={(startsAt, message) => {
-          setCreating(null);
-          setCreatedMessage(message);
-          setTypeFilter('');
-          setModeFilter('');
-          setMonthCursor(new Date(Date.UTC(startsAt.getUTCFullYear(), startsAt.getUTCMonth(), 1)));
-        }} />}
+      {canManage && creating && (
+        <CreateEventDialog
+          series={creating === 'series'}
+          onClose={() => setCreating(null)}
+          onCreated={(startsAt, message) => {
+            setCreating(null);
+            setCreatedMessage(message);
+            setTypeFilter('');
+            setModeFilter('');
+            setMonthCursor(
+              new Date(Date.UTC(startsAt.getUTCFullYear(), startsAt.getUTCMonth(), 1)),
+            );
+          }}
+        />
+      )}
       {error && <ErrorText>{error}</ErrorText>}
 
       <Card className="mb-4">
@@ -170,7 +166,11 @@ export default function SchedulePage() {
           <div className="flex items-center gap-2">
             <Button onClick={() => shiftMonth(-1)}>←</Button>
             <span className="text-lg font-semibold">
-              {monthCursor.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' })}
+              {monthCursor.toLocaleDateString('ru-RU', {
+                month: 'long',
+                year: 'numeric',
+                timeZone: 'UTC',
+              })}
             </span>
             <Button onClick={() => shiftMonth(1)}>→</Button>
           </div>
@@ -186,7 +186,10 @@ export default function SchedulePage() {
               </Select>
             </Field>
             <Field label="Режим:">
-              <Select value={modeFilter} onChange={(e) => setModeFilter(e.target.value as EventMode | '')}>
+              <Select
+                value={modeFilter}
+                onChange={(e) => setModeFilter(e.target.value as EventMode | '')}
+              >
                 <option value="">все</option>
                 {EVENT_MODES.map((mode) => (
                   <option key={mode} value={mode}>
@@ -218,7 +221,7 @@ export default function SchedulePage() {
                 onClick={() => setSelected(event)}
               >
                 <span className="flex flex-wrap items-center gap-2">
-                  <Badge tone="accent">{event.eventTypeName}</Badge>
+                  <Badge tone="accent">{event.name || event.eventTypeName}</Badge>
                   <Badge>{MODE_LABELS[event.mode]}</Badge>
                   <span className="text-sm font-medium">
                     {new Date(event.startsAt).toLocaleString('ru-RU', {
@@ -229,7 +232,9 @@ export default function SchedulePage() {
                       minute: '2-digit',
                     })}
                   </span>
-                  <Muted>РЛ: {event.raidLeadName} · {event.dkpReward} ДКП</Muted>
+                  <Muted>
+                    РЛ: {event.raidLeadName} · {event.dkpReward} ДКП
+                  </Muted>
                   {event.status !== 'PLANNED' && (
                     <Badge tone={event.status === 'RUNNING' ? 'success' : 'warning'}>
                       {STATUS_LABELS[event.status]}
@@ -252,14 +257,15 @@ export default function SchedulePage() {
           onChanged={load}
         />
       )}
-
     </Page>
   );
 
   function shiftMonth(delta: number) {
     // UTC-конструктор: Date(год, месяц, 1) в локальной зоне даёт месяц,
     // «съедаемый» при смене UTC-страницей вперёд (баг ревью владельца, п.7)
-    setMonthCursor((prev) => new Date(Date.UTC(prev.getUTCFullYear(), prev.getUTCMonth() + delta, 1)));
+    setMonthCursor(
+      (prev) => new Date(Date.UTC(prev.getUTCFullYear(), prev.getUTCMonth() + delta, 1)),
+    );
   }
 }
 
@@ -295,7 +301,10 @@ function MonthGrid({
     // Начинаем с понедельника
     const offset = (first.getUTCDay() + 6) % 7;
     const start = new Date(first.getTime() - offset * 24 * 60 * 60 * 1000);
-    return Array.from({ length: 42 }, (_, i) => new Date(start.getTime() + i * 24 * 60 * 60 * 1000));
+    return Array.from(
+      { length: 42 },
+      (_, i) => new Date(start.getTime() + i * 24 * 60 * 60 * 1000),
+    );
   }, [monthCursor]);
 
   return (
@@ -329,7 +338,7 @@ function MonthGrid({
                   type="button"
                   onClick={() => onSelect(event)}
                   className="w-full text-left"
-                  title={`${event.eventTypeName} · ${new Date(event.startsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · РЛ ${event.raidLeadName}`}
+                  title={`${event.name || event.eventTypeName} · ${new Date(event.startsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · РЛ ${event.raidLeadName}`}
                 >
                   <EventPhaseBar event={event} gameTime={gameTime} />
                 </button>
@@ -348,7 +357,7 @@ function MonthGrid({
  */
 function EventPhaseBar({ event, gameTime }: { event: EventRow; gameTime: GamePhaseConfig | null }) {
   const startsAt = new Date(event.startsAt);
-  const label = `${startsAt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} ${event.eventTypeName}`;
+  const label = `${startsAt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} ${event.name || event.eventTypeName}`;
 
   if (!gameTime) {
     return (
@@ -359,183 +368,20 @@ function EventPhaseBar({ event, gameTime }: { event: EventRow; gameTime: GamePha
   }
 
   const segments = splitIntoPhaseSegments(startsAt, new Date(event.endsAt), gameTime);
-  const totalMs = startsAt.getTime() > 0 ? new Date(event.endsAt).getTime() - startsAt.getTime() : 1;
+  const totalMs =
+    startsAt.getTime() > 0 ? new Date(event.endsAt).getTime() - startsAt.getTime() : 1;
 
   return (
-    <span
-      className="flex h-5 w-full overflow-hidden rounded-sm border border-line"
-      title={label}
-    >
+    <span className="flex h-5 w-full overflow-hidden rounded-sm border border-line" title={label}>
       {segments.map((segment, index) => (
         <span
           key={index}
-          style={{ width: `${Math.max(8, ((segment.endsAt.getTime() - segment.startsAt.getTime()) / totalMs) * 100)}%` }}
-          className={`block h-full ${
-            segment.phase === 'DAY' ? 'bg-[#f5c84c]' : 'bg-[#3b4a6b]'
-          }`}
+          style={{
+            width: `${Math.max(8, ((segment.endsAt.getTime() - segment.startsAt.getTime()) / totalMs) * 100)}%`,
+          }}
+          className={`block h-full ${segment.phase === 'DAY' ? 'bg-[#f5c84c]' : 'bg-[#3b4a6b]'}`}
         />
       ))}
     </span>
-  );
-}
-
-/** Карточка ивента: шкала фаз на его длительность, детали, статусы. */
-function EventCard({
-  event,
-  gameTime,
-  canManage,
-  canConduct,
-  onClose,
-  onChanged,
-}: {
-  event: EventRow;
-  gameTime: GamePhaseConfig | null;
-  canManage: boolean;
-  canConduct: boolean;
-  onClose: () => void;
-  onChanged: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-
-  const changeStatus = async (status: string) => {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await api(`/events/${event.id}/status`, {
-        method: 'POST',
-        body: JSON.stringify({ status }),
-      });
-      setMessage('Статус изменён');
-      onChanged();
-      onClose();
-    } catch (err) {
-      const httpStatus = (err as { status?: number }).status;
-      setMessage(httpStatus === 409 ? 'Переход невозможен' : 'Не удалось изменить статус');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const startsAt = new Date(event.startsAt);
-  const endsAt = new Date(event.endsAt);
-  const segments = gameTime
-    ? splitIntoPhaseSegments(startsAt, endsAt, gameTime)
-    : [];
-  const totalMs = endsAt.getTime() - startsAt.getTime();
-
-  return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <Card className="w-full max-w-lg" >
-        <div onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <h2 className="text-xl font-semibold">
-                {event.eventTypeName} <Badge tone="accent">{MODE_LABELS[event.mode]}</Badge>{' '}
-                <Badge>{STATUS_LABELS[event.status]}</Badge>
-              </h2>
-              <p className="mt-1 text-sm text-secondary">
-                {startsAt.toLocaleString('ru-RU', {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}{' '}
-                —{' '}
-                {endsAt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}{' '}
-                (время ваше, хранится в UTC)
-              </p>
-            </div>
-            <Button onClick={onClose}>×</Button>
-          </div>
-
-          {segments.length > 0 && (
-            <div className="mt-3">
-              <p className="mb-1 text-xs text-secondary">Фазы игрового времени на длительность ивента:</p>
-              <span className="flex h-6 w-full overflow-hidden rounded-md border border-line">
-                {segments.map((segment, index) => (
-                  <span
-                    key={index}
-                    style={{ width: `${((segment.endsAt.getTime() - segment.startsAt.getTime()) / totalMs) * 100}%` }}
-                    className={`flex items-center justify-center text-[10px] ${
-                      segment.phase === 'DAY' ? 'bg-[#f5c84c] text-black' : 'bg-[#3b4a6b] text-white'
-                    }`}
-                  >
-                    {segment.phase === 'DAY' ? 'день' : 'ночь'}
-                  </span>
-                ))}
-              </span>
-            </div>
-          )}
-
-          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-            <dt className="text-secondary">Плата ДКП</dt>
-            <dd>{event.dkpReward} (фиксирована при создании)</dd>
-            <dt className="text-secondary">Рейд-лид</dt>
-            <dd>{event.raidLeadName}</dd>
-            {event.place && (
-              <>
-                <dt className="text-secondary">Место сбора</dt>
-                <dd>{event.place}</dd>
-              </>
-            )}
-            {event.notes && (
-              <>
-                <dt className="text-secondary">Заметки</dt>
-                <dd>{event.notes}</dd>
-              </>
-            )}
-          </dl>
-
-          {/* Чек-ин кодами (план 2.2): игрок отмечается, РЛ видит код */}
-          {(event.status === 'PLANNED' || event.status === 'RUNNING') && (
-            <CheckInPanel eventId={event.id} />
-          )}
-          {canConduct && (event.status === 'PLANNED' || event.status === 'RUNNING') && (
-            <RaidLeadCodePanel eventId={event.id} />
-          )}
-
-          {/* Оформленно отсутствующие (план 2.3): всем, авто-отметка при закрытии */}
-          <AbsentMembersPanel eventStartsAt={event.startsAt} />
-
-          {canConduct && event.status === 'PLANNED' && (
-            <div className="mt-3 flex gap-2">
-              <Button variant="primary" disabled={busy} onClick={() => changeStatus('RUNNING')}>
-                Начать ивент
-              </Button>
-              <a
-                href={`/schedule/${event.id}/conduct`}
-                className="rounded-lg border border-line bg-surface px-4 py-1.5 text-sm font-medium hover:bg-surface-muted"
-              >
-                Страница проведения
-              </a>
-            </div>
-          )}
-          {canConduct && event.status === 'RUNNING' && (
-            <div className="mt-3 flex gap-2">
-              <Button variant="primary" disabled={busy} onClick={() => changeStatus('FINISHED')}>
-                Завершить
-              </Button>
-              <a
-                href={`/schedule/${event.id}/conduct`}
-                className="rounded-lg border border-line bg-surface px-4 py-1.5 text-sm font-medium hover:bg-surface-muted"
-              >
-                Страница проведения
-              </a>
-            </div>
-          )}
-          {canManage && isEventEditable(event.status) && (
-            <Button disabled={busy} onClick={() => changeStatus('CANCELLED')}>Отменить</Button>
-          )}
-          {!canConduct && !canManage && (
-            <p className="mt-3 text-xs text-secondary">
-              Проведение ивента доступно Главе, Админу и назначенному РЛ.
-            </p>
-          )}
-          {message && <p className="mt-2 text-sm">{message}</p>}
-        </div>
-      </Card>
-    </div>
   );
 }

@@ -64,6 +64,7 @@ export function CreateEventDialog({
     (day) => (day + dayOffset + 7) % 7,
   );
   const previewInput = createEventSeriesSchema.safeParse({
+    name: 'Предпросмотр серии',
     eventTypeId: 'preview',
     raidLeadId: 'preview',
     mode: 'PVE',
@@ -82,6 +83,7 @@ export function CreateEventDialog({
     setError('');
     const data = new FormData(event.currentTarget);
     const input = {
+      name: data.get('name'),
       eventTypeId: data.get('eventTypeId'),
       mode: data.get('mode'),
       raidLeadId: data.get('raidLeadId'),
@@ -134,6 +136,9 @@ export function CreateEventDialog({
       {loading && <p>Загрузка справочников…</p>}
       <form onSubmit={submit} className="flex flex-col gap-4">
         <fieldset disabled={busy || loading} className="flex min-w-0 flex-col gap-4">
+          <Field label="Название">
+            <Input name="name" required maxLength={120} />
+          </Field>
           <Field label="Тип ивента">
             <Select name="eventTypeId" required defaultValue="">
               <option value="" disabled>

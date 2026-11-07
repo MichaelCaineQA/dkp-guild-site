@@ -10,6 +10,7 @@ import { getGamePhase, type GamePhase, type GamePhaseConfig } from './game-time'
 
 /** Создание ивента: плата ДКП фиксируется при создании (решение 1). */
 export const createEventApiSchema = z.object({
+  name: z.string().trim().min(1).max(120),
   eventTypeId: z.string().min(1),
   mode: z.enum(EVENT_MODES),
   startsAt: z.coerce.date(),
@@ -27,6 +28,7 @@ export type CreateEventApiInput = z.infer<typeof createEventApiSchema>;
  * офицеры+ (проверяется в API через can с target.raidLeadId).
  */
 export const updateEventSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
   eventTypeId: z.string().min(1).optional(),
   mode: z.enum(EVENT_MODES).optional(),
   startsAt: z.coerce.date().optional(),
@@ -66,6 +68,7 @@ export type EventsQuery = z.infer<typeof eventsQuerySchema>;
  * ивента, серия сдвигает их на недели.
  */
 export const createEventSeriesSchema = z.object({
+  name: z.string().trim().min(1).max(120),
   eventTypeId: z.string().min(1),
   mode: z.enum(EVENT_MODES),
   /** Первый ивент серии: его интервал задаёт время и длительность. */
@@ -112,7 +115,9 @@ export function generateSeriesEvents(
         continue;
       }
       // Время суток — как у первого ивента, день недели — из календаря.
-      const startsAt = new Date(input.startsAt.getTime() + week * WEEK_MS + day * 24 * 60 * 60 * 1000);
+      const startsAt = new Date(
+        input.startsAt.getTime() + week * WEEK_MS + day * 24 * 60 * 60 * 1000,
+      );
       events.push({ startsAt, endsAt: new Date(startsAt.getTime() + durationMs) });
     }
   }
@@ -146,9 +151,7 @@ export function splitIntoPhaseSegments(
 
   while (cursor.getTime() < endsAt.getTime()) {
     const { phase, switchesAt } = getGamePhase(cursor, config);
-    const segmentEnd = new Date(
-      Math.min(switchesAt.getTime(), endsAt.getTime()),
-    );
+    const segmentEnd = new Date(Math.min(switchesAt.getTime(), endsAt.getTime()));
     segments.push({ phase, startsAt: cursor, endsAt: segmentEnd });
     cursor = segmentEnd;
   }
