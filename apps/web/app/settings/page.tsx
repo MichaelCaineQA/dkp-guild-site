@@ -73,7 +73,7 @@ export default function SettingsPage() {
   useEffect(() => {
     // Грузим данные только когда экран реально показан (офицер+):
     // рядовому рано возвращаемся, запросы ему не нужны.
-    if (!sessionLoading && (canManageTypes || canManageSettings)) {
+    if (!sessionLoading && canManageSettings) {
       void load();
     }
   }, [sessionLoading, canManageTypes, canManageSettings, load]);
@@ -90,10 +90,10 @@ export default function SettingsPage() {
     );
   }
 
-  if (!canManageTypes && !canManageSettings) {
+  if (!canManageSettings) {
     return (
       <Page>
-        <PageHeader title="Справочники и настройки" subtitle="Раздел доступен офицерам и выше." />
+          <PageHeader title="Справочники и настройки" subtitle="Раздел доступен Главе и Админу." />
       </Page>
     );
   }

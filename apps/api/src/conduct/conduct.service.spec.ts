@@ -13,7 +13,7 @@ const EVENT = {
 
 const SETTINGS: ConductSettings = { startSharePct: 50, endSharePct: 50 };
 
-const OFFICER = { memberId: 'm-off', isAdmin: false };
+const LEADER = { memberId: 'm-off', isAdmin: false };
 const RL = { memberId: 'm-rl', isAdmin: false };
 const MEMBER = { memberId: 'm-3', isAdmin: false };
 
@@ -86,15 +86,15 @@ describe('ConductService.setAttendance', () => {
     expect(audit[0]!.comment).toContain('Задержался');
   });
 
-  it('офицер может; рядовой-не-РЛ — 403', async () => {
+  it('Глава может; рядовой-не-РЛ — 403', async () => {
     const { db } = makeDb();
     const service = new ConductService(db, SETTINGS);
 
     await service.setAttendance(
       'e-1',
       { memberId: 'm-1', status: 'NO_SHOW', comment: 'Не пришёл' },
-      OFFICER,
-      'OFFICER',
+      LEADER,
+      'GUILD_LEADER',
     );
     await expect(
       service.setAttendance(
@@ -111,7 +111,7 @@ describe('ConductService.setAttendance', () => {
     const service = new ConductService(db, SETTINGS);
 
     await expect(
-      service.setAttendance('e-1', { memberId: 'm-1', status: 'EXCUSED_ABSENCE', comment: 'Вручную' }, OFFICER, 'OFFICER'),
+      service.setAttendance('e-1', { memberId: 'm-1', status: 'EXCUSED_ABSENCE', comment: 'Вручную' }, LEADER, 'GUILD_LEADER'),
     ).rejects.toThrow();
   });
 });
@@ -141,9 +141,9 @@ describe('ConductService.manualCheckIn', () => {
     const { db, dkp } = makeDb();
     const service = new ConductService(db, SETTINGS);
 
-    await service.manualCheckIn('e-1', { memberId: 'm-1', phase: 'END', comment: 'Ушёл на работу' }, OFFICER, 'OFFICER');
+    await service.manualCheckIn('e-1', { memberId: 'm-1', phase: 'END', comment: 'Ушёл на работу' }, LEADER, 'GUILD_LEADER');
     await expect(
-      service.manualCheckIn('e-1', { memberId: 'm-1', phase: 'END', comment: 'Ещё раз' }, OFFICER, 'OFFICER'),
+      service.manualCheckIn('e-1', { memberId: 'm-1', phase: 'END', comment: 'Ещё раз' }, LEADER, 'GUILD_LEADER'),
     ).rejects.toThrow(ConflictException);
     expect(dkp).toHaveLength(1);
   });
@@ -154,7 +154,7 @@ describe('ConductService.manualCheckIn', () => {
     const service = new ConductService(db, SETTINGS);
 
     await expect(
-      service.manualCheckIn('e-1', { memberId: 'm-1', phase: 'START', comment: 'Двойная отметка' }, OFFICER, 'OFFICER'),
+      service.manualCheckIn('e-1', { memberId: 'm-1', phase: 'START', comment: 'Двойная отметка' }, LEADER, 'GUILD_LEADER'),
     ).rejects.toThrow(ConflictException);
   });
 });
@@ -167,14 +167,14 @@ describe('ConductService.manualDkp', () => {
     await service.manualDkp(
       'e-1',
       { memberId: 'm-2', type: 'MANUAL_EARN', amount: 3, comment: 'Помог с боссом' },
-      OFFICER,
-      'OFFICER',
+      LEADER,
+      'GUILD_LEADER',
     );
     await service.manualDkp(
       'e-1',
       { memberId: 'm-2', type: 'ADJUSTMENT', amount: -2, comment: 'Ошибка прошлого начисления' },
-      OFFICER,
-      'OFFICER',
+      LEADER,
+      'GUILD_LEADER',
     );
     expect(dkp.map((d) => d.amount)).toEqual([3, -2]);
     expect(dkp.every((d) => d.createdById === 'm-off')).toBe(true);

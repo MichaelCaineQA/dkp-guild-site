@@ -24,12 +24,13 @@ interface LinkRequest {
   user: { username: string };
 }
 
-/** Очередь заявок «Discord ↔ ник» для офицеров (issue #6, план 2.9). */
+/** Очередь заявок «Discord ↔ ник» для Главы/Админа (issue #6, план 2.9). */
 export default function LinkRequestsPage() {
   const { user, loading: sessionLoading } = useSession();
   const [requests, setRequests] = useState<LinkRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const canReview = !!user && can(user, 'link_requests.review');
 
   const load = useCallback(async () => {
     try {
@@ -41,17 +42,10 @@ export default function LinkRequestsPage() {
   }, []);
 
   useEffect(() => {
-    if (!sessionLoading && user?.memberId) {
+    if (!sessionLoading && canReview) {
       void load();
     }
-  }, [sessionLoading, user, load]);
-
-  const canReview =
-    user &&
-    can(
-      { rank: user.rank, isAdmin: user.isAdmin, memberId: user.memberId },
-      'link_requests.review',
-    );
+  }, [sessionLoading, canReview, load]);
 
   const resolve = async (id: string, action: 'approve' | 'reject') => {
     setBusyId(id);
@@ -77,7 +71,7 @@ export default function LinkRequestsPage() {
     return (
       <Page>
         <PageHeader title="Заявки на привязку" />
-        <Notice>Раздел доступен офицерам и выше.</Notice>
+        <Notice>Раздел доступен Главе и Админу.</Notice>
       </Page>
     );
   }

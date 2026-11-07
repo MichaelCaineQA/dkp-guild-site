@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   EVENT_MODES,
-  RANK_LABELS,
   can,
+  canManageEvent,
+  isEventEditable,
   splitIntoPhaseSegments,
   type EventMode,
   type GamePhaseConfig,
@@ -245,8 +246,8 @@ export default function SchedulePage() {
         <EventCard
           event={selected}
           gameTime={gameTime}
-          canManage={!!canManage}
-          isRl={user.memberId === selected.raidLeadId}
+          canManage={canManageEvent(user, selected)}
+          canConduct={can(user, 'events.conduct', selected)}
           onClose={() => setSelected(null)}
           onChanged={load}
         />
@@ -383,14 +384,14 @@ function EventCard({
   event,
   gameTime,
   canManage,
-  isRl,
+  canConduct,
   onClose,
   onChanged,
 }: {
   event: EventRow;
   gameTime: GamePhaseConfig | null;
   canManage: boolean;
-  isRl: boolean;
+  canConduct: boolean;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -422,7 +423,6 @@ function EventCard({
     ? splitIntoPhaseSegments(startsAt, endsAt, gameTime)
     : [];
   const totalMs = endsAt.getTime() - startsAt.getTime();
-  const canConduct = canManage || isRl;
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -510,9 +510,6 @@ function EventCard({
               >
                 Страница проведения
               </a>
-              <Button disabled={busy} onClick={() => changeStatus('CANCELLED')}>
-                Отменить
-              </Button>
             </div>
           )}
           {canConduct && event.status === 'RUNNING' && (
@@ -526,14 +523,14 @@ function EventCard({
               >
                 Страница проведения
               </a>
-              <Button disabled={busy} onClick={() => changeStatus('CANCELLED')}>
-                Отменить
-              </Button>
             </div>
           )}
-          {!canConduct && (
+          {canManage && isEventEditable(event.status) && (
+            <Button disabled={busy} onClick={() => changeStatus('CANCELLED')}>Отменить</Button>
+          )}
+          {!canConduct && !canManage && (
             <p className="mt-3 text-xs text-secondary">
-              Управление ивентом — офицеры и РЛ (сейчас: {RANK_LABELS.MEMBER} может только смотреть).
+              Проведение ивента доступно Главе, Админу и назначенному РЛ.
             </p>
           )}
           {message && <p className="mt-2 text-sm">{message}</p>}

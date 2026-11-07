@@ -254,9 +254,10 @@ export class ConductService {
       can(
         { rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId },
         'events.conduct',
-      ) || actor.memberId === event.raidLeadId;
+        event,
+      );
     if (!allowed) {
-      throw new ForbiddenException('Проведение — офицерам и РЛ ивента');
+      throw new ForbiddenException('Проведение — Главе, Админу и РЛ ивента');
     }
     if (event.status === 'CANCELLED') {
       throw new ConflictException('Ивент отменён');

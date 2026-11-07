@@ -95,31 +95,14 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Добавить')).toBeDefined();
   });
 
-  it('офицер видит справочник с кнопками, но настройки — только для чтения', async () => {
-    mockSession({
-      userId: 'u2',
-      username: 'test-officer',
-      memberId: 'm2',
-      rank: 'OFFICER',
-      isAdmin: false,
-    });
-
+  it('офицеру настройки недоступны, запросов нет', async () => {
+    mockSession({userId:'u2', username:'test-officer', memberId:'m2', rank:'OFFICER', isAdmin:false});
     render(<SettingsPage />);
-
-    expect(await screen.findByText('Настройки системы')).toBeDefined();
-    expect(screen.getByText('Изменение — только Глава и Админ.')).toBeDefined();
-    expect(screen.queryByText('Сохранить настройки')).toBeNull();
-    expect(screen.getByText('Типы ивентов')).toBeDefined();
-    expect(screen.getAllByText('Переименовать').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Удалить').length).toBeGreaterThan(0);
-    // Инпуты значений настроек заблокированы для офицера.
-    const numberInputs = screen
-      .getAllByRole('spinbutton')
-      .filter((input) => (input as HTMLInputElement).disabled);
-    expect(numberInputs.length).toBeGreaterThan(0);
+    expect(await screen.findByText('Раздел доступен Главе и Админу.')).toBeDefined();
+    expect(api).not.toHaveBeenCalled();
   });
 
-  it('рядовому — заглушка офицеров и выше', async () => {
+  it('рядовому — заглушка Главы и Админа', async () => {
     mockSession({
       userId: 'u3',
       username: 'test-member',
@@ -130,7 +113,7 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    expect(await screen.findByText('Раздел доступен офицерам и выше.')).toBeDefined();
+    expect(await screen.findByText('Раздел доступен Главе и Админу.')).toBeDefined();
     expect(api).not.toHaveBeenCalled();
   });
 });

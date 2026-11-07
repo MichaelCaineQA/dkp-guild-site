@@ -3,6 +3,8 @@ import {
   PERMISSIONS,
   RAID_LEAD_ACTIONS,
   can,
+  canManageEvent,
+  isEventEditable,
   permissionsOf,
   rankAtLeast,
   type Permission,
@@ -21,17 +23,17 @@ const ALL_RANKS: Rank[] = ['GUILD_LEADER', 'ADMIN', 'OFFICER', 'MEMBER'];
 
 /** Ожидания матрицы 2.6: право → кто может (кроме РЛ ивента и админа). */
 const EXPECTED: Partial<Record<Permission, Rank[]>> = {
-  'members.manage': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
+  'members.manage': ['GUILD_LEADER', 'ADMIN'],
   'members.change_rank': ['GUILD_LEADER', 'ADMIN'],
   'members.view_roster': ALL_RANKS,
-  'link_requests.review': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
+  'link_requests.review': ['GUILD_LEADER', 'ADMIN'],
   'settings.manage': ['GUILD_LEADER', 'ADMIN'],
   'rules.edit': ['GUILD_LEADER', 'ADMIN'],
   'events.manage': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
-  'events.conduct': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
-  'attendance.manual': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
+  'events.conduct': ['GUILD_LEADER', 'ADMIN'],
+  'attendance.manual': ['GUILD_LEADER', 'ADMIN'],
   'absence.see': ['GUILD_LEADER', 'ADMIN'],
-  'dkp.penalty': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
+  'dkp.penalty': ['GUILD_LEADER', 'ADMIN'],
   'items.manage': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
   'auction.bid': ALL_RANKS,
   'profile.view': ALL_RANKS,
@@ -115,5 +117,28 @@ describe('rankAtLeast / permissionsOf', () => {
 
   it('permissionsOf: у главы всё', () => {
     expect(permissionsOf(actor({ rank: 'GUILD_LEADER' }))).toHaveLength(PERMISSIONS.length);
+  });
+});
+
+describe('права существующего ивента и финальные состояния', () => {
+  it('Офицер управляет расписанием, но ведёт только свой ивент', () => {
+    const officer = actor({ rank: 'OFFICER' });
+    expect(canManageEvent(officer, { raidLeadId: 'other' })).toBe(true);
+    expect(can(officer, 'events.conduct', { raidLeadId: 'other' })).toBe(false);
+    expect(can(officer, 'events.conduct', { raidLeadId: 'm-self' })).toBe(true);
+    expect(can(officer, 'dkp.penalty', { raidLeadId: 'other' })).toBe(false);
+    expect(can(officer, 'dkp.penalty', { raidLeadId: 'm-self' })).toBe(true);
+  });
+  it('рядовой РЛ управляет своим ивентом, но не создаёт новый', () => {
+    expect(canManageEvent(actor({}), { raidLeadId: 'm-self' })).toBe(true);
+    expect(canManageEvent(actor({}), { raidLeadId: 'other' })).toBe(false);
+    expect(can(actor({}), 'events.manage')).toBe(false);
+    expect(canManageEvent(actor({ rank: null }), { raidLeadId: 'm-self' })).toBe(false);
+  });
+  it.each(['FINISHED', 'CANCELLED'])('%s не допускает обычное редактирование', (status) => {
+    expect(isEventEditable(status)).toBe(false);
+  });
+  it.each(['PLANNED', 'RUNNING'])('%s допускает редактирование', (status) => {
+    expect(isEventEditable(status)).toBe(true);
   });
 });

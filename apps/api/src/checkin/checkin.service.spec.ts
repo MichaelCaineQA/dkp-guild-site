@@ -99,11 +99,11 @@ describe('CheckInService.raidLeadView', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('офицер видит код (events.conduct)', async () => {
+  it('Глава видит код (events.conduct)', async () => {
     const { db } = makeDb();
     const service = new CheckInService(db, SETTINGS, () => new Date('2026-03-03T16:58:00Z'), ENC_KEY);
 
-    const view = await service.raidLeadView('e-1', ACTOR, 'OFFICER');
+    const view = await service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER');
     expect(view.code).toMatch(/^\d{3}$/);
   });
 
@@ -112,8 +112,8 @@ describe('CheckInService.raidLeadView', () => {
     const clock: Clock = () => new Date('2026-03-03T16:58:00Z');
     const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
 
-    const first = await service.raidLeadView('e-1', ACTOR, 'OFFICER');
-    const second = await service.raidLeadView('e-1', ACTOR, 'OFFICER');
+    const first = await service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER');
+    const second = await service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER');
     expect(second.code).toBe(first.code);
     // В БД код лежит зашифрованным — не открытым текстом
     const stored = codes.get('e-1:START')!;
@@ -125,10 +125,10 @@ describe('CheckInService.raidLeadView', () => {
     const { db } = makeDb();
     const clock: Clock = () => new Date('2026-03-03T16:58:00Z');
     const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
-    await service.raidLeadView('e-1', ACTOR, 'OFFICER');
+    await service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER');
 
     const stranger = new CheckInService(db, SETTINGS, clock, 'cd'.repeat(32));
-    await expect(stranger.raidLeadView('e-1', ACTOR, 'OFFICER')).rejects.toThrow(
+    await expect(stranger.raidLeadView('e-1', ACTOR, 'GUILD_LEADER')).rejects.toThrow(
       ConflictException,
     );
   });
@@ -137,7 +137,7 @@ describe('CheckInService.raidLeadView', () => {
     const { db, codes } = makeDb();
     const service = new CheckInService(db, SETTINGS, () => new Date('2026-03-03T16:00:00Z'), ENC_KEY);
 
-    const view = await service.raidLeadView('e-1', ACTOR, 'OFFICER');
+    const view = await service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER');
     expect(view.windowState).toBe('NOT_OPEN_YET');
     expect(view.code).toBe('');
     expect(codes.size).toBe(0);
@@ -155,7 +155,7 @@ describe('CheckInService.playerView', () => {
     const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
 
     // Сначала РЛ генерит код, затем игрок получает варианты
-    const rlView = await service.raidLeadView('e-1', ACTOR, 'OFFICER');
+    const rlView = await service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER');
     const view = await service.playerView('e-1', 'm-player');
     expect(view.windowState).toBe('ACTIVE');
     expect(view.choices).toHaveLength(4);
@@ -178,7 +178,7 @@ describe('CheckInService.submit', () => {
     const state = makeDb();
     const clock: Clock = () => new Date('2026-03-03T16:58:00Z');
     const service = new CheckInService(state.db, SETTINGS, clock, ENC_KEY);
-    const rlView = await service.raidLeadView('e-1', ACTOR, 'OFFICER');
+    const rlView = await service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER');
     return { ...state, service, correctCode: rlView.code };
   }
 
@@ -218,7 +218,7 @@ describe('CheckInService.submit', () => {
     const clock: Clock = () => new Date('2026-03-03T19:01:00Z'); // финальное окно
     const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
 
-    const rlView = await service.raidLeadView('e-1', ACTOR, 'OFFICER');
+    const rlView = await service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER');
     const result = await service.submit('e-1', 'm-player', { code: rlView.code });
     expect(result).toEqual({ result: 'PASSED' });
     expect(db).toBeDefined();
@@ -245,7 +245,7 @@ describe('CheckInService.submit', () => {
     await expect(service.submit('e-1', 'm-player', { code: '123' })).rejects.toThrow(
       ConflictException,
     );
-    await expect(service.raidLeadView('e-1', ACTOR, 'OFFICER')).rejects.toThrow(
+    await expect(service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER')).rejects.toThrow(
       ConflictException,
     );
     expect(dkp).toHaveLength(0);
@@ -259,7 +259,7 @@ describe('CheckInService.submit', () => {
     const clock: Clock = () => new Date('2026-03-03T19:01:00Z');
     const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
 
-    const rlView = await service.raidLeadView('e-1', ACTOR, 'OFFICER');
+    const rlView = await service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER');
     const result = await service.submit('e-1', 'm-player', { code: rlView.code });
     expect(result).toEqual({ result: 'PASSED' });
   });
@@ -271,7 +271,7 @@ describe('CheckInService: игрок получает варианты без р
     const clock: Clock = () => new Date('2026-03-03T16:58:00Z');
     const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
 
-    const rlView = await service.raidLeadView('e-1', ACTOR, 'OFFICER');
+    const rlView = await service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER');
     const view = await service.playerView('e-1', 'm-player');
     expect(view.choices).toContain(rlView.code);
     // В ответе игрока нет пометки, какой код верный: только массив строк
@@ -286,7 +286,7 @@ describe('CheckInService.startEndCodeEarly', () => {
     const clock: Clock = () => new Date('2026-03-03T18:30:00Z');
     const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
 
-    const early = await service.startEndCodeEarly('e-1', ACTOR, 'OFFICER');
+    const early = await service.startEndCodeEarly('e-1', ACTOR, 'GUILD_LEADER');
     expect(early.phase).toBe('END');
     expect(early.windowState).toBe('ACTIVE');
     expect(early.code).toMatch(/^\d{3}$/);
@@ -305,8 +305,8 @@ describe('CheckInService.startEndCodeEarly', () => {
     const clock: Clock = () => new Date('2026-03-03T18:30:00Z');
     const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
 
-    await service.startEndCodeEarly('e-1', ACTOR, 'OFFICER');
-    await expect(service.startEndCodeEarly('e-1', ACTOR, 'OFFICER')).rejects.toThrow(
+    await service.startEndCodeEarly('e-1', ACTOR, 'GUILD_LEADER');
+    await expect(service.startEndCodeEarly('e-1', ACTOR, 'GUILD_LEADER')).rejects.toThrow(
       ConflictException,
     );
   });
@@ -316,7 +316,7 @@ describe('CheckInService.startEndCodeEarly', () => {
     const clock: Clock = () => new Date('2026-03-03T19:01:00Z'); // плановое END-окно
     const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
 
-    await expect(service.startEndCodeEarly('e-1', ACTOR, 'OFFICER')).rejects.toThrow(
+    await expect(service.startEndCodeEarly('e-1', ACTOR, 'GUILD_LEADER')).rejects.toThrow(
       ConflictException,
     );
   });

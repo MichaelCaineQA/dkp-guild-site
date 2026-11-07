@@ -16,7 +16,7 @@ const NAV_ITEMS: Array<{ href: string; label: string; permission?: Permission }>
   { href: '/rules/site-rules', label: 'Правила сайта', permission: 'members.view_roster' },
   { href: '/audit', label: 'Аудит', permission: 'audit.view' },
   { href: '/link-requests', label: 'Заявки', permission: 'link_requests.review' },
-  { href: '/settings', label: 'Настройки', permission: 'items.manage' },
+  { href: '/settings', label: 'Настройки', permission: 'settings.manage' },
   { href: '/design', label: 'Дизайн', permission: 'members.view_roster' },
 ];
 
