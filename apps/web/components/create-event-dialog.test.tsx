@@ -21,7 +21,7 @@ afterEach(cleanup);
 async function fillForm() {
   await screen.findByRole('option', { name: 'Гильдбосс' });
   await waitFor(() =>
-    expect(screen.getByRole('button', { name: 'Создать' }).hasAttribute('disabled')).toBe(false),
+    expect(screen.getByRole('button', { name: 'Принять' }).hasAttribute('disabled')).toBe(false),
   );
   fireEvent.change(screen.getByLabelText('Название'), { target: { value: 'Сбор гильдии' } });
   fireEvent.change(screen.getByLabelText('Тип ивента'), { target: { value: 'type-1' } });
@@ -35,7 +35,7 @@ describe('создание ивента', () => {
     const onCreated = vi.fn();
     render(<CreateEventDialog series={false} onClose={vi.fn()} onCreated={onCreated} />);
     await fillForm();
-    fireEvent.click(screen.getByRole('button', { name: 'Создать' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Принять' }));
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
     const call = vi.mocked(api).mock.calls.find(([, init]) => init?.method === 'POST')!;
     expect(call[0]).toBe('/events');
@@ -50,14 +50,17 @@ describe('создание ивента', () => {
   it('предпросмотр серии совпадает с параметрами отправки, день старта включён', async () => {
     render(<CreateEventDialog series onClose={vi.fn()} onCreated={vi.fn()} />);
     await fillForm();
-    fireEvent.change(screen.getByLabelText('Количество недель'), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText('Дата окончания серии'), {
+      target: { value: '2026-11-23' },
+    });
     fireEvent.click(screen.getByLabelText('Чт'));
     expect(screen.getByText('Будет создано ивентов: 4')).toBeDefined();
-    fireEvent.click(screen.getByRole('button', { name: 'Создать' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Принять' }));
     await waitFor(() => expect(api).toHaveBeenCalledWith('/events/series', expect.anything()));
     const call = vi.mocked(api).mock.calls.find(([path]) => path === '/events/series')!;
     const body = JSON.parse(call[1]!.body as string);
-    expect(body.weeks).toBe(2);
+    expect(body.repeat).toBe('WEEKLY');
+    expect(body.until).toBe(new Date('2026-11-23T23:59:59.999').toISOString());
     expect(body.weekdays).toContain(new Date(body.startsAt).getUTCDay());
   });
 
@@ -72,7 +75,7 @@ describe('создание ивента', () => {
           rejectRequest = reject;
         }),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Создать' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Принять' }));
     expect(screen.getByRole('button', { name: 'Сохранение…' }).hasAttribute('disabled')).toBe(true);
     rejectRequest({ status: 403 });
     expect(await screen.findByRole('alert')).toHaveProperty(
@@ -82,4 +85,21 @@ describe('создание ивента', () => {
     expect(onCreated).not.toHaveBeenCalled();
     expect((screen.getByLabelText('Плата ДКП') as HTMLInputElement).value).toBe('10');
   });
+});
+
+it('единая форма создаёт ежедневную серию по включительной дате окончания', async () => {
+  const onCreated = vi.fn();
+  render(<CreateEventDialog onClose={vi.fn()} onCreated={onCreated} />);
+  await fillForm();
+  fireEvent.change(screen.getByLabelText('Повторять'), { target: { value: 'DAILY' } });
+  fireEvent.change(screen.getByLabelText('Дата окончания серии'), {
+    target: { value: '2026-11-13' },
+  });
+  expect(screen.getByText('Будет создано ивентов: 4')).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: 'Принять' }));
+  await waitFor(() => expect(onCreated).toHaveBeenCalled());
+  const request = vi.mocked(api).mock.calls.find(([path]) => path === '/events/series')!;
+  const body = JSON.parse(request[1]!.body as string);
+  expect(body.repeat).toBe('DAILY');
+  expect(body.until).toBe(new Date('2026-11-13T23:59:59.999').toISOString());
 });

@@ -8,11 +8,11 @@ import { Button, ErrorText, Field, Input, Muted, Select } from './ui';
 const DAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
 export function CreateEventDialog({
-  series,
+  series = false,
   onClose,
   onCreated,
 }: {
-  series: boolean;
+  series?: boolean;
   onClose: () => void;
   onCreated: (startsAt: Date, message: string) => void;
 }) {
@@ -24,7 +24,9 @@ export function CreateEventDialog({
   const [busy, setBusy] = useState(false);
   const [start, setStart] = useState('');
   const [duration, setDuration] = useState('60');
-  const [weeks, setWeeks] = useState('1');
+  const [repeat, setRepeat] = useState<'NONE' | 'DAILY' | 'WEEKLY'>(series ? 'WEEKLY' : 'NONE');
+  const [until, setUntil] = useState('');
+  const repeating = repeat !== 'NONE';
   const [weekdays, setWeekdays] = useState<number[]>([]);
 
   useEffect(() => {
@@ -71,11 +73,19 @@ export function CreateEventDialog({
     dkpReward: 1,
     startsAt,
     endsAt,
-    weeks: Number(weeks),
+    repeat: repeating ? repeat : 'WEEKLY',
+    until: new Date(`${until}T23:59:59.999`),
     weekdays: utcWeekdays,
   });
-  const slots =
-    previewInput.success && endsAt > startsAt ? generateSeriesEvents(previewInput.data) : [];
+  let slots: ReturnType<typeof generateSeriesEvents> = [];
+  let previewError = '';
+  if (repeating && previewInput.success && endsAt > startsAt) {
+    try {
+      slots = generateSeriesEvents(previewInput.data);
+    } catch (error) {
+      previewError = error instanceof Error ? error.message : 'Некорректная серия';
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -92,20 +102,22 @@ export function CreateEventDialog({
       endsAt,
       place: data.get('place'),
       notes: data.get('notes'),
-      ...(series ? { weekdays: utcWeekdays, weeks: Number(weeks) } : {}),
+      ...(repeating
+        ? { repeat, until: new Date(`${until}T23:59:59.999`), weekdays: utcWeekdays }
+        : {}),
     };
-    const parsed = (series ? createEventSeriesSchema : createEventApiSchema).safeParse(input);
-    if (!parsed.success || !(endsAt > startsAt)) {
+    const parsed = (repeating ? createEventSeriesSchema : createEventApiSchema).safeParse(input);
+    if (!parsed.success || !(endsAt > startsAt) || !!previewError) {
       setError('Проверьте обязательные поля, дату, длительность и целую положительную плату ДКП.');
       return;
     }
     setBusy(true);
     try {
-      const result = await api<{ created?: number }>(series ? '/events/series' : '/events', {
+      const result = await api<{ created?: number }>(repeating ? '/events/series' : '/events', {
         method: 'POST',
         body: JSON.stringify(parsed.data),
       });
-      onCreated(startsAt, series ? `Создана серия: ${result.created} ивентов` : 'Ивент создан');
+      onCreated(startsAt, repeating ? `Создана серия: ${result.created} ивентов` : 'Ивент создан');
     } catch (err) {
       const status = (err as { status?: number }).status;
       setError(
@@ -131,7 +143,7 @@ export function CreateEventDialog({
       }}
     >
       <h2 id="create-event-title" className="mb-4 text-xl font-semibold">
-        {series ? 'Создать серию' : 'Создать ивент'}
+        Создать ивент
       </h2>
       {loading && <p>Загрузка справочников…</p>}
       <form onSubmit={submit} className="flex flex-col gap-4">
@@ -162,7 +174,10 @@ export function CreateEventDialog({
               type="datetime-local"
               required
               value={start}
-              onChange={(e) => setStart(e.target.value)}
+              onChange={(e) => {
+                setStart(e.target.value);
+                if (!until) setUntil(e.target.value.slice(0, 10));
+              }}
             />
           </Field>
           <Muted>Время в вашей таймзоне: {Intl.DateTimeFormat().resolvedOptions().timeZone}.</Muted>
@@ -197,45 +212,53 @@ export function CreateEventDialog({
           <Field label="Заметки">
             <Input name="notes" maxLength={2000} />
           </Field>
-          {series && (
+          <Field label="Повторять">
+            <Select value={repeat} onChange={(e) => setRepeat(e.target.value as typeof repeat)}>
+              <option value="NONE">Нет</option>
+              <option value="DAILY">Ежедневно</option>
+              <option value="WEEKLY">Еженедельно</option>
+            </Select>
+          </Field>
+          {repeating && (
             <>
-              <Field label="Количество недель">
+              <Field label="Дата окончания серии">
                 <Input
-                  type="number"
-                  min="1"
-                  max="26"
-                  step="1"
+                  type="date"
                   required
-                  value={weeks}
-                  onChange={(e) => setWeeks(e.target.value)}
+                  min={start.slice(0, 10)}
+                  value={until}
+                  onChange={(e) => setUntil(e.target.value)}
                 />
               </Field>
-              <fieldset>
-                <legend className="mb-2 text-sm">Дни недели</legend>
-                <div className="flex flex-wrap gap-3">
-                  {[1, 2, 3, 4, 5, 6, 0].map((day) => (
-                    <label key={day} className="flex items-center gap-1">
-                      <input
-                        type="checkbox"
-                        checked={weekdays.includes(day) || day === startsAt.getDay()}
-                        disabled={day === startsAt.getDay()}
-                        onChange={(e) =>
-                          setWeekdays(
-                            e.target.checked
-                              ? [...weekdays, day]
-                              : weekdays.filter((value) => value !== day),
-                          )
-                        }
-                      />
-                      {DAYS[day]}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+              {repeat === 'WEEKLY' && (
+                <fieldset>
+                  <legend className="mb-2 text-sm">Дни недели</legend>
+                  <div className="flex flex-wrap gap-3">
+                    {[1, 2, 3, 4, 5, 6, 0].map((day) => (
+                      <label key={day} className="flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          checked={weekdays.includes(day) || day === startsAt.getDay()}
+                          disabled={day === startsAt.getDay()}
+                          onChange={(e) =>
+                            setWeekdays(
+                              e.target.checked
+                                ? [...weekdays, day]
+                                : weekdays.filter((value) => value !== day),
+                            )
+                          }
+                        />
+                        {DAYS[day]}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
               <Muted>
                 День первого ивента включён. Повторы сохраняют время UTC; при переходе на летнее
                 время местное время может измениться.
               </Muted>
+              {previewError && <ErrorText>{previewError}</ErrorText>}
               {slots.length > 0 && (
                 <details>
                   <summary>Будет создано ивентов: {slots.length}</summary>
@@ -263,9 +286,9 @@ export function CreateEventDialog({
           <Button
             type="submit"
             variant="primary"
-            disabled={busy || loading || !types.length || !members.length}
+            disabled={busy || loading || !types.length || !members.length || !!previewError}
           >
-            {busy ? 'Сохранение…' : 'Создать'}
+            {busy ? 'Сохранение…' : 'Принять'}
           </Button>
           <Button type="button" disabled={busy} onClick={onClose}>
             Закрыть

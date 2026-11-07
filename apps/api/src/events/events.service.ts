@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -103,12 +104,16 @@ export interface EventsDb {
         seriesId?: string;
       };
     }): Promise<{ id: string; startsAt: Date }>;
+    createMany(args: {
+      data: Array<Parameters<EventsDb['event']['create']>[0]['data']>;
+    }): Promise<{ count: number }>;
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<{ id: string }>;
     deleteMany(args: { where: { seriesId: string; status: string } }): Promise<{ count: number }>;
     delete(args: { where: { id: string } }): Promise<unknown>;
     count(args: { where: { seriesId: string; status: { not: string } } }): Promise<number>;
   };
   auditLog: AuditWriter;
+  $transaction<T>(work: (tx: Pick<EventsDb, 'event' | 'auditLog'>) => Promise<T>): Promise<T>;
 }
 
 /** Действующий пользователь сессии — для прав и аудита. */
@@ -176,21 +181,23 @@ export class EventsService {
     await this.mustExistMember(input.raidLeadId);
     this.assertValidRange(input.startsAt, input.endsAt);
 
-    const created = await this.db.event.create({
-      data: {
-        name: input.name,
-        eventTypeId: input.eventTypeId,
-        mode: input.mode,
-        startsAt: input.startsAt,
-        endsAt: input.endsAt,
-        dkpReward: input.dkpReward,
-        raidLeadId: input.raidLeadId,
-        place: input.place ?? null,
-        notes: input.notes ?? null,
-      },
+    return this.db.$transaction(async (tx) => {
+      const created = await tx.event.create({
+        data: {
+          name: input.name,
+          eventTypeId: input.eventTypeId,
+          mode: input.mode,
+          startsAt: input.startsAt,
+          endsAt: input.endsAt,
+          dkpReward: input.dkpReward,
+          raidLeadId: input.raidLeadId,
+          place: input.place ?? null,
+          notes: input.notes ?? null,
+        },
+      });
+      await this.audit(actor, 'EVENT_CREATE', created.id, this.describeCreated(input), tx.auditLog);
+      return { id: created.id };
     });
-    await this.audit(actor, 'EVENT_CREATE', created.id, this.describeCreated(input));
-    return { id: created.id };
   }
 
   /**
@@ -208,32 +215,37 @@ export class EventsService {
     await this.mustExistMember(input.raidLeadId);
     this.assertValidRange(input.startsAt, input.endsAt);
 
-    const seriesId = `series-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    let created = 0;
-    for (const slot of generateSeriesEvents(input)) {
-      await this.db.event.create({
-        data: {
+    let slots: ReturnType<typeof generateSeriesEvents>;
+    try {
+      slots = generateSeriesEvents(input);
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : 'Некорректная серия');
+    }
+    const seriesId = `series-${randomUUID()}`;
+    return this.db.$transaction(async (tx) => {
+      const result = await tx.event.createMany({
+        data: slots.map((slot) => ({
+          ...slot,
+          seriesId,
           name: input.name,
           eventTypeId: input.eventTypeId,
           mode: input.mode,
-          startsAt: slot.startsAt,
-          endsAt: slot.endsAt,
           dkpReward: input.dkpReward,
           raidLeadId: input.raidLeadId,
           place: input.place ?? null,
           notes: input.notes ?? null,
-          seriesId,
-        },
+        })),
       });
-      created++;
-    }
-    await this.audit(
-      actor,
-      'EVENT_SERIES_CREATE',
-      seriesId,
-      `Серия из ${created} ивентов: ${input.startsAt.toISOString()} × ${input.weeks} нед.`,
-    );
-    return { seriesId, created };
+      await this.audit(
+        actor,
+        'EVENT_SERIES_CREATE',
+        seriesId,
+        `Создана серия из ${result.count} ивентов до ${input.until.toISOString()}`,
+        tx.auditLog,
+        'EventSeries',
+      );
+      return { seriesId, created: result.count };
+    });
   }
 
   /** Удаление серии целиком — только пока все ивенты PLANNED (issue #8). */
@@ -445,12 +457,19 @@ export class EventsService {
     return `Создан ивент ${input.startsAt.toISOString()}, плата ${input.dkpReward} ДКП, режим ${input.mode}`;
   }
 
-  private async audit(actor: EventsActor, action: string, entityId: string, comment: string) {
-    await this.db.auditLog.create({
+  private async audit(
+    actor: EventsActor,
+    action: string,
+    entityId: string,
+    comment: string,
+    writer: AuditWriter = this.db.auditLog,
+    entityType = 'Event',
+  ) {
+    await writer.create({
       data: {
         actorMemberId: actor.memberId,
         action,
-        entityType: 'Event',
+        entityType,
         entityId,
         comment,
       },

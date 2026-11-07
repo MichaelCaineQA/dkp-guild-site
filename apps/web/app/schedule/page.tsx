@@ -50,7 +50,7 @@ export default function SchedulePage() {
   const [gameTime, setGameTime] = useState<GamePhaseConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<EventRow | null>(null);
-  const [creating, setCreating] = useState<'single' | 'series' | null>(null);
+  const [creating, setCreating] = useState(false);
   const [createdMessage, setCreatedMessage] = useState('');
 
   // Месяц календаря: первый день просматриваемого месяца.
@@ -137,19 +137,17 @@ export default function SchedulePage() {
       <PageHeader title="Расписание ивентов" />
       {canManage && (
         <div className="mb-4 flex flex-wrap gap-2">
-          <Button variant="primary" onClick={() => setCreating('single')}>
+          <Button variant="primary" onClick={() => setCreating(true)}>
             Создать ивент
           </Button>
-          <Button onClick={() => setCreating('series')}>Создать серию</Button>
         </div>
       )}
       {createdMessage && <p role="status">{createdMessage}</p>}
       {canManage && creating && (
         <CreateEventDialog
-          series={creating === 'series'}
-          onClose={() => setCreating(null)}
+          onClose={() => setCreating(false)}
           onCreated={(startsAt, message) => {
-            setCreating(null);
+            setCreating(false);
             setCreatedMessage(message);
             setTypeFilter('');
             setModeFilter('');

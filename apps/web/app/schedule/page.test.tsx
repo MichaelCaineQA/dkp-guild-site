@@ -128,7 +128,7 @@ describe('SchedulePage', () => {
     await screen.findByText('Ближайшие ивенты');
     await screen.findByText(/РЛ: РЛ · 10 ДКП/);
     expect(screen.getByRole('button', { name: 'Создать ивент' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Создать серию' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Создать ивент' })).toBeDefined();
     const mentions = screen.getAllByText('Гильдбосс');
     mentions[mentions.length - 1]!.click();
     expect(await screen.findByText('Фазы игрового времени на длительность ивента:')).toBeDefined();

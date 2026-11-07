@@ -25,7 +25,8 @@ function seriesInput(partial: Partial<Parameters<typeof generateSeriesEvents>[0]
     dkpReward: 10,
     raidLeadId: 'm-rl',
     weekdays: [2, 4], // вт, чт
-    weeks: 4,
+    repeat: 'WEEKLY',
+    until: '2026-03-30T23:59:59Z',
     ...partial,
   });
 }
@@ -62,8 +63,8 @@ describe('generateSeriesEvents', () => {
     expect(events[1]!.startsAt.getUTCDay()).toBe(1);
   });
 
-  it('weeks=1 — только ивенты первой недели', () => {
-    const events = generateSeriesEvents(seriesInput({ weeks: 1 }));
+  it('дата окончания ограничивает первую неделю', () => {
+    const events = generateSeriesEvents(seriesInput({ until: new Date('2026-03-09T23:59:59Z') }));
     expect(events).toHaveLength(2);
   });
 
@@ -205,4 +206,60 @@ it('название обязательно, обрезается по края�
   expect(createEventApiSchema.parse({ ...base, name: '  Сбор  ' }).name).toBe('Сбор');
   for (const name of ['', ' ', undefined, 'x'.repeat(121)])
     expect(createEventApiSchema.safeParse({ ...base, name }).success).toBe(false);
+});
+
+describe('Повторы до даты окончания', () => {
+  it('ежедневно включает последний день и сохраняет время/длительность через смену года', () => {
+    const events = generateSeriesEvents(
+      seriesInput({
+        repeat: 'DAILY',
+        startsAt: new Date('2026-12-30T23:00:00Z'),
+        endsAt: new Date('2026-12-31T01:00:00Z'),
+        until: new Date('2027-01-02T23:00:00Z'),
+      }),
+    );
+    expect(events.map((e) => e.startsAt.toISOString())).toEqual([
+      '2026-12-30T23:00:00.000Z',
+      '2026-12-31T23:00:00.000Z',
+      '2027-01-01T23:00:00.000Z',
+      '2027-01-02T23:00:00.000Z',
+    ]);
+    expect(events.every((e) => +e.endsAt - +e.startsAt === 7200000)).toBe(true);
+  });
+  it('високосный день сохраняется, первый ивент входит при совпадении границы', () => {
+    const first = seriesInput({
+      repeat: 'DAILY',
+      startsAt: new Date('2024-02-28T17:00:00Z'),
+      endsAt: new Date('2024-02-28T19:00:00Z'),
+      until: new Date('2024-03-01T17:00:00Z'),
+    });
+    expect(generateSeriesEvents(first).map((e) => e.startsAt.getUTCDate())).toEqual([28, 29, 1]);
+    expect(generateSeriesEvents({ ...first, until: first.startsAt })).toHaveLength(1);
+  });
+  it('еженедельно без дополнительных дней повторяет день старта', () => {
+    const events = generateSeriesEvents(seriesInput({ weekdays: [] }));
+    expect(events).toHaveLength(4);
+    expect(events.every((e) => e.startsAt.getUTCDay() === 2)).toBe(true);
+  });
+  it('ранняя дата окончания и пропущенные параметры не принимаются', () => {
+    const first = seriesInput();
+    for (const body of [
+      { ...first, until: '2026-03-02' },
+      { ...first, until: undefined },
+      { ...first, repeat: undefined },
+    ])
+      expect(createEventSeriesSchema.safeParse(body).success).toBe(false);
+  });
+  it('технический предел не обрезает серию молча и проверяется до большого цикла', () => {
+    const first = seriesInput({ repeat: 'DAILY' });
+    expect(
+      generateSeriesEvents({ ...first, until: new Date(+first.startsAt + 999 * 86400000) }),
+    ).toHaveLength(1000);
+    expect(() =>
+      generateSeriesEvents({ ...first, until: new Date(+first.startsAt + 1000 * 86400000) }),
+    ).toThrow('Разбейте серию');
+    expect(() => generateSeriesEvents({ ...first, until: new Date('9999-01-01') })).toThrow(
+      'Разбейте серию',
+    );
+  });
 });
