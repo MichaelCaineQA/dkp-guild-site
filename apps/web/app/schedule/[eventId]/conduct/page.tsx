@@ -73,7 +73,7 @@ const STATUS_LABELS: Record<string, string> = {
 /**
  * Проведение ивента (issue #10, план 2.2 п.6): чек-лист РЛ с ручными
  * отметками и начислениями, досрочный финальный код, итоговая сводка.
- * Доступ: офицеры+ и РЛ ивента; остальным — только чтение чек-листа.
+ * Доступ: Глава, Админ и назначенный РЛ ивента; остальным — только чтение чек-листа.
  */
 export default function ConductPage() {
   const params = useParams<{ eventId: string }>();
@@ -104,14 +104,13 @@ export default function ConductPage() {
     }
   }, [sessionLoading, user, load]);
 
-  const isRl = !!user && !!event && user.memberId === event.raidLeadId;
   const canConduct = useMemo(
     () =>
       !!user &&
       !!event &&
-      (can({ rank: user.rank, isAdmin: user.isAdmin, memberId: user.memberId }, 'events.conduct') ||
-        isRl),
-    [user, event, isRl],
+      event.status !== 'CANCELLED' &&
+      can(user, 'events.conduct', event),
+    [user, event],
   );
 
   if (sessionLoading) {

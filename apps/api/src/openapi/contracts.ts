@@ -16,7 +16,7 @@ const list = (name: string) => array(ref(name));
 const member = 'Член гильдии или администратор.';
 const officer = 'Офицер, глава или администратор.';
 const leader = 'Глава или администратор.';
-const rl = 'Назначенный РЛ этого ивента, офицер, глава или администратор.';
+const rl = 'Назначенный РЛ этого ивента, Глава или Админ.';
 const c = (
   summary: string,
   response: string | SchemaObject,
@@ -76,15 +76,15 @@ export const contracts: Record<string, Contract> = {
     errors: [400],
   }),
   Auth_listLinkRequests: c('Получить очередь заявок на привязку', list('LinkRequest'), {
-    access: officer,
+    access: leader,
   }),
   Auth_approveLinkRequest: c('Подтвердить привязку Discord', 'Ok', {
-    access: officer,
+    access: leader,
     errors: [404, 409],
     description: 'Старую заявку без роли или пары оружия нужно подать заново.',
   }),
   Auth_rejectLinkRequest: c('Отклонить заявку на привязку', 'Ok', {
-    access: officer,
+    access: leader,
     errors: [404, 409],
   }),
   Members_roster: c('Получить состав гильдии', list('RosterMember'), {
@@ -93,13 +93,13 @@ export const contracts: Record<string, Contract> = {
   }),
   Members_getOne: c('Получить участника', 'RosterMember', { errors: [404] }),
   Members_create: c('Добавить участника', 'Member', {
-    access: officer,
+    access: leader,
     body: 'CreateMember',
     errors: [400, 409],
     description: 'Создаваемый ранг — MEMBER или OFFICER. Запись действия в аудит.',
   }),
   Members_update: c('Изменить участника', 'Member', {
-    access: officer,
+    access: leader,
     body: 'UpdateMember',
     errors: [400, 404, 409],
     description: 'Ник, роль и пара оружия обязательны; изменение фиксируется в аудите.',
@@ -126,26 +126,26 @@ export const contracts: Record<string, Contract> = {
       'Первый ивент включается всегда. weekdays: 0=воскресенье, 6=суббота. Повторения сохраняют время UTC.',
   }),
   Events_deleteSeries: c('Удалить серию ивентов', 'DeletedSeries', {
-    access: officer,
+    access: 'Глава, Админ, Офицер или назначенный РЛ своего ивента.',
     errors: [404, 409],
     description: 'Только если все ивенты серии в статусе PLANNED.',
   }),
   Events_deleteOne: c('Удалить запланированный ивент', 'Ok', {
-    access: officer,
+    access: 'Глава, Админ, Офицер или назначенный РЛ своего ивента.',
     errors: [404, 409],
   }),
   Events_update: c('Изменить ивент', 'Id', {
-    access: rl,
+    access: 'Глава, Админ, Офицер или назначенный РЛ своего ивента.',
     body: 'UpdateEvent',
     errors: [404, 409],
-    description: 'Плата ДКП не редактируется.',
+    description: 'Плата ДКП не редактируется. Параметры завершённых/отменённых ивентов закрыты для правки. Назначать другого РЛ могут только Глава, Админ и Офицер.',
   }),
   Events_changeStatus: c('Изменить статус ивента', 'EventStatus', {
-    access: officer,
+    access: 'Глава, Админ, Офицер или назначенный РЛ своего ивента.',
     body: 'ChangeEventStatus',
     errors: [404, 409],
     description:
-      'PLANNED → RUNNING/CANCELLED; RUNNING → FINISHED/CANCELLED. Финальные статусы неизменяемы.',
+      'PLANNED → RUNNING/CANCELLED; RUNNING → FINISHED/CANCELLED. Запуск/завершение — Глава, Админ или назначенный РЛ; отмена также доступна Офицеру. Финальные статусы неизменяемы.',
   }),
   CheckIn_playerView: c('Получить варианты чек-ин кода', 'PlayerCheckIn', {
     access: 'Участник с привязанным Member.',

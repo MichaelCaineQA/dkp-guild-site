@@ -43,10 +43,10 @@ describe('PermissionsGuard', () => {
     ).toThrow(ForbiddenException);
   });
 
-  it('офицер на members.manage проходит', () => {
-    expect(
+  it('офицер на members.manage получает 403', () => {
+    expect(() =>
       makeGuard('members.manage').canActivate(makeContext(session({ rank: 'OFFICER' }))),
-    ).toBe(true);
+    ).toThrow(ForbiddenException);
   });
 
   it('рядовой на members.view_roster проходит', () => {

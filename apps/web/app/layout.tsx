@@ -18,7 +18,7 @@ const themeInit = `(function(){try{var t=localStorage.getItem('theme');var d=t?t
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="ru">
+    <html lang="ru" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>

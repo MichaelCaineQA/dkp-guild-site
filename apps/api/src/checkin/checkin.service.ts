@@ -174,7 +174,7 @@ export class CheckInService {
   }
 
   /**
-   * Вид РЛ: сам код (только РЛ ивента или офицер+ — план 2.2).
+   * Вид РЛ: сам код (только РЛ ивента, Глава или Админ+ — план 2.2).
    * Ленивая генерация: код создаётся при первом запросе в окне;
    * повторный показ — расшифровкой codeEnc.
    */
@@ -191,9 +191,10 @@ export class CheckInService {
       can(
         { rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId },
         'events.conduct',
-      ) || actor.memberId === event.raidLeadId;
+        event,
+      );
     if (!allowed) {
-      throw new ForbiddenException('Код видит только РЛ ивента или офицер');
+      throw new ForbiddenException('Код видит только РЛ ивента, Глава или Админ');
     }
 
     const now = this.clock();
@@ -350,9 +351,10 @@ export class CheckInService {
       can(
         { rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId },
         'events.conduct',
-      ) || actor.memberId === event.raidLeadId;
+        event,
+      );
     if (!allowed) {
-      throw new ForbiddenException('Досрочный код — РЛ ивента или офицеру');
+      throw new ForbiddenException('Досрочный код — РЛ ивента, Главе или Админу');
     }
     if (event.status === 'CANCELLED' || event.status === 'FINISHED') {
       throw new ConflictException('Ивент отменён или завершён');

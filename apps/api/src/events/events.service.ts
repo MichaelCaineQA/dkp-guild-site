@@ -2,6 +2,9 @@ import { ConflictException, ForbiddenException, Injectable, NotFoundException } 
 import {
   EVENT_TRANSITIONS,
   can,
+  canManageEvent,
+  isEventEditable,
+  type Rank,
   changeEventStatusSchema,
   createEventApiSchema,
   createEventSeriesSchema,
@@ -51,6 +54,7 @@ export interface EventsDb {
         eventTypeId?: string;
         mode?: string;
         status?: { not: string };
+        seriesId?: string;
       };
       orderBy: { startsAt: 'asc' };
       include: { eventType: { select: { name: true } }; raidLead: { select: { nickname: true } } };
@@ -103,6 +107,7 @@ export interface EventsDb {
 export interface EventsActor {
   memberId: string | null;
   isAdmin: boolean;
+  rank?: Rank | null;
 }
 
 /**
@@ -213,6 +218,20 @@ export class EventsService {
 
   /** Удаление серии целиком — только пока все ивенты PLANNED (issue #8). */
   async deleteSeries(seriesId: string, actor: EventsActor): Promise<{ deleted: number }> {
+    if (!can({ ...actor, rank: actor.rank ?? null }, 'events.manage')) {
+      const events = await this.db.event.findMany({
+        where: { seriesId },
+        orderBy: { startsAt: 'asc' },
+        include: {
+          eventType: { select: { name: true } },
+          raidLead: { select: { nickname: true } },
+        },
+      });
+      if (!events.length || !events.every(event =>
+        canManageEvent({ ...actor, rank: actor.rank ?? null }, event))) {
+        throw new ForbiddenException('Удалять можно только свою серию ивентов');
+      }
+    }
     const active = await this.db.event.count({
       where: { seriesId, status: { not: 'PLANNED' } },
     });
@@ -232,6 +251,9 @@ export class EventsService {
   /** Удаление одиночного ивента — только PLANNED (CRUD-полнота, план 2.1). */
   async deleteOne(id: string, actor: EventsActor): Promise<{ ok: true }> {
     const event = await this.mustExist(id);
+    if (!canManageEvent({ ...actor, rank: actor.rank ?? null }, event)) {
+      throw new ForbiddenException('Нет права на удаление ивента');
+    }
     if (event.status !== 'PLANNED') {
       throw new ConflictException('Удалить можно только запланированный ивент');
     }
@@ -250,14 +272,21 @@ export class EventsService {
    * этого ивента — точечная проверка can() с target.raidLeadId (2.6).
    * Плата ДКП в схеме отсутствует — попытка её передать отбрасывается zod'ом.
    */
-  async update(id: string, body: unknown, actor: EventsActor, actorRank: string | null): Promise<{ id: string }> {
+  async update(id: string, body: unknown, actor: EventsActor, actorRank: Rank | null): Promise<{ id: string }> {
     const input: UpdateEventInput = updateEventSchema.parse(body);
     const event = await this.mustExist(id);
 
-    const isRl = actor.memberId === event.raidLeadId;
-    const isOfficer = can({ rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId }, 'events.manage');
-    if (!isOfficer && !isRl) {
+    if (!canManageEvent({ ...actor, rank: actorRank }, event)) {
       throw new ForbiddenException('Редактировать может офицер или РЛ ивента');
+    }
+    if (!isEventEditable(event.status)) {
+      throw new ConflictException('Завершённый или отменённый ивент доступен только для просмотра');
+    }
+    if (
+      input.raidLeadId !== undefined && input.raidLeadId !== event.raidLeadId &&
+      !can({ ...actor, rank: actorRank }, 'events.manage')
+    ) {
+      throw new ForbiddenException('Назначать РЛ могут только Глава, Админ и Офицер');
     }
 
     if (input.eventTypeId) {
@@ -282,6 +311,11 @@ export class EventsService {
   async changeStatus(id: string, body: unknown, actor: EventsActor): Promise<{ id: string; status: string }> {
     const input: ChangeEventStatusInput = changeEventStatusSchema.parse(body);
     const event = await this.mustExist(id);
+
+    const permitted = input.status === 'CANCELLED'
+      ? canManageEvent({ ...actor, rank: actor.rank ?? null }, event)
+      : can({ ...actor, rank: actor.rank ?? null }, 'events.conduct', event);
+    if (!permitted) throw new ForbiddenException('Нет права на изменение статуса ивента');
 
     const allowed = EVENT_TRANSITIONS[event.status] ?? [];
     if (!allowed.includes(input.status)) {

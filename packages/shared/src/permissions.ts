@@ -7,10 +7,10 @@ import { RANKS, type Rank } from './domain';
  *
  * Права здесь — декларация для людей и тестов; эндпоинты API вешают их
  * через @RequirePermission (apps/api). «РЛ ивента» разрешается проверкой
- * target.raidLeadId — она появится в ивентах (задачи #8–#10).
+ * target.raidLeadId в сервисах ивентов.
  */
 export const PERMISSIONS = [
-  'members.manage', // создание/редактирование членов (issue #6: офицеры+)
+  'members.manage', // создание/редактирование членов — Глава/Админ
   'members.change_rank', // смена рангов — только Глава/Админ
   'members.view_roster', // состав гильдии — всем членам
   'link_requests.review', // подтверждение заявок на привязку Discord
@@ -21,7 +21,7 @@ export const PERMISSIONS = [
   'attendance.manual', // ручные отметки посещения
   'absence.see', // отметка «Увидел» на отсутствиях
   'dkp.penalty', // штрафы и корректировки ДКП
-  'items.manage', // справочник предметов, КП и паки
+  'items.manage', // справочник предметов
   'auction.bid', // ставки на аукционе
   'profile.view', // профили и статистика
   'profile.edit_own', // свой профиль: роль, прайм-тайм, GS-скрины
@@ -31,17 +31,17 @@ export type Permission = (typeof PERMISSIONS)[number];
 
 /** Минимальный ранг для права (Глава и Админ равны по матрице 2.6). */
 const MIN_RANK: Record<Permission, Rank> = {
-  'members.manage': 'OFFICER',
+  'members.manage': 'GUILD_LEADER',
   'members.change_rank': 'GUILD_LEADER',
   'members.view_roster': 'MEMBER',
-  'link_requests.review': 'OFFICER',
+  'link_requests.review': 'GUILD_LEADER',
   'settings.manage': 'GUILD_LEADER',
   'rules.edit': 'GUILD_LEADER',
   'events.manage': 'OFFICER',
-  'events.conduct': 'OFFICER',
-  'attendance.manual': 'OFFICER',
+  'events.conduct': 'GUILD_LEADER',
+  'attendance.manual': 'GUILD_LEADER',
   'absence.see': 'GUILD_LEADER', // «Увидел»: Глава/Админ; лидеры КП/пачки — этап 3 (issue #38)
-  'dkp.penalty': 'OFFICER',
+  'dkp.penalty': 'GUILD_LEADER',
   'items.manage': 'OFFICER',
   'auction.bid': 'MEMBER',
   'profile.view': 'MEMBER',
@@ -70,6 +70,7 @@ export interface PermissionActor {
 export const RAID_LEAD_ACTIONS: ReadonlySet<Permission> = new Set([
   'events.conduct',
   'attendance.manual',
+  'dkp.penalty',
   // absence.see исключён (решение владельца): «Увидел» — Глава/Админ
   // (+ лидеры КП/пачки человека с этапа 3, issue #38)
 ]);
@@ -93,22 +94,18 @@ export function can(
   action: Permission,
   target?: PermissionTarget,
 ): boolean {
+  if (actor.isAdmin) return true;
+  if (actor.rank === null) return false;
   // Права «РЛ ивента» действуют на ивентах, где актор назначен рейд-лидом.
   if (
     target?.raidLeadId !== undefined &&
-    actor.memberId !== undefined &&
+    !!actor.memberId &&
     target.raidLeadId === actor.memberId &&
     RAID_LEAD_ACTIONS.has(action)
   ) {
     return true;
   }
 
-  if (actor.isAdmin) {
-    return true; // резервный админ — технический доступ полного уровня (2.6)
-  }
-  if (actor.rank === null) {
-    return false; // вошёл, но не привязан к члену гильдии
-  }
   return rankAtLeast(actor.rank, MIN_RANK[action]);
 }
 
@@ -120,6 +117,16 @@ export function permissionsOf(actor: PermissionActor): Permission[] {
 /** Самостоятельное редактирование профиля требует своего Member. */
 export function canEditOwnProfile(actor: PermissionActor, memberId: string): boolean {
   return actor.memberId === memberId && can(actor, 'profile.edit_own');
+}
+
+/** Управление существующим ивентом не даёт РЛ права создавать новые. */
+export function canManageEvent(actor: PermissionActor, event: PermissionTarget): boolean {
+  return can(actor, 'events.manage') || can(actor, 'events.conduct', event);
+}
+
+/** Параметры завершённых/отменённых ивентов доступны только для чтения. */
+export function isEventEditable(status: string): boolean {
+  return status === 'PLANNED' || status === 'RUNNING';
 }
 
 export type { Rank };

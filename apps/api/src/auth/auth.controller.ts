@@ -141,35 +141,35 @@ export class AuthController {
     return this.linkRequests.create(req.session!.user!.userId, body);
   }
 
-  /** Очередь заявок — офицерам и выше. */
+  /** Очередь заявок — Главе и Админу. */
   @Get('link-requests')
-  @MinRank('OFFICER')
+  @MinRank('GUILD_LEADER')
   @UseGuards(AuthGuard)
   listLinkRequests() {
     return this.linkRequests.listPending();
   }
 
-  /** Подтвердить заявку — офицерам и выше. */
+  /** Подтвердить заявку — Главе и Админу. */
   @Post('link-requests/:id/approve')
   @AuditAction({
     action: 'LINK_REQUEST_APPROVE',
     entityType: 'MemberLinkRequest',
     comment: 'Привязка Discord подтверждена',
   })
-  @MinRank('OFFICER')
+  @MinRank('GUILD_LEADER')
   @UseGuards(AuthGuard)
   approveLinkRequest(@Param('id') id: string) {
     return this.linkRequests.approve(id);
   }
 
-  /** Отклонить заявку — офицерам и выше. */
+  /** Отклонить заявку — Главе и Админу. */
   @Post('link-requests/:id/reject')
   @AuditAction({
     action: 'LINK_REQUEST_REJECT',
     entityType: 'MemberLinkRequest',
     comment: 'Привязка Discord отклонена',
   })
-  @MinRank('OFFICER')
+  @MinRank('GUILD_LEADER')
   @UseGuards(AuthGuard)
   rejectLinkRequest(@Param('id') id: string) {
     return this.linkRequests.reject(id);

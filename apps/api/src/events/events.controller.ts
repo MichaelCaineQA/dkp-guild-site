@@ -17,7 +17,7 @@ import { EventsService } from './events.service';
 /**
  * Расписание ивентов (issue #8): чтение — всем членам, создание/серии —
  * офицерам+, редактирование — офицерам или РЛ ивента (проверка в сервисе),
- * статусы — по той же логике, что и ведение ивента.
+ * запуск/завершение — Глава/Админ/РЛ, отмена — также Офицер.
  */
 @Controller('events')
 @UseGuards(AuthGuard, PermissionsGuard)
@@ -53,26 +53,26 @@ export class EventsController {
 
   /** Удаление серии целиком — только пока все ивенты запланированы. */
   @Delete('series/:seriesId')
-  @RequirePermission('events.manage')
+  @RequirePermission('members.view_roster')
   deleteSeries(@Param('seriesId') seriesId: string, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
-    return this.events.deleteSeries(seriesId, { memberId: user.memberId, isAdmin: user.isAdmin });
+    return this.events.deleteSeries(seriesId, { memberId: user.memberId, isAdmin: user.isAdmin, rank: user.rank });
   }
 
-  /** Удаление одиночного ивента — только PLANNED (офицеры+). */
+  /** Удаление одиночного ивента — только PLANNED, с проверкой ранга/назначения. */
   @Delete(':id')
-  @RequirePermission('events.manage')
+  @RequirePermission('members.view_roster')
   deleteOne(@Param('id') id: string, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
-    return this.events.deleteOne(id, { memberId: user.memberId, isAdmin: user.isAdmin });
+    return this.events.deleteOne(id, { memberId: user.memberId, isAdmin: user.isAdmin, rank: user.rank });
   }
 
   /**
-   * Редактирование: guard пропускает офицеров+; РЛ-не-офицер тоже может —
+   * Редактирование: guard проверяет членство; ранг и назначение РЛ —
    * точечная проверка в сервисе (механизм «РЛ ивента», план 2.6).
    */
   @Patch(':id')
-  @UseGuards(AuthGuard)
+  @RequirePermission('members.view_roster')
   update(@Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
     return this.events.update(
@@ -85,9 +85,9 @@ export class EventsController {
 
   /** Смена статуса: planned → running → finished / cancelled. */
   @Post(':id/status')
-  @RequirePermission('events.conduct')
+  @RequirePermission('members.view_roster')
   changeStatus(@Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
-    return this.events.changeStatus(id, body, { memberId: user.memberId, isAdmin: user.isAdmin });
+    return this.events.changeStatus(id, body, { memberId: user.memberId, isAdmin: user.isAdmin, rank: user.rank });
   }
 }

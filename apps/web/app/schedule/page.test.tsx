@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SchedulePage from './page';
 
@@ -108,7 +108,7 @@ describe('SchedulePage', () => {
     expect(screen.queryByRole('button', { name: 'Создать серию' })).toBeNull();
   });
 
-  it('офицер открывает карточку и видит кнопки управления статусами', async () => {
+  it('офицер управляет расписанием, но не видит коды и кнопки проведения', async () => {
     mockSession({
       userId: 'u2',
       username: 'test-officer',
@@ -127,7 +127,8 @@ describe('SchedulePage', () => {
     const mentions = screen.getAllByText('Гильдбосс');
     mentions[mentions.length - 1]!.click();
     expect(await screen.findByText('Фазы игрового времени на длительность ивента:')).toBeDefined();
-    expect(screen.getByText('Начать ивент')).toBeDefined();
+    expect(screen.queryByText('Начать ивент')).toBeNull();
+    expect(api).not.toHaveBeenCalledWith('/events/e-1/checkin/code');
     expect(screen.getByText('Отменить')).toBeDefined();
     // Плата показана с пометкой фиксации (решение 1)
     expect(screen.getByText('10 (фиксирована при создании)')).toBeDefined();
@@ -140,5 +141,16 @@ describe('SchedulePage', () => {
 
     expect(await screen.findByText(/отправьте заявку на привязку ника/)).toBeDefined();
     expect(api).not.toHaveBeenCalled();
+  });
+
+  it.each(['MEMBER', 'OFFICER'])('назначенный РЛ с рангом %s видит проведение своего ивента', async rank => {
+    mockSession({ userId:'rl', username:'РЛ', memberId:'m-rl', rank, isAdmin:false });
+    render(<SchedulePage />);
+    await screen.findByText(/РЛ: РЛ · 10 ДКП/);
+    const mentions = screen.getAllByText('Гильдбосс');
+    mentions[mentions.length - 1]!.click();
+    expect(await screen.findByText('Начать ивент')).toBeDefined();
+    await waitFor(() => expect(api).toHaveBeenCalledWith('/events/e-1/checkin/code'));
+    if (rank === 'MEMBER') expect(screen.queryByRole('button', { name: 'Создать ивент' })).toBeNull();
   });
 });

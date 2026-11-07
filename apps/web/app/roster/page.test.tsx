@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RosterPage from './page';
 
 /** Мокаем api-клиент и сессию: страница состава — чистый UI над /members. */
@@ -23,6 +23,7 @@ function mockSession(user: Record<string, unknown> | null) {
 }
 
 describe('RosterPage', () => {
+  afterEach(cleanup);
   beforeEach(() => {
     vi.clearAllMocks();
     mockSession({
@@ -52,12 +53,12 @@ describe('RosterPage', () => {
     expect(screen.queryByText('Добавить члена')).toBeNull();
   });
 
-  it('офицер видит форму добавления', async () => {
+  it('Глава видит форму добавления', async () => {
     mockSession({
       userId: 'u2',
-      username: 'test-officer',
+      username: 'test-leader',
       memberId: 'm-2',
-      rank: 'OFFICER',
+      rank: 'GUILD_LEADER',
       isAdmin: false,
     });
     vi.mocked(api).mockResolvedValue([]);
@@ -77,5 +78,13 @@ describe('RosterPage', () => {
       expect(screen.getByText(/заявку на привязку ника/)).toBeDefined();
     });
     expect(api).not.toHaveBeenCalled();
+  });
+
+  it('Офицер читает состав без формы добавления и правки игроков', async () => {
+    mockSession({ userId: 'off', username: 'Офицер', memberId: 'off', rank: 'OFFICER', isAdmin: false });
+    vi.mocked(api).mockResolvedValue([{ id: 'm1', nickname: 'Alpha', rank: 'MEMBER', combatRole: 'DPS', weapons: [], discord: null }]);
+    render(<RosterPage />);
+    expect(await screen.findByText('Alpha')).toBeDefined();
+    expect(screen.queryByText('Добавить члена')).toBeNull();
   });
 });

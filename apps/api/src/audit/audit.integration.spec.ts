@@ -130,7 +130,8 @@ describe('аудит через HTTP: права, фильтры, ровно о�
     expect(record).not.toHaveBeenCalled();
   });
 
-  it('подтверждение привязки пишет одну запись, чтение — ни одной', async () => {
+  it('подтверждение привязки Главой пишет одну запись, чтение — ни одной', async () => {
+    actor!.rank = 'GUILD_LEADER';
     expect(
       (await fetch(`${url}/auth/link-requests/link1/approve`, { method: 'POST' })).status,
     ).toBe(201);

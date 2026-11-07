@@ -6,7 +6,7 @@ import { ConductService, type ConductSettings } from './conduct.service';
 
 /**
  * Проведение ивента (issue #10, план 2.2 п.6): чек-лист, ручные отметки
- * и начисления — офицерам+ и РЛ ивента. Настройки читаются на запрос.
+ * и начисления — Главе, Админу и назначенному РЛ ивента. Настройки читаются на запрос.
  */
 @Controller('events/:eventId/conduct')
 @UseGuards(AuthGuard, PermissionsGuard)
