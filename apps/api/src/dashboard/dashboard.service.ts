@@ -83,6 +83,8 @@ export class DashboardService {
         members: {
           select: {
             id: true,
+            avatar: true,
+            avatarColor: true,
             nickname: true,
             rank: true,
             weapons: true,
@@ -113,6 +115,8 @@ export class DashboardService {
       name: pack.name,
       members: sortTeamMembers(pack.members, pack.leaderId).map((m) => ({
         id: m.id,
+        avatar: m.avatar as import('@dkp/shared').Avatar | null,
+        avatarColor: m.avatarColor as import('@dkp/shared').AvatarColor | null,
         nickname: m.nickname,
         rank: m.rank,
         weapons: m.weapons,

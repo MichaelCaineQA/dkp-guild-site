@@ -1,0 +1,41 @@
+name: Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Окружение GitHub с секретами сервера
+        type: choice
+        options: [staging, production]
+        required: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency: deploy-${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require a version tag for production
+        if: inputs.environment == 'production' && github.ref_type != 'tag'
+        run: exit 1
+      - name: Prepare SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Deploy selected commit
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          set -eu
+          case "$DEPLOY_PATH" in /*) ;; *) echo 'DEPLOY_PATH must be absolute' >&2; exit 1;; esac
+          # Путь ограничен безопасными символами: он передаётся удалённой оболочке.
+          case "$DEPLOY_PATH" in *[!a-zA-Z0-9_./-]*|*..*) echo 'Invalid DEPLOY_PATH' >&2; exit 1;; esac
+          git archive HEAD | ssh -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH' && tar -xf - -C '$DEPLOY_PATH'"
+          ssh -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && sh scripts/deploy-prod.sh"

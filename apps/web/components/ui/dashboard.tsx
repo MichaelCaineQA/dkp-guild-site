@@ -10,6 +10,7 @@ import {
 } from '@dkp/shared';
 import { TextLink } from './controls';
 import { Muted } from './layout';
+import { Avatar } from '../avatar';
 export function DashboardGrid({ children }: { children: ReactNode }) {
   return (
     <div className="grid gap-4 md:h-[calc(100dvh-11rem)] md:min-h-[560px] md:grid-cols-2 md:grid-rows-2">
@@ -62,12 +63,7 @@ export function TeamMemberLink({ member }: { member: DashboardTeamMember }) {
       href={`/profiles/${encodeURIComponent(member.id)}`}
       className="flex min-w-0 items-center gap-3 rounded-lg p-2 hover:bg-surface-muted"
     >
-      <span
-        aria-hidden="true"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent"
-      >
-        {Array.from(member.nickname).slice(0, 2).join('')}
-      </span>
+      <Avatar avatar={member.avatar} avatarColor={member.avatarColor} nickname={member.nickname} />
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-2 font-medium">
           <span className="break-all">{member.nickname}</span>

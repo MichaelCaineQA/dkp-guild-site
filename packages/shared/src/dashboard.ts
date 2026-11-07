@@ -51,6 +51,8 @@ export interface DashboardEvent {
   notes: string | null;
 }
 export interface DashboardTeamMember {
+  avatar?: import('./profile').Avatar | null;
+  avatarColor?: import('./profile').AvatarColor | null;
   id: string;
   nickname: string;
   rank: Rank;

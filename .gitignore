@@ -9,6 +9,7 @@ coverage/
 # env & secrets
 .env
 .env.local
+.env.production
 .env.*.local
 
 # misc
@@ -24,3 +25,4 @@ next-env.d.ts
 # локальный семантический индекс MCP codebase-index
 .codebase-index/
 uploads/
+backups/

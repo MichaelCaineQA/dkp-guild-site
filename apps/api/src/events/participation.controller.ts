@@ -6,6 +6,16 @@ import { ParticipationService } from './participation.service';
 @UseGuards(AuthGuard, PermissionsGuard)
 export class ParticipationController {
   constructor(private readonly participation: ParticipationService) {}
+  @Get(':id/roster')
+  @Header('Cache-Control', 'private, no-store')
+  @RequirePermission('members.view_roster')
+  roster(@Param('id') id: string, @Req() req: AuthedRequest) {
+    const user = req.session!.user!;
+    return this.participation.roster(
+      id,
+      user.isAdmin || user.rank === 'GUILD_LEADER' || user.rank === 'ADMIN',
+    );
+  }
   @Get(':id/participation')
   @Header('Cache-Control', 'private, no-store')
   @RequirePermission('members.view_roster')

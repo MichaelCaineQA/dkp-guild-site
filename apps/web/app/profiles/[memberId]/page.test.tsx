@@ -44,6 +44,8 @@ it('старый профиль заполняет оружия без смен�
     body: JSON.stringify({
       combatRole: 'DPS',
       weapons: ['SPEAR', 'DAGGERS'],
+      avatar: null,
+      avatarColor: null,
       comment: 'Заполняю оружия',
     }),
   });
@@ -76,6 +78,8 @@ it('показывает профиль, баланс и сохраняет св
     body: JSON.stringify({
       combatRole: 'HEALER',
       weapons: ['STAFF', 'WAND'],
+      avatar: null,
+      avatarColor: null,
       comment: 'Перешёл на лечение',
     }),
   });
@@ -89,7 +93,29 @@ it('в чужом профиле нет формы самостоятельно�
   });
   render(<ProfilePage />);
   await screen.findByText('Профиль: Алистер');
-  expect(screen.queryByText('Изменить роль и оружия')).toBeNull();
+  expect(screen.queryByText('Изменить профиль')).toBeNull();
+});
+
+it('сохраняет выбранный аватар и уведомляет шапку', async () => {
+  const changed = vi.fn();
+  window.addEventListener('profile:changed', changed);
+  render(<ProfilePage />);
+  await screen.findByText('Профиль: Алистер');
+  fireEvent.click(screen.getByLabelText('Океан'));
+  fireEvent.click(screen.getByLabelText('Синий'));
+  fireEvent.change(screen.getByLabelText('Комментарий'), { target: { value: 'Новый аватар' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить профиль' }));
+  await screen.findByRole('status');
+  expect(api).toHaveBeenCalledWith(
+    '/profiles/m1',
+    expect.objectContaining({ body: expect.stringContaining('"avatar":"OCEAN"') }),
+  );
+  expect(changed).toHaveBeenCalledOnce();
+  expect(api).toHaveBeenCalledWith(
+    '/profiles/m1',
+    expect.objectContaining({ body: expect.stringContaining('"avatarColor":"BLUE"') }),
+  );
+  window.removeEventListener('profile:changed', changed);
 });
 
 it('показывает 404 и сохраняет поля при ошибке изменения роли', async () => {

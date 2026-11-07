@@ -18,6 +18,57 @@
 
 ## Быстрый старт
 
+### Staging и production
+
+Production-конфигурация подготовлена в `docker-compose.prod.yml` и `Caddyfile`.
+На отдельном Linux VPS установите Docker Engine с Compose и Git; направьте DNS
+имён сайта и API на сервер, откройте порты 80 и 443. Не включайте проксирование
+DNS через Cloudflare. Подойдут VPS с локацией в ЕС, например Selectel или
+Timeweb Cloud, и домен у любого регистратора.
+
+1. Разместите checkout проекта в постоянном каталоге сервера и скопируйте
+   `.env.production.example` в `.env.production` в этом каталоге; ограничьте
+   права файла: `chmod 600 .env.production`.
+2. Укажите два домена, учётные данные PostgreSQL, Discord OAuth и резервного
+   администратора. Значение `DATABASE_URL` должно соответствовать PostgreSQL;
+   специальные символы пароля в URL кодируются percent-encoding. Создайте
+   независимые секреты `SESSION_SECRET` и `CHECKIN_ENC_KEY` (последний —
+   64 hex-символа, например `openssl rand -hex 32`). В Discord укажите callback
+   `https://<API_HOST>/auth/discord/callback`.
+3. Запустите `sh scripts/deploy-prod.sh`. Скрипт собирает образы, останавливает
+   API, делает снимок БД и файлов, применяет миграции и seed, запускает сервисы.
+   При ошибке миграции API остаётся остановленным до проверки. Caddy получает
+   сертификаты автоматически; проверьте `https://<API_HOST>/health` и сайт.
+
+Для ручного workflow `Deploy` настройте GitHub environments `staging` и
+`production`: secrets `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`,
+`DEPLOY_KNOWN_HOSTS` (проверенный ключ сервера) и variable `DEPLOY_PATH`
+(абсолютный путь к checkout с заранее настроенным `.env.production`).
+Выберите нужный ref и окружение в Actions. Production принимает только тег;
+правила подтверждения для GitHub environment настраиваются владельцем отдельно.
+У staging должны быть отдельные домены, БД, секреты и каталог сервера.
+
+Для локальной HTTPS-проверки используйте отдельный каталог и проект Compose,
+отдельные порты и тестовые секреты; в env задайте `CADDY_TLS=tls internal`,
+имена `localhost` и `api.localhost`, `HTTPS_PORT=8443`, `HTTP_PORT=8080`,
+`PUBLIC_WEB_URL=https://localhost:8443` и `PUBLIC_API_URL=https://api.localhost:8443`,
+затем запустите скрипт с отдельным `COMPOSE_PROJECT_NAME`. Сертификат
+локального CA Caddy потребуется добавить в доверенные для браузера. Не используйте
+для этого production-базу или production-секреты.
+
+Резервную копию отдельно создаёт `sh scripts/backup-prod.sh`: `pg_dump` в
+формате custom и архив тома скриншотов помещаются в `backups/<UTC-время>` с
+ограниченными правами. Переменная `BACKUP_REMOTE` включает копирование через
+`rsync` в заранее настроенное отдельное хранилище; ошибка копирования означает
+неуспешный запуск. Например, в cron укажите абсолютные пути и установите
+`BACKUP_REMOTE` на доступное по SSH хранилище. Настройте там хранение 30 дней и
+контроль успешности заданий; локальные копии самостоятельно не удаляются.
+Не реже раза в месяц проверяйте восстановление **в отдельной тестовой базе**:
+создайте чистую БД, выполните `pg_restore --no-owner --no-privileges -d <test_db>
+database.dump`, распакуйте `screenshots.tar.gz` в отдельный каталог и проверьте
+запуск приложения и файлы. Не восстанавливайте поверх рабочей БД без плана
+остановки и отдельной актуальной копии.
+
 ### Вариант A — весь сайт в Docker одной командой
 
 Нужен только запущенный Docker Desktop (Windows/macOS). Собирает образы,

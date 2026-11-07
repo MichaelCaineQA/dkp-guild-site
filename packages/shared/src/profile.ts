@@ -1,12 +1,64 @@
 import { z } from 'zod';
 import { COMBAT_ROLES, type CombatRole, type Rank } from './domain';
 import { weaponPairSchema, type Weapon } from './weapons';
+export const AVATARS = [
+  'AURORA',
+  'EMBER',
+  'FOREST',
+  'OCEAN',
+  'VIOLET',
+  'GOLD',
+  'IRON',
+  'ROSE',
+  'FOX',
+  'WOLF',
+  'DRAGON',
+  'OWL',
+  'RAVEN',
+  'TIGER',
+  'LION',
+  'PANDA',
+  'FROG',
+  'BUTTERFLY',
+  'PHOENIX',
+  'UNICORN',
+  'MOON',
+  'COMET',
+  'CRYSTAL',
+  'POTION',
+  'BOOK',
+  'BOW',
+  'SWORD',
+  'CROWN',
+  'MUSHROOM',
+  'LOTUS',
+  'SHELL',
+  'LIGHTNING',
+] as const;
+export type Avatar = (typeof AVATARS)[number];
+export const AVATAR_COLORS = [
+  'ORANGE',
+  'RED',
+  'PINK',
+  'PURPLE',
+  'INDIGO',
+  'BLUE',
+  'CYAN',
+  'TEAL',
+  'GREEN',
+  'LIME',
+  'GOLD',
+  'SLATE',
+] as const;
+export type AvatarColor = (typeof AVATAR_COLORS)[number];
 
 /** Самостоятельно меняются роль и оружия; ник и ранг здесь запрещены. */
 export const updateOwnProfileSchema = z
   .object({
     combatRole: z.enum(COMBAT_ROLES),
     weapons: weaponPairSchema,
+    avatar: z.enum(AVATARS).nullable().optional(),
+    avatarColor: z.enum(AVATAR_COLORS).nullable().optional(),
     comment: z.string().trim().min(3).max(500),
   })
   .strict();
@@ -23,6 +75,8 @@ export function canViewProfileGearScore(
   );
 }
 export interface PlayerProfile {
+  avatar?: Avatar | null;
+  avatarColor?: AvatarColor | null;
   gearScore?: { value: number; screenshotIds: string[]; createdAt: string } | null;
   id: string;
   nickname: string;

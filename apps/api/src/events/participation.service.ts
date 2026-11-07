@@ -91,6 +91,62 @@ export class ParticipationService {
   async get(id: string, memberId: string | null): Promise<ParticipationState> {
     return (await this.context(this.db, id, memberId)).state;
   }
+  async roster(id: string, canViewGs: boolean) {
+    const event = await this.db.event.findUnique({
+      where: { id },
+      select: { startsAt: true, scope: true, kpId: true, packId: true },
+    });
+    if (!event) throw new NotFoundException('Ивент не найден');
+    const [members, absences] = await Promise.all([
+      this.db.member.findMany({
+        select: {
+          id: true,
+          avatar: true,
+          avatarColor: true,
+          nickname: true,
+          rank: true,
+          combatRole: true,
+          weapons: true,
+          packId: true,
+          pack: { select: { name: true, kpId: true, kp: { select: { name: true } } } },
+          gsRecords: canViewGs
+            ? { orderBy: { createdAt: 'desc' }, take: 1, select: { value: true } }
+            : false,
+        },
+        orderBy: { nickname: 'asc' },
+      }),
+      this.db.absence.findMany({
+        where: {
+          status: 'ACTIVE',
+          OR: [
+            { eventId: id },
+            { eventId: null, dateFrom: { lte: event.startsAt }, dateTo: { gte: event.startsAt } },
+          ],
+        },
+        select: { memberId: true },
+      }),
+    ]);
+    const absent = new Set(absences.map((a) => a.memberId));
+    return members
+      .filter((m) =>
+        isEventInvitee(event, { id: m.id, packId: m.packId, kpId: m.pack?.kpId ?? null }),
+      )
+      .map((m) => ({
+        id: m.id,
+        avatar: m.avatar,
+        avatarColor: m.avatarColor,
+        nickname: m.nickname,
+        rank: m.rank,
+        weapons: m.weapons,
+        combatRole: m.combatRole,
+        packId: m.packId,
+        packName: m.pack?.name ?? null,
+        kpId: m.pack?.kpId ?? null,
+        kpName: m.pack?.kp.name ?? null,
+        gearScore: canViewGs ? (m.gsRecords?.[0]?.value ?? null) : null,
+        attending: !absent.has(m.id),
+      }));
+  }
   async update(id: string, memberId: string | null, body: unknown): Promise<{ ok: true }> {
     const parsed = participationInputSchema.safeParse(body);
     if (!parsed.success)

@@ -33,7 +33,10 @@ import {
   WeaponPicker,
 } from '../../components/ui';
 
+import { Avatar } from '../../components/avatar';
 interface RosterRow {
+  avatar?: string | null;
+  avatarColor?: string | null;
   weapons: Weapon[];
   id: string;
   nickname: string;
@@ -260,6 +263,11 @@ export default function RosterPage() {
             {sortedRows.slice(pageOffset, pageOffset + PAGE_SIZE).map((row) => (
               <Table.Row key={row.id} onClick={() => setSelected(row)}>
                 <Table.Td className="font-medium">
+                  <Avatar
+                    avatar={row.avatar}
+                    avatarColor={row.avatarColor}
+                    nickname={row.nickname}
+                  />
                   <a
                     className="text-accent hover:underline"
                     href={`/profiles/${encodeURIComponent(row.id)}`}

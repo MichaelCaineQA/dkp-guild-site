@@ -9,11 +9,15 @@ export function UserMenu() {
   const { user, loading, reload } = useSession();
   const router = useRouter();
   const [identity, setIdentity] = useState<DkpBalanceRow | null>(null);
+  const [avatar, setAvatar] = useState<string | null>(null);
+  const [avatarColor, setAvatarColor] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
     setIdentity(null);
+    setAvatar(null);
+    setAvatarColor(null);
     if (!user?.memberId) return;
     let active = true;
     const load = () =>
@@ -23,16 +27,29 @@ export function UserMenu() {
         })
         .catch(() => {});
     void load();
+    const loadAvatar = () => {
+      void api<{ avatar?: string | null; avatarColor?: string | null }>(
+        `/members/${encodeURIComponent(user.memberId!)}`,
+      )
+        .then((value) => {
+          if (active) setAvatar(value.avatar ?? null);
+          if (active) setAvatarColor(value.avatarColor ?? null);
+        })
+        .catch(() => {});
+    };
+    loadAvatar();
     const timer = setInterval(() => {
       void load();
     }, 60000);
     window.addEventListener('focus', load);
     window.addEventListener('dkp:changed', load);
+    window.addEventListener('profile:changed', loadAvatar);
     return () => {
       active = false;
       clearInterval(timer);
       window.removeEventListener('focus', load);
       window.removeEventListener('dkp:changed', load);
+      window.removeEventListener('profile:changed', loadAvatar);
     };
   }, [user?.memberId]);
   if (loading || !user || (!user.memberId && !user.isAdmin)) return null;
@@ -56,6 +73,8 @@ export function UserMenu() {
       name={identity?.memberName ?? user.username}
       memberId={user.memberId}
       balance={identity?.balance ?? null}
+      avatar={avatar}
+      avatarColor={avatarColor}
     >
       <Badge tone="accent">
         {user.isAdmin ? 'Админ' : user.rank ? RANK_LABELS[user.rank] : ''}
