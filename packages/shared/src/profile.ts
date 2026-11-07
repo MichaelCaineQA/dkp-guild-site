@@ -40,3 +40,8 @@ export interface PlayerProfile {
     createdAt: string;
   }>;
 }
+
+/** GS в общем составе/карточке/виджете команды — только Главе/Админу. */
+export function canViewGuildGearScore(actor: import('./permissions').PermissionActor): boolean {
+  return !!actor.isAdmin || actor.rank === 'GUILD_LEADER' || actor.rank === 'ADMIN';
+}

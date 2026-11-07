@@ -4,6 +4,7 @@ import { EventsService } from './events.service';
 
 interface EventRecord {
   id: string;
+  name: string;
   eventTypeId: string;
   mode: string;
   status: string;
@@ -18,6 +19,7 @@ interface EventRecord {
 
 function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
   const events: EventRecord[] = seed.map((e) => ({
+    name: 'Сбор гильдии',
     eventTypeId: 'et-1',
     mode: 'PVE',
     status: 'PLANNED',
@@ -66,6 +68,7 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
       create: async ({ data }) => {
         const created: EventRecord = {
           id: `e-${events.length + 1}`,
+          name: data.name,
           eventTypeId: data.eventTypeId,
           mode: data.mode,
           status: 'PLANNED',
@@ -117,6 +120,7 @@ const ACTOR: EventsActor = { memberId: 'm-leader', isAdmin: false, rank: 'GUILD_
 
 function createBody(overrides: Record<string, unknown> = {}) {
   return {
+    name: 'Сбор гильдии',
     eventTypeId: 'et-1',
     mode: 'PVE',
     startsAt: '2026-03-03T17:00:00Z',
@@ -138,13 +142,23 @@ describe('EventsService.create', () => {
     expect(audit[0]!.comment).toContain('плата 10 ДКП');
   });
 
+  it('название сохраняется независимо от типа и читается в списке/карточке', async () => {
+    const { db, events } = makeDb();
+    const service = new EventsService(db);
+    const { id } = await service.create(createBody({ name: 'Вечерний поход' }), ACTOR);
+    expect(events[0].name).toBe('Вечерний поход');
+    expect((await service.getOne(id)).name).toBe('Вечерний поход');
+    await service.update(id, { name: 'Новый поход' }, ACTOR, 'GUILD_LEADER');
+    expect((await service.getOne(id)).name).toBe('Новый поход');
+  });
+
   it('неизвестный тип ивента — 404', async () => {
     const { db } = makeDb();
     const service = new EventsService(db);
 
-    await expect(
-      service.create(createBody({ eventTypeId: 'et-x' }), ACTOR),
-    ).rejects.toThrow(NotFoundException);
+    await expect(service.create(createBody({ eventTypeId: 'et-x' }), ACTOR)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('неизвестный РЛ — 404', async () => {
@@ -227,7 +241,12 @@ describe('EventsService.update', () => {
     const service = new EventsService(db);
 
     await expect(
-      service.update('e-1', { place: 'Место сбора' }, { memberId: 'm-rl', isAdmin: false }, 'MEMBER'),
+      service.update(
+        'e-1',
+        { place: 'Место сбора' },
+        { memberId: 'm-rl', isAdmin: false },
+        'MEMBER',
+      ),
     ).resolves.toEqual({ id: 'e-1' });
 
     await expect(
@@ -306,30 +325,46 @@ describe('назначенный РЛ и финальные состояния',
   const rl: EventsActor = { memberId: 'm-rl', rank: 'MEMBER', isAdmin: false };
   it('право РЛ редактировать свой ивент не позволяет переназначить РЛ', async () => {
     const { db, events, audit } = makeDb([{ id: 'e1' }]);
-    await expect(new EventsService(db).update('e1', { raidLeadId: 'other' }, rl, 'MEMBER')).rejects.toThrow(ForbiddenException);
-    expect(events[0].raidLeadId).toBe('m-rl'); expect(audit).toHaveLength(0);
+    await expect(
+      new EventsService(db).update('e1', { raidLeadId: 'other' }, rl, 'MEMBER'),
+    ).rejects.toThrow(ForbiddenException);
+    expect(events[0].raidLeadId).toBe('m-rl');
+    expect(audit).toHaveLength(0);
   });
   it('РЛ удаляет свой запланированный ивент, чужой остаётся без изменений', async () => {
     const { db, events, audit } = makeDb([{ id: 'own' }, { id: 'other', raidLeadId: 'other' }]);
     const service = new EventsService(db);
     await expect(service.deleteOne('other', rl)).rejects.toThrow(ForbiddenException);
-    expect(events).toHaveLength(2); expect(audit).toHaveLength(0);
+    expect(events).toHaveLength(2);
+    expect(audit).toHaveLength(0);
     await service.deleteOne('own', rl);
-    expect(events.map(e => e.id)).toEqual(['other']); expect(audit).toHaveLength(1);
+    expect(events.map((e) => e.id)).toEqual(['other']);
+    expect(audit).toHaveLength(1);
   });
   it('РЛ не удаляет серию, в которой есть чужой ивент', async () => {
-    const { db, events, audit } = makeDb([{ id: 'own', seriesId: 's' }, { id: 'other', seriesId: 's', raidLeadId: 'other' }]);
+    const { db, events, audit } = makeDb([
+      { id: 'own', seriesId: 's' },
+      { id: 'other', seriesId: 's', raidLeadId: 'other' },
+    ]);
     await expect(new EventsService(db).deleteSeries('s', rl)).rejects.toThrow(ForbiddenException);
-    expect(events).toHaveLength(2); expect(audit).toHaveLength(0);
+    expect(events).toHaveLength(2);
+    expect(audit).toHaveLength(0);
   });
   it('РЛ удаляет только полностью свою запланированную серию', async () => {
-    const { db, events, audit } = makeDb([{ id: 'own', seriesId: 's' }, { id: 'other-series', seriesId: 'other', raidLeadId: 'other' }]);
+    const { db, events, audit } = makeDb([
+      { id: 'own', seriesId: 's' },
+      { id: 'other-series', seriesId: 'other', raidLeadId: 'other' },
+    ]);
     expect(await new EventsService(db).deleteSeries('s', rl)).toEqual({ deleted: 1 });
-    expect(events.map(e => e.id)).toEqual(['other-series']); expect(audit).toHaveLength(1);
+    expect(events.map((e) => e.id)).toEqual(['other-series']);
+    expect(audit).toHaveLength(1);
   });
-  it.each(['FINISHED', 'CANCELLED'])('параметры %s не меняются даже Главой', async status => {
+  it.each(['FINISHED', 'CANCELLED'])('параметры %s не меняются даже Главой', async (status) => {
     const { db, events, audit } = makeDb([{ id: 'e1', status }]);
-    await expect(new EventsService(db).update('e1', { place: 'Новое место' }, ACTOR, 'GUILD_LEADER')).rejects.toThrow(ConflictException);
-    expect(events[0].place).toBeNull(); expect(audit).toHaveLength(0);
+    await expect(
+      new EventsService(db).update('e1', { place: 'Новое место' }, ACTOR, 'GUILD_LEADER'),
+    ).rejects.toThrow(ConflictException);
+    expect(events[0].place).toBeNull();
+    expect(audit).toHaveLength(0);
   });
 });

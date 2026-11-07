@@ -17,6 +17,7 @@ const CONFIG = {
 
 function seriesInput(partial: Partial<Parameters<typeof generateSeriesEvents>[0]> = {}) {
   return createEventSeriesSchema.parse({
+    name: 'Сбор гильдии',
     eventTypeId: 'et-1',
     mode: 'PVE',
     startsAt: '2026-03-03T17:00:00Z', // вторник
@@ -36,10 +37,14 @@ describe('generateSeriesEvents', () => {
     expect(events).toHaveLength(8);
     const days = events.map((e) => e.startsAt.toISOString().slice(0, 10));
     expect(days).toEqual([
-      '2026-03-03', '2026-03-05', // неделя 1: вт, чт
-      '2026-03-10', '2026-03-12',
-      '2026-03-17', '2026-03-19',
-      '2026-03-24', '2026-03-26',
+      '2026-03-03',
+      '2026-03-05', // неделя 1: вт, чт
+      '2026-03-10',
+      '2026-03-12',
+      '2026-03-17',
+      '2026-03-19',
+      '2026-03-24',
+      '2026-03-26',
     ]);
     // Время суток и длительность — как у первого
     for (const event of events) {
@@ -74,6 +79,7 @@ describe('generateSeriesEvents', () => {
 describe('createEventApiSchema', () => {
   it('принимает валидный ивент, плата положительная', () => {
     const parsed = createEventApiSchema.parse({
+      name: 'Сбор гильдии',
       eventTypeId: 'et-1',
       mode: 'PVP',
       startsAt: '2026-03-03T17:00:00Z',
@@ -88,6 +94,7 @@ describe('createEventApiSchema', () => {
   it('нулевая/отрицательная плата отвергается (решение 1)', () => {
     expect(() =>
       createEventApiSchema.parse({
+        name: 'Сбор гильдии',
         eventTypeId: 'et-1',
         mode: 'PVE',
         startsAt: '2026-03-03T17:00:00Z',
@@ -115,6 +122,7 @@ describe('eventsQuerySchema', () => {
     const parsed = eventsQuerySchema.parse({
       from: '2026-03-01',
       to: '2026-04-01',
+      name: 'Сбор гильдии',
       eventTypeId: 'et-1',
       mode: 'PVE',
     });
@@ -143,8 +151,16 @@ describe('splitIntoPhaseSegments', () => {
       CONFIG,
     );
     expect(segments).toHaveLength(2);
-    expect(segments[0]).toMatchObject({ phase: 'DAY', startsAt: new Date('2026-01-01T01:20:00Z'), endsAt: new Date('2026-01-01T01:30:00Z') });
-    expect(segments[1]).toMatchObject({ phase: 'NIGHT', startsAt: new Date('2026-01-01T01:30:00Z'), endsAt: new Date('2026-01-01T01:50:00Z') });
+    expect(segments[0]).toMatchObject({
+      phase: 'DAY',
+      startsAt: new Date('2026-01-01T01:20:00Z'),
+      endsAt: new Date('2026-01-01T01:30:00Z'),
+    });
+    expect(segments[1]).toMatchObject({
+      phase: 'NIGHT',
+      startsAt: new Date('2026-01-01T01:30:00Z'),
+      endsAt: new Date('2026-01-01T01:50:00Z'),
+    });
   });
 
   it('длинный ивент через несколько циклов — фазы чередуются', () => {
@@ -168,10 +184,25 @@ describe('splitIntoPhaseSegments', () => {
 
   it('пустой/перевёрнутый интервал — без сегментов', () => {
     expect(
-      splitIntoPhaseSegments(new Date('2026-01-01T01:00:00Z'), new Date('2026-01-01T01:00:00Z'), CONFIG),
+      splitIntoPhaseSegments(
+        new Date('2026-01-01T01:00:00Z'),
+        new Date('2026-01-01T01:00:00Z'),
+        CONFIG,
+      ),
     ).toEqual([]);
     expect(
-      splitIntoPhaseSegments(new Date('2026-01-01T01:00:00Z'), new Date('2026-01-01T00:00:00Z'), CONFIG),
+      splitIntoPhaseSegments(
+        new Date('2026-01-01T01:00:00Z'),
+        new Date('2026-01-01T00:00:00Z'),
+        CONFIG,
+      ),
     ).toEqual([]);
   });
+});
+
+it('название обязательно, обрезается по краям и не может быть пустым', () => {
+  const base = seriesInput();
+  expect(createEventApiSchema.parse({ ...base, name: '  Сбор  ' }).name).toBe('Сбор');
+  for (const name of ['', ' ', undefined, 'x'.repeat(121)])
+    expect(createEventApiSchema.safeParse({ ...base, name }).success).toBe(false);
 });

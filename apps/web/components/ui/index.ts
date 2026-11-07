@@ -6,3 +6,4 @@ export { Stack } from './layout';
 export { WeaponPicker } from './weapon-picker';
 
 export * from './modal';
+export * from './dashboard';

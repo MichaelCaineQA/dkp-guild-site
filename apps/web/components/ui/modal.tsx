@@ -4,10 +4,14 @@ export function Modal({
   title,
   onClose,
   children,
+  wide = false,
+  heading = true,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  wide?: boolean;
+  heading?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -18,9 +22,9 @@ export function Modal({
       ref={dialog}
       aria-label={title}
       onCancel={onClose}
-      className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-xl border border-line bg-surface p-6 text-primary backdrop:bg-black/60"
+      className={`m-auto max-h-[90dvh] w-[calc(100%-2rem)] ${wide ? 'max-w-xl' : 'max-w-sm'} overflow-y-auto rounded-xl border border-line bg-surface p-6 text-primary backdrop:bg-black/60`}
     >
-      <h2 className="mb-4 text-xl font-semibold">{title}</h2>
+      {heading && <h2 className="mb-4 text-xl font-semibold">{title}</h2>}
       {children}
     </dialog>
   );

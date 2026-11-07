@@ -1,4 +1,10 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   EVENT_TRANSITIONS,
   can,
@@ -21,6 +27,7 @@ import type { AuditWriter } from '../members/members.service';
 
 /** Строка списка/календаря. */
 export interface EventRow {
+  name: string;
   id: string;
   eventTypeId: string;
   eventTypeName: string;
@@ -61,6 +68,7 @@ export interface EventsDb {
     }): Promise<
       Array<{
         id: string;
+        name: string;
         eventTypeId: string;
         mode: string;
         status: string;
@@ -78,9 +86,12 @@ export interface EventsDb {
     findUnique(args: {
       where: { id: string };
       include: { eventType: { select: { name: true } }; raidLead: { select: { nickname: true } } };
-    }): Promise<(EventDetail & { eventType: { name: string }; raidLead: { nickname: string } }) | null>;
+    }): Promise<
+      (EventDetail & { eventType: { name: string }; raidLead: { nickname: string } }) | null
+    >;
     create(args: {
       data: {
+        name: string;
         eventTypeId: string;
         mode: string;
         startsAt: Date;
@@ -92,10 +103,7 @@ export interface EventsDb {
         seriesId?: string;
       };
     }): Promise<{ id: string; startsAt: Date }>;
-    update(args: {
-      where: { id: string };
-      data: Record<string, unknown>;
-    }): Promise<{ id: string }>;
+    update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<{ id: string }>;
     deleteMany(args: { where: { seriesId: string; status: string } }): Promise<{ count: number }>;
     delete(args: { where: { id: string } }): Promise<unknown>;
     count(args: { where: { seriesId: string; status: { not: string } } }): Promise<number>;
@@ -158,13 +166,19 @@ export class EventsService {
 
   /** Создание ивента (events.manage — офицеры+). */
   async create(body: unknown, actor: EventsActor): Promise<{ id: string }> {
-    const input: CreateEventApiInput = createEventApiSchema.parse(body);
+    const parsed = createEventApiSchema.safeParse(body);
+    if (!parsed.success)
+      throw new BadRequestException(
+        'Укажите название, тип, время, РЛ и положительную целую плату ДКП',
+      );
+    const input: CreateEventApiInput = parsed.data;
     await this.mustExistEventType(input.eventTypeId);
     await this.mustExistMember(input.raidLeadId);
     this.assertValidRange(input.startsAt, input.endsAt);
 
     const created = await this.db.event.create({
       data: {
+        name: input.name,
         eventTypeId: input.eventTypeId,
         mode: input.mode,
         startsAt: input.startsAt,
@@ -183,8 +197,13 @@ export class EventsService {
    * Серия по шаблону (issue #8): «вт/чт 20:00 × N недель» одним действием.
    * Все ивенты серии несут общий seriesId — удаляются тоже целиком.
    */
-  async createSeries(body: unknown, actor: EventsActor): Promise<{ seriesId: string; created: number }> {
-    const input: CreateEventSeriesInput = createEventSeriesSchema.parse(body);
+  async createSeries(
+    body: unknown,
+    actor: EventsActor,
+  ): Promise<{ seriesId: string; created: number }> {
+    const parsed = createEventSeriesSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('Проверьте название и параметры серии');
+    const input: CreateEventSeriesInput = parsed.data;
     await this.mustExistEventType(input.eventTypeId);
     await this.mustExistMember(input.raidLeadId);
     this.assertValidRange(input.startsAt, input.endsAt);
@@ -194,6 +213,7 @@ export class EventsService {
     for (const slot of generateSeriesEvents(input)) {
       await this.db.event.create({
         data: {
+          name: input.name,
           eventTypeId: input.eventTypeId,
           mode: input.mode,
           startsAt: slot.startsAt,
@@ -227,8 +247,10 @@ export class EventsService {
           raidLead: { select: { nickname: true } },
         },
       });
-      if (!events.length || !events.every(event =>
-        canManageEvent({ ...actor, rank: actor.rank ?? null }, event))) {
+      if (
+        !events.length ||
+        !events.every((event) => canManageEvent({ ...actor, rank: actor.rank ?? null }, event))
+      ) {
         throw new ForbiddenException('Удалять можно только свою серию ивентов');
       }
     }
@@ -258,12 +280,7 @@ export class EventsService {
       throw new ConflictException('Удалить можно только запланированный ивент');
     }
     await this.db.event.delete({ where: { id } });
-    await this.audit(
-      actor,
-      'EVENT_DELETE',
-      id,
-      `Удалён ивент ${event.startsAt.toISOString()}`,
-    );
+    await this.audit(actor, 'EVENT_DELETE', id, `Удалён ивент ${event.startsAt.toISOString()}`);
     return { ok: true };
   }
 
@@ -272,8 +289,15 @@ export class EventsService {
    * этого ивента — точечная проверка can() с target.raidLeadId (2.6).
    * Плата ДКП в схеме отсутствует — попытка её передать отбрасывается zod'ом.
    */
-  async update(id: string, body: unknown, actor: EventsActor, actorRank: Rank | null): Promise<{ id: string }> {
-    const input: UpdateEventInput = updateEventSchema.parse(body);
+  async update(
+    id: string,
+    body: unknown,
+    actor: EventsActor,
+    actorRank: Rank | null,
+  ): Promise<{ id: string }> {
+    const parsed = updateEventSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('Некорректные поля ивента');
+    const input: UpdateEventInput = parsed.data;
     const event = await this.mustExist(id);
 
     if (!canManageEvent({ ...actor, rank: actorRank }, event)) {
@@ -283,7 +307,8 @@ export class EventsService {
       throw new ConflictException('Завершённый или отменённый ивент доступен только для просмотра');
     }
     if (
-      input.raidLeadId !== undefined && input.raidLeadId !== event.raidLeadId &&
+      input.raidLeadId !== undefined &&
+      input.raidLeadId !== event.raidLeadId &&
       !can({ ...actor, rank: actorRank }, 'events.manage')
     ) {
       throw new ForbiddenException('Назначать РЛ могут только Глава, Админ и Офицер');
@@ -308,13 +333,18 @@ export class EventsService {
   }
 
   /** Смена статуса: planned → running → finished / cancelled (план 2.1). */
-  async changeStatus(id: string, body: unknown, actor: EventsActor): Promise<{ id: string; status: string }> {
+  async changeStatus(
+    id: string,
+    body: unknown,
+    actor: EventsActor,
+  ): Promise<{ id: string; status: string }> {
     const input: ChangeEventStatusInput = changeEventStatusSchema.parse(body);
     const event = await this.mustExist(id);
 
-    const permitted = input.status === 'CANCELLED'
-      ? canManageEvent({ ...actor, rank: actor.rank ?? null }, event)
-      : can({ ...actor, rank: actor.rank ?? null }, 'events.conduct', event);
+    const permitted =
+      input.status === 'CANCELLED'
+        ? canManageEvent({ ...actor, rank: actor.rank ?? null }, event)
+        : can({ ...actor, rank: actor.rank ?? null }, 'events.conduct', event);
     if (!permitted) throw new ForbiddenException('Нет права на изменение статуса ивента');
 
     const allowed = EVENT_TRANSITIONS[event.status] ?? [];
@@ -323,12 +353,7 @@ export class EventsService {
     }
 
     await this.db.event.update({ where: { id }, data: { status: input.status } });
-    await this.audit(
-      actor,
-      'EVENT_STATUS_CHANGE',
-      id,
-      `Статус ${event.status} → ${input.status}`,
-    );
+    await this.audit(actor, 'EVENT_STATUS_CHANGE', id, `Статус ${event.status} → ${input.status}`);
 
     // Закрытие ивента: отсутствующим по уважительной — авто-отметка
     // EXCUSED_ABSENCE (план 2.3, issue #11). Хук опционален: без него
@@ -351,6 +376,7 @@ export class EventsService {
   onEventFinished?: (eventId: string, startsAt: Date) => Promise<number>;
 
   private toRow(event: {
+    name: string;
     id: string;
     eventTypeId: string;
     mode: string;
@@ -366,6 +392,7 @@ export class EventsService {
   }): EventRow {
     return {
       id: event.id,
+      name: event.name,
       eventTypeId: event.eventTypeId,
       eventTypeName: event.eventType.name,
       mode: event.mode,

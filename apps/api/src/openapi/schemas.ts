@@ -74,6 +74,7 @@ const weapons = {
 };
 const roster = { id: str, nickname: str, rank, combatRole: role, weapons, discord: nullable(str) };
 const event = {
+  name: str,
   id: str,
   eventTypeId: str,
   eventTypeName: str,
@@ -108,6 +109,28 @@ const settings = Object.fromEntries(
 
 export const schemas: Record<string, SchemaObject> = {
   ...generated,
+  DashboardTeamMember: object(
+    {
+      id: str,
+      nickname: str,
+      rank,
+      combatRole: role,
+      weapons,
+      leader: { type: 'boolean' },
+      gearScore: nullable(num),
+    },
+    ['id', 'nickname', 'rank', 'combatRole', 'weapons', 'leader'],
+  ),
+  Dashboard: object({
+    generatedAt: date,
+    events: array(ref('Event')),
+    team: nullable(object({ id: str, name: str, members: array(ref('DashboardTeamMember')) })),
+    auction: { type: 'object', nullable: true, enum: [null] },
+    audit: { ...array(ref('AuditEntry')), nullable: true },
+    gameTime: nullable(
+      object({ gameTimeAnchor: date, gameTimeDayMinutes: num, gameTimeNightMinutes: num }),
+    ),
+  }),
   Ok: object({ ok: { type: 'boolean', enum: [true] } }),
   Id: object({ id: str }),
   Error: object({ statusCode: num, message: { oneOf: [str, array(str)] }, error: str }, [
