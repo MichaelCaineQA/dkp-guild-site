@@ -55,11 +55,9 @@ it('показывает журнал, фильтрует и сбрасывае�
   await waitFor(() =>
     expect(api).toHaveBeenCalledWith('/audit?limit=50&offset=0&actorMemberId=m1'),
   );
-  fireEvent.change(screen.getByLabelText('Действие'), { target: { value: 'ROLE_CHANGE' } });
+  fireEvent.change(screen.getByLabelText('Сущность'), { target: { value: 'Member' } });
   await waitFor(() =>
-    expect(api).toHaveBeenCalledWith(
-      '/audit?limit=50&offset=0&actorMemberId=m1&action=ROLE_CHANGE',
-    ),
+    expect(api).toHaveBeenCalledWith('/audit?limit=50&offset=0&actorMemberId=m1&entityType=Member'),
   );
 });
 
@@ -67,4 +65,61 @@ it('показывает ошибку загрузки', async () => {
   vi.mocked(api).mockRejectedValue(new Error('offline'));
   render(<AuditPage />);
   expect(await screen.findByRole('alert')).toBeDefined();
+});
+
+it('лента без ссылок и счётчика, Система, размеры и совместные даты', async () => {
+  render(<AuditPage />);
+  const feed = await screen.findByRole('list', { name: 'Записи журнала' });
+  expect(feed.querySelectorAll('a')).toHaveLength(0);
+  expect(screen.queryByText(/Найдено записей/)).toBeNull();
+  fireEvent.change(screen.getByLabelText('Записей на странице'), { target: { value: '10' } });
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/audit?limit=10&offset=0'));
+  fireEvent.change(screen.getByLabelText('Кто'), { target: { value: '__system__' } });
+  fireEvent.change(screen.getByLabelText('Сущность'), { target: { value: 'Event' } });
+  fireEvent.change(screen.getByLabelText('С'), { target: { value: '2026-11-01T12:00' } });
+  fireEvent.change(screen.getByLabelText('По'), { target: { value: '2026-11-07T12:00' } });
+  await waitFor(() => {
+    const path = vi
+      .mocked(api)
+      .mock.calls.filter(([p]) => p.startsWith('/audit?'))
+      .at(-1)![0];
+    const q = new URL(path, 'http://test').searchParams;
+    expect(Object.fromEntries(q)).toEqual({
+      limit: '10',
+      offset: '0',
+      system: 'true',
+      entityType: 'Event',
+      from: new Date('2026-11-01T12:00').toISOString(),
+      to: new Date('2026-11-07T12:00').toISOString(),
+    });
+  });
+  fireEvent.change(screen.getByLabelText('Записей на странице'), { target: { value: '100' } });
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/audit\?limit=100&offset=0&system=true&entityType=Event/),
+    ),
+  );
+});
+it('запись без автора показывает Систему', async () => {
+  vi.mocked(api).mockImplementation(async (path) =>
+    path === '/members'
+      ? []
+      : {
+          entries: [
+            {
+              id: 'sys',
+              actorName: null,
+              entityType: 'Event',
+              entityId: 'e',
+              action: 'EVENT_STATUS_CHANGE',
+              comment: 'Автоматическое завершение',
+              createdAt: '2026-11-07T12:00:00Z',
+            },
+          ],
+          total: 1,
+        },
+  );
+  render(<AuditPage />);
+  const feed = await screen.findByRole('list', { name: 'Записи журнала' });
+  expect(feed.textContent).toContain('Система');
 });
