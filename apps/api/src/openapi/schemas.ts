@@ -33,6 +33,7 @@ const inputs: Record<string, unknown> = {
   CreateEventSeries: shared.createEventSeriesSchema,
   ChangeEventStatus: shared.changeEventStatusSchema,
   EventsQuery: shared.eventsQuerySchema,
+  WeekQuery: shared.weekQuerySchema,
   SubmitCheckIn: shared.submitCheckInSchema,
   SetAttendance: shared.setAttendanceSchema,
   ManualCheckIn: shared.manualCheckInSchema,
@@ -109,6 +110,7 @@ const settings = Object.fromEntries(
 
 export const schemas: Record<string, SchemaObject> = {
   ...generated,
+  WeekEvent: object({ ...event, invitedCount: num, attendingCount: num }),
   DashboardTeamMember: object(
     {
       id: str,

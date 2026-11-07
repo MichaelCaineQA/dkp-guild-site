@@ -9,3 +9,5 @@ export * from './modal';
 export * from './dashboard';
 export * from './settings';
 export * from './navigation';
+
+export * from './schedule';

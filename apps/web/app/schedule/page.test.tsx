@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SchedulePage from './page';
 
@@ -74,6 +74,8 @@ describe('SchedulePage', () => {
           windowClosesAt: '2026-03-03T17:00:00Z',
         };
       }
+      if (path.startsWith('/schedule/week'))
+        return [eventFixture({ invitedCount: 12, attendingCount: 10 })];
       if (path.startsWith('/events')) {
         return [eventFixture()];
       }
@@ -91,7 +93,7 @@ describe('SchedulePage', () => {
     cleanup();
   });
 
-  it('рядовой видит календарь, ближайшие и карточку ивента, без кнопок управления', async () => {
+  it('рядовой видит неделю, счётчик и подсказку выбора, без кнопок управления', async () => {
     mockSession({
       userId: 'u3',
       username: 'test-member',
@@ -102,9 +104,10 @@ describe('SchedulePage', () => {
 
     render(<SchedulePage />);
 
-    expect(await screen.findByText('Ближайшие ивенты')).toBeDefined();
+    expect(await screen.findByText('10/12 · пойдут / приглашены')).toBeDefined();
     // «Гильдбосс» встречается в option фильтра и в списке ближайших — берём все.
     expect(screen.getAllByText('Гильдбосс').length).toBeGreaterThan(1);
+    expect(screen.getByText('Выберите событие из списка')).toBeDefined();
     expect(screen.getByText(/РЛ: РЛ · 10 ДКП/)).toBeDefined();
     expect(screen.getAllByText('→').length).toBeGreaterThan(0);
     expect(screen.queryByText('Начать ивент')).toBeNull();
@@ -125,7 +128,7 @@ describe('SchedulePage', () => {
     render(<SchedulePage />);
 
     // Ждём загрузки списка, затем кликаем по «Гильдбосс» в ближайших.
-    await screen.findByText('Ближайшие ивенты');
+    await screen.findByText('10/12 · пойдут / приглашены');
     await screen.findByText(/РЛ: РЛ · 10 ДКП/);
     expect(screen.getByRole('button', { name: 'Создать ивент' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Создать ивент' })).toBeDefined();
@@ -162,4 +165,41 @@ describe('SchedulePage', () => {
         expect(screen.queryByRole('button', { name: 'Создать ивент' })).toBeNull();
     },
   );
+  it('переключает неделю и календарь, очищает выбранную карточку и показывает пустую неделю', async () => {
+    mockSession({ userId: 'u', memberId: 'm3', rank: 'MEMBER', isAdmin: false });
+    render(<SchedulePage />);
+    await screen.findByText('10/12 · пойдут / приглашены');
+    fireEvent.click(screen.getByRole('button', { name: /10\/12/ }));
+    expect(await screen.findByText('Фазы игрового времени на длительность ивента:')).toBeDefined();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Календарь' }));
+    await waitFor(() => expect(api).toHaveBeenCalledWith(expect.stringMatching(/^\/events\?/)));
+    expect(screen.queryByText('Фазы игрового времени на длительность ивента:')).toBeNull();
+    await screen.findByRole('button', { name: 'Следующий месяц' });
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path.startsWith('/schedule/week')) return [];
+      if (path === '/event-types') return [];
+      if (path === '/settings/game-time') return GAME_TIME;
+      return [];
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'События' }));
+    await screen.findByText('На этой неделе событий нет');
+    const before = vi
+      .mocked(api)
+      .mock.calls.filter(([path]) => path.startsWith('/schedule/week'))
+      .at(-1)![0];
+    fireEvent.click(screen.getByRole('button', { name: 'Следующая неделя' }));
+    await waitFor(() => {
+      const after = vi
+        .mocked(api)
+        .mock.calls.filter(([path]) => path.startsWith('/schedule/week'))
+        .at(-1)![0];
+      expect(after).not.toBe(before);
+      const first = new URL(before, 'http://test');
+      const second = new URL(after, 'http://test');
+      expect(
+        +new Date(second.searchParams.get('from')!) - +new Date(first.searchParams.get('from')!),
+      ).toBeGreaterThan(6 * 86400000);
+    });
+  });
 });

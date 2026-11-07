@@ -17,3 +17,5 @@ export * from './weapons';
 
 export * from './dashboard';
 export * from './audit-labels';
+
+export * from './week';

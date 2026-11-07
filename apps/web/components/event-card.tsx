@@ -10,7 +10,7 @@ import type { DashboardEvent as EventRow } from '@dkp/shared';
 import { api } from '../lib/api';
 import { CheckInPanel, RaidLeadCodePanel } from './checkin-panels';
 import { AbsentMembersPanel } from './absent-members-panel';
-import { Badge, Button, Modal } from './ui';
+import { Badge, Button, Card, Modal } from './ui';
 const MODE_LABELS: Record<EventMode, string> = { PVE: 'PvE', PVP: 'PvP' };
 const STATUS_LABELS: Record<string, string> = {
   PLANNED: 'Запланирован',
@@ -26,7 +26,9 @@ export function EventCard({
   canConduct,
   onClose,
   onChanged,
+  presentation = 'dialog',
 }: {
+  presentation?: 'dialog' | 'panel';
   event: EventRow;
   gameTime: GamePhaseConfig | null;
   canManage: boolean;
@@ -61,8 +63,8 @@ export function EventCard({
   const segments = gameTime ? splitIntoPhaseSegments(startsAt, endsAt, gameTime) : [];
   const totalMs = endsAt.getTime() - startsAt.getTime();
 
-  return (
-    <Modal title={event.name || event.eventTypeName} onClose={onClose} wide heading={false}>
+  const content = (
+    <>
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 className="text-xl font-semibold">
@@ -176,6 +178,13 @@ export function EventCard({
         </p>
       )}
       {message && <p className="mt-2 text-sm">{message}</p>}
+    </>
+  );
+  return presentation === 'panel' ? (
+    <Card>{content}</Card>
+  ) : (
+    <Modal title={event.name || event.eventTypeName} onClose={onClose} wide heading={false}>
+      {content}
     </Modal>
   );
 }

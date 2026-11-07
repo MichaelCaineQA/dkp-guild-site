@@ -1,12 +1,14 @@
 'use client';
-
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   EVENT_MODES,
   can,
   canManageEvent,
+  getLocalWeekBounds,
+  localDayKey,
   splitIntoPhaseSegments,
   type DashboardEvent as EventRow,
+  type WeekEvent,
   type EventMode,
   type GamePhaseConfig,
 } from '@dkp/shared';
@@ -15,7 +17,6 @@ import { api } from '../../lib/api';
 import { EventCard } from '../../components/event-card';
 import { CreateEventDialog } from '../../components/create-event-dialog';
 import {
-  Badge,
   Button,
   Card,
   ErrorText,
@@ -24,100 +25,97 @@ import {
   Page,
   PageHeader,
   Select,
-  SectionTitle,
+  ScheduleColumns,
+  WeekEventButton,
 } from '../../components/ui';
-
 interface EventTypeRow {
   id: string;
   name: string;
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  PLANNED: 'Запланирован',
-  RUNNING: 'Идёт',
-  FINISHED: 'Завершён',
-  CANCELLED: 'Отменён',
-};
-
 const MODE_LABELS: Record<EventMode, string> = { PVE: 'PvE', PVP: 'PvP' };
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
-/** Расписание (issue #8): календарь с игровыми фазами + список ближайших. */
 export default function SchedulePage() {
   const { user, loading: sessionLoading } = useSession();
+  const [view, setView] = useState<'week' | 'calendar'>('week');
   const [events, setEvents] = useState<EventRow[]>([]);
+  const [weekEvents, setWeekEvents] = useState<WeekEvent[]>([]);
   const [eventTypes, setEventTypes] = useState<EventTypeRow[]>([]);
   const [gameTime, setGameTime] = useState<GamePhaseConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<EventRow | null>(null);
+  const [pending, setPending] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createdMessage, setCreatedMessage] = useState('');
-
-  // Месяц календаря: первый день просматриваемого месяца.
+  const [weekCursor, setWeekCursor] = useState(() => getLocalWeekBounds(new Date()).start);
   const [monthCursor, setMonthCursor] = useState(() => {
     const now = new Date();
-    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [typeFilter, setTypeFilter] = useState('');
   const [modeFilter, setModeFilter] = useState('');
-
-  const canManage = useMemo(
-    () =>
-      user &&
-      can({ rank: user.rank, isAdmin: user.isAdmin, memberId: user.memberId }, 'events.manage'),
-    [user],
-  );
-
+  const generation = useRef(0);
+  const canManage = !!user && can(user, 'events.manage');
   const load = useCallback(async () => {
-    const from = new Date(monthCursor.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const to = new Date(monthCursor.getTime() + 45 * 24 * 60 * 60 * 1000);
+    const request = ++generation.current;
+    setPending(true);
+    setError(null);
+    const week = getLocalWeekBounds(weekCursor);
+    const from =
+      view === 'week'
+        ? week.start
+        : new Date(monthCursor.getFullYear(), monthCursor.getMonth(), -6);
+    const to =
+      view === 'week'
+        ? week.end
+        : new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 14);
     const params = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
-    if (typeFilter) {
-      params.set('eventTypeId', typeFilter);
-    }
-    if (modeFilter) {
-      params.set('mode', modeFilter);
-    }
+    if (typeFilter) params.set('eventTypeId', typeFilter);
+    if (modeFilter) params.set('mode', modeFilter);
     try {
-      const [eventsData, typesData, gameTimeData] = await Promise.all([
-        api<EventRow[]>(`/events?${params.toString()}`),
+      const [data, types, time] = await Promise.all([
+        api<WeekEvent[] | EventRow[]>(
+          `${view === 'week' ? '/schedule/week' : '/events'}?${params}`,
+        ),
         api<EventTypeRow[]>('/event-types'),
         api<{ gameTimeAnchor: string; gameTimeDayMinutes: number; gameTimeNightMinutes: number }>(
           '/settings/game-time',
         ),
       ]);
-      setEvents(eventsData);
-      setEventTypes(typesData);
+      if (request !== generation.current) return;
+      setEvents(data);
+      setWeekEvents(view === 'week' ? (data as WeekEvent[]) : []);
+      setEventTypes(types);
       setGameTime({
-        anchor: new Date(gameTimeData.gameTimeAnchor),
-        dayMinutes: gameTimeData.gameTimeDayMinutes,
-        nightMinutes: gameTimeData.gameTimeNightMinutes,
+        anchor: new Date(time.gameTimeAnchor),
+        dayMinutes: time.gameTimeDayMinutes,
+        nightMinutes: time.gameTimeNightMinutes,
       });
-      setError(null);
     } catch {
-      setError('Не удалось загрузить расписание');
+      if (request === generation.current) {
+        setError('Не удалось загрузить расписание');
+        setEvents([]);
+        setWeekEvents([]);
+      }
+    } finally {
+      if (request === generation.current) setPending(false);
     }
-  }, [monthCursor, typeFilter, modeFilter]);
-
+  }, [view, weekCursor, monthCursor, typeFilter, modeFilter]);
   useEffect(() => {
-    if (!sessionLoading && (user?.memberId || user?.isAdmin)) {
-      void load();
-    }
+    if (!sessionLoading && (user?.memberId || user?.isAdmin)) void load();
+    return () => {
+      generation.current++;
+    };
   }, [sessionLoading, user, load]);
-
-  if (sessionLoading) {
-    return <Page>Загрузка…</Page>;
-  }
-
-  if (!user) {
+  const selected = events.find((event) => event.id === selectedId);
+  if (sessionLoading) return <Page>Загрузка…</Page>;
+  if (!user)
     return (
       <Page>
         <PageHeader title="Расписание" subtitle="Раздел доступен членам гильдии после входа." />
       </Page>
     );
-  }
-
-  if (!user.memberId && !user.isAdmin) {
+  if (!user.memberId && !user.isAdmin)
     return (
       <Page>
         <PageHeader
@@ -126,55 +124,99 @@ export default function SchedulePage() {
         />
       </Page>
     );
-  }
-
-  const upcoming = events
-    .filter((event) => new Date(event.startsAt).getTime() >= Date.now() - 2 * 60 * 60 * 1000)
-    .slice(0, 10);
-
+  const week = getLocalWeekBounds(weekCursor);
+  const lastDay = new Date(week.end);
+  lastDay.setDate(lastDay.getDate() - 1);
+  const detail =
+    selected && !pending ? (
+      <EventCard
+        key={selected.id}
+        event={selected}
+        gameTime={gameTime}
+        presentation={view === 'week' ? 'panel' : 'dialog'}
+        canManage={canManageEvent(user, selected)}
+        canConduct={can(user, 'events.conduct', selected)}
+        onClose={() => setSelectedId(null)}
+        onChanged={load}
+      />
+    ) : null;
   return (
     <Page width="wide">
       <PageHeader title="Расписание ивентов" />
-      {canManage && (
-        <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div role="group" aria-label="Вид расписания" className="flex gap-2">
+          <Button
+            aria-pressed={view === 'week'}
+            variant={view === 'week' ? 'primary' : undefined}
+            onClick={() => {
+              setView('week');
+              setSelectedId(null);
+            }}
+          >
+            События
+          </Button>
+          <Button
+            aria-pressed={view === 'calendar'}
+            variant={view === 'calendar' ? 'primary' : undefined}
+            onClick={() => {
+              setView('calendar');
+              setSelectedId(null);
+            }}
+          >
+            Календарь
+          </Button>
+        </div>
+        {canManage && (
           <Button variant="primary" onClick={() => setCreating(true)}>
             Создать ивент
           </Button>
-        </div>
-      )}
+        )}
+      </div>
       {createdMessage && <p role="status">{createdMessage}</p>}
       {canManage && creating && (
         <CreateEventDialog
           onClose={() => setCreating(false)}
-          onCreated={(startsAt, message) => {
+          onCreated={(date, message) => {
             setCreating(false);
             setCreatedMessage(message);
             setTypeFilter('');
             setModeFilter('');
-            setMonthCursor(
-              new Date(Date.UTC(startsAt.getUTCFullYear(), startsAt.getUTCMonth(), 1)),
-            );
+            setSelectedId(null);
+            setWeekCursor(getLocalWeekBounds(date).start);
+            setMonthCursor(new Date(date.getFullYear(), date.getMonth(), 1));
           }}
         />
       )}
-      {error && <ErrorText>{error}</ErrorText>}
-
       <Card className="mb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Button onClick={() => shiftMonth(-1)}>←</Button>
-            <span className="text-lg font-semibold">
-              {monthCursor.toLocaleDateString('ru-RU', {
-                month: 'long',
-                year: 'numeric',
-                timeZone: 'UTC',
-              })}
+            <Button
+              aria-label={view === 'week' ? 'Предыдущая неделя' : 'Предыдущий месяц'}
+              onClick={() => shift(-1)}
+            >
+              ←
+            </Button>
+            <span className="font-semibold">
+              {view === 'week'
+                ? `${week.start.toLocaleDateString('ru-RU')} — ${lastDay.toLocaleDateString('ru-RU')}`
+                : monthCursor.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}
             </span>
-            <Button onClick={() => shiftMonth(1)}>→</Button>
+            <Button
+              aria-label={view === 'week' ? 'Следующая неделя' : 'Следующий месяц'}
+              onClick={() => shift(1)}
+            >
+              →
+            </Button>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap gap-3">
             <Field label="Тип:">
-              <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+              <Select
+                value={typeFilter}
+                onChange={(e) => {
+                  setTypeFilter(e.target.value);
+                  setSelectedId(null);
+                }}
+              >
                 <option value="">все</option>
                 {eventTypes.map((type) => (
                   <option key={type.id} value={type.id}>
@@ -186,7 +228,10 @@ export default function SchedulePage() {
             <Field label="Режим:">
               <Select
                 value={modeFilter}
-                onChange={(e) => setModeFilter(e.target.value as EventMode | '')}
+                onChange={(e) => {
+                  setModeFilter(e.target.value);
+                  setSelectedId(null);
+                }}
               >
                 <option value="">все</option>
                 {EVENT_MODES.map((mode) => (
@@ -198,72 +243,60 @@ export default function SchedulePage() {
             </Field>
           </div>
         </div>
-        <Legend />
-        <MonthGrid
-          monthCursor={monthCursor}
-          events={events}
-          gameTime={gameTime}
-          onSelect={setSelected}
-        />
       </Card>
-
-      <Card>
-        <SectionTitle>Ближайшие ивенты</SectionTitle>
-        {upcoming.length === 0 && <Muted>Ближайших ивентов нет</Muted>}
-        <ul className="flex flex-col gap-2">
-          {upcoming.map((event) => (
-            <li key={event.id}>
-              <button
-                type="button"
-                className="w-full rounded-card border border-line bg-surface px-3 py-2 text-left hover:bg-surface-muted"
-                onClick={() => setSelected(event)}
-              >
-                <span className="flex flex-wrap items-center gap-2">
-                  <Badge tone="accent">{event.name || event.eventTypeName}</Badge>
-                  <Badge>{MODE_LABELS[event.mode]}</Badge>
-                  <span className="text-sm font-medium">
-                    {new Date(event.startsAt).toLocaleString('ru-RU', {
-                      weekday: 'short',
-                      day: 'numeric',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                  <Muted>
-                    РЛ: {event.raidLeadName} · {event.dkpReward} ДКП
-                  </Muted>
-                  {event.status !== 'PLANNED' && (
-                    <Badge tone={event.status === 'RUNNING' ? 'success' : 'warning'}>
-                      {STATUS_LABELS[event.status]}
-                    </Badge>
-                  )}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </Card>
-
-      {selected && (
-        <EventCard
-          event={selected}
-          gameTime={gameTime}
-          canManage={canManageEvent(user, selected)}
-          canConduct={can(user, 'events.conduct', selected)}
-          onClose={() => setSelected(null)}
-          onChanged={load}
-        />
-      )}
+      {error && <ErrorText>{error}</ErrorText>}
+      {pending && <p role="status">Загрузка расписания…</p>}
+      {!pending &&
+        !error &&
+        (view === 'week' ? (
+          <ScheduleColumns
+            list={
+              <Card>
+                {weekEvents.length === 0 && <Muted>На этой неделе событий нет</Muted>}
+                <ul className="flex flex-col gap-2">
+                  {weekEvents.map((event) => (
+                    <li key={event.id}>
+                      <WeekEventButton
+                        event={event}
+                        selected={selectedId === event.id}
+                        onSelect={() => setSelectedId(event.id)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            }
+            detail={
+              detail ?? (
+                <Card>
+                  <Muted>Выберите событие из списка</Muted>
+                </Card>
+              )
+            }
+          />
+        ) : (
+          <Card>
+            <Legend />
+            <MonthGrid
+              monthCursor={monthCursor}
+              events={events}
+              gameTime={gameTime}
+              onSelect={(event) => setSelectedId(event.id)}
+            />
+          </Card>
+        ))}
+      {view === 'calendar' && detail}
     </Page>
   );
-
-  function shiftMonth(delta: number) {
-    // UTC-конструктор: Date(год, месяц, 1) в локальной зоне даёт месяц,
-    // «съедаемый» при смене UTC-страницей вперёд (баг ревью владельца, п.7)
-    setMonthCursor(
-      (prev) => new Date(Date.UTC(prev.getUTCFullYear(), prev.getUTCMonth() + delta, 1)),
-    );
+  function shift(delta: number) {
+    setSelectedId(null);
+    if (view === 'week')
+      setWeekCursor((prev) => {
+        const next = new Date(prev);
+        next.setDate(next.getDate() + delta * 7);
+        return next;
+      });
+    else setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
   }
 }
 
@@ -294,14 +327,16 @@ function MonthGrid({
   gameTime: GamePhaseConfig | null;
   onSelect: (event: EventRow) => void;
 }) {
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const days = useMemo(() => {
-    const first = new Date(Date.UTC(monthCursor.getUTCFullYear(), monthCursor.getUTCMonth(), 1));
+    const first = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
     // Начинаем с понедельника
-    const offset = (first.getUTCDay() + 6) % 7;
-    const start = new Date(first.getTime() - offset * 24 * 60 * 60 * 1000);
+    const offset = (first.getDay() + 6) % 7;
+    const start = new Date(first);
+    start.setDate(first.getDate() - offset);
     return Array.from(
       { length: 42 },
-      (_, i) => new Date(start.getTime() + i * 24 * 60 * 60 * 1000),
+      (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i),
     );
   }, [monthCursor]);
 
@@ -314,11 +349,10 @@ function MonthGrid({
       ))}
       {days.map((day) => {
         const dayEvents = events.filter(
-          (event) =>
-            new Date(event.startsAt).toISOString().slice(0, 10) === day.toISOString().slice(0, 10),
+          (event) => localDayKey(new Date(event.startsAt)) === localDayKey(day),
         );
-        const inMonth = day.getUTCMonth() === monthCursor.getUTCMonth();
-        const isToday = day.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
+        const inMonth = day.getMonth() === monthCursor.getMonth();
+        const isToday = localDayKey(day) === localDayKey(new Date());
         return (
           <div
             key={day.toISOString()}
@@ -327,20 +361,31 @@ function MonthGrid({
             } ${isToday ? 'ring-1 ring-accent' : ''}`}
           >
             <div className={`text-right text-xs ${inMonth ? 'text-secondary' : 'text-disabled'}`}>
-              {day.getUTCDate()}
+              {day.getDate()}
             </div>
             <div className="flex flex-col gap-0.5">
-              {dayEvents.map((event) => (
+              {(expandedDay === localDayKey(day) ? dayEvents : dayEvents.slice(0, 4)).map(
+                (event) => (
+                  <button
+                    key={event.id}
+                    type="button"
+                    onClick={() => onSelect(event)}
+                    className={`w-full text-left ${+new Date(event.endsAt) <= Date.now() || event.status === 'FINISHED' ? 'opacity-60' : ''}`}
+                    title={`${event.name || event.eventTypeName} · ${new Date(event.startsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · РЛ ${event.raidLeadName}`}
+                  >
+                    <EventPhaseBar event={event} gameTime={gameTime} />
+                  </button>
+                ),
+              )}
+              {dayEvents.length > 4 && expandedDay !== localDayKey(day) && (
                 <button
-                  key={event.id}
                   type="button"
-                  onClick={() => onSelect(event)}
-                  className="w-full text-left"
-                  title={`${event.name || event.eventTypeName} · ${new Date(event.startsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · РЛ ${event.raidLeadName}`}
+                  className="text-left text-xs text-accent"
+                  onClick={() => setExpandedDay(localDayKey(day))}
                 >
-                  <EventPhaseBar event={event} gameTime={gameTime} />
+                  +{dayEvents.length - 4}
                 </button>
-              ))}
+              )}
             </div>
           </div>
         );
@@ -370,7 +415,13 @@ function EventPhaseBar({ event, gameTime }: { event: EventRow; gameTime: GamePha
     startsAt.getTime() > 0 ? new Date(event.endsAt).getTime() - startsAt.getTime() : 1;
 
   return (
-    <span className="flex h-5 w-full overflow-hidden rounded-sm border border-line" title={label}>
+    <span
+      className="relative flex h-5 w-full overflow-hidden rounded-sm border border-line"
+      title={label}
+    >
+      <span className="absolute inset-0 z-10 truncate px-1 text-[11px] leading-5 text-white [text-shadow:0_1px_2px_#000]">
+        {label}
+      </span>
       {segments.map((segment, index) => (
         <span
           key={index}
