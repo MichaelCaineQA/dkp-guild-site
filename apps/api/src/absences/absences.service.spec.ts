@@ -31,6 +31,18 @@ function makeDb(seed: Array<Partial<AbsenceRecord> & { id: string }> = []) {
     { startsAt: new Date('2026-03-20T17:00:00Z'), status: 'PLANNED' }, // в периоде заявок
   ];
   const db: AbsencesDb = {
+    $transaction: async (work) => {
+      const oldSeen = [...seen];
+      const oldAudit = structuredClone(audit);
+      try {
+        return await work(db);
+      } catch (error) {
+        seen.clear();
+        oldSeen.forEach((key) => seen.add(key));
+        audit.splice(0, audit.length, ...oldAudit);
+        throw error;
+      }
+    },
     absence: {
       findMany: async ({ where }) =>
         absences
@@ -42,7 +54,7 @@ function makeDb(seed: Array<Partial<AbsenceRecord> & { id: string }> = []) {
             member: { nickname: 'Игрок' },
             seenBy: Array.from(seen)
               .filter((s) => s.startsWith(`${a.id}:`))
-              .map((s) => ({ seenById: s.split(':')[1]! })),
+              .map((s) => ({ actorKey: s.split(':')[1]! })),
           })),
       findUnique: async ({ where }) => {
         const found = absences.find((a) => a.id === where.id);
@@ -64,12 +76,16 @@ function makeDb(seed: Array<Partial<AbsenceRecord> & { id: string }> = []) {
       },
     },
     absenceSeen: {
-      findUnique: async ({ where }) =>
-        seen.has(`${where.absenceId_seenById.absenceId}:${where.absenceId_seenById.seenById}`)
-          ? { id: 'seen' }
-          : null,
-      create: async ({ data }) => {
-        seen.add(`${data.absenceId}:${data.seenById}`);
+      createMany: async ({ data }) => {
+        let count = 0;
+        for (const row of data) {
+          const key = `${row.absenceId}:${row.actorKey}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            count++;
+          }
+        }
+        return { count };
       },
     },
     event: {
@@ -216,6 +232,29 @@ describe('AbsencesService.cancel', () => {
 });
 
 describe('AbsencesService.markSeen', () => {
+  it.each(['MEMBER', 'OFFICER'])(
+    'ранг %s без дополнительных прав не ставит Увидел',
+    async (rank) => {
+      const { db, seen } = makeDb([{ id: 'a-1' }]);
+      await expect(
+        new AbsencesService(db, SETTINGS, clock).markSeen('a-1', { ...ACTOR, rank }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(seen.size).toBe(0);
+    },
+  );
+  it('резервный админ без Member ставит отметку; сбой аудита откатывает её', async () => {
+    const { db, seen, audit } = makeDb([{ id: 'a-1' }]);
+    const service = new AbsencesService(db, SETTINGS, clock);
+    const admin = { memberId: null, isAdmin: true, rank: null };
+    await service.markSeen('a-1', admin);
+    expect(seen.has('a-1:system-admin')).toBe(true);
+    expect(audit[0]!.actorMemberId).toBeNull();
+    db.auditLog.create = async () => {
+      throw new Error('audit failure');
+    };
+    await expect(service.markSeen('a-1', LEADER)).rejects.toThrow('audit failure');
+    expect(seen.has('a-1:m-lead')).toBe(false);
+  });
   it('глава ставит «Увидел» — идемпотентно, статус заявки не меняется (офицер больше не может — решение владельца)', async () => {
     const { db, seen, absences, audit } = makeDb([{ id: 'a-1' }]);
     const service = new AbsencesService(db, SETTINGS, clock);

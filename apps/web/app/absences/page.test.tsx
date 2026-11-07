@@ -111,4 +111,18 @@ describe('AbsencesPage', () => {
     expect(await screen.findByText(/заявку на привязку ника/)).toBeDefined();
     expect(api).not.toHaveBeenCalled();
   });
+  it('резервный админ читает общий список без запроса чужих заявок как своих', async () => {
+    mockSession({
+      userId: 'admin:root',
+      username: 'Админ',
+      memberId: null,
+      rank: null,
+      isAdmin: true,
+    });
+    render(<AbsencesPage />);
+    expect(await screen.findByText('Все заявки гильдии')).toBeDefined();
+    expect(api).toHaveBeenCalledWith('/absences');
+    expect(api).not.toHaveBeenCalledWith('/absences/mine');
+    expect(screen.queryByRole('button', { name: 'Подать' })).toBeNull();
+  });
 });

@@ -1,3 +1,4 @@
+import { serializable } from '../prisma/serializable';
 import {
   ConflictException,
   ForbiddenException,
@@ -6,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   absenceCoversEvent,
+  absenceSeenActorKey,
   absenceDeadlineError,
   canCancelAbsence,
   can,
@@ -30,13 +32,17 @@ export interface AbsenceRow {
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
 export interface AbsencesDb {
+  $transaction<T>(
+    work: (tx: Omit<AbsencesDb, '$transaction'>) => Promise<T>,
+    options: { isolationLevel: 'Serializable' },
+  ): Promise<T>;
   absence: {
     findMany(args: {
       where?: { memberId?: string; status?: string };
       orderBy: { dateFrom: 'desc' };
       include: {
         member: { select: { nickname: true } };
-        seenBy: { select: { seenById: true } };
+        seenBy: { select: { actorKey: true } };
         event?: { select: { startsAt: true; name: true } };
       };
     }): Promise<
@@ -50,7 +56,7 @@ export interface AbsencesDb {
         reason: string;
         status: string;
         member: { nickname: string };
-        seenBy: Array<{ seenById: string }>;
+        seenBy: Array<{ actorKey: string }>;
       }>
     >;
     findUnique(args: { where: { id: string } }): Promise<{
@@ -67,10 +73,10 @@ export interface AbsencesDb {
     update(args: { where: { id: string }; data: { status: string } }): Promise<unknown>;
   };
   absenceSeen: {
-    findUnique(args: {
-      where: { absenceId_seenById: { absenceId: string; seenById: string } };
-    }): Promise<{ id: string } | null>;
-    create(args: { data: { absenceId: string; seenById: string } }): Promise<unknown>;
+    createMany(args: {
+      data: { absenceId: string; seenById: string | null; actorKey: string }[];
+      skipDuplicates: true;
+    }): Promise<{ count: number }>;
   };
   event: {
     findMany(args: {
@@ -93,7 +99,7 @@ export interface AbsencesDb {
 
 /** Действующий пользователь сессии. */
 export interface AbsencesActor {
-  memberId: string;
+  memberId: string | null;
   isAdmin: boolean;
   rank: string | null;
 }
@@ -119,14 +125,14 @@ export class AbsencesService {
     private readonly clock: Clock = () => new Date(),
   ) {}
 
-  /** Свои заявки (или все — для офицерского списка). */
+  /** Свои заявки (или все — для списка Главы/Админа). */
   async list(memberId?: string): Promise<AbsenceRow[]> {
     const rows = await this.db.absence.findMany({
       where: memberId ? { memberId, status: 'ACTIVE' } : { status: 'ACTIVE' },
       orderBy: { dateFrom: 'desc' },
       include: {
         member: { select: { nickname: true } },
-        seenBy: { select: { seenById: true } },
+        seenBy: { select: { actorKey: true } },
         event: { select: { startsAt: true, name: true } },
       },
     });
@@ -140,7 +146,7 @@ export class AbsencesService {
       dateTo: row.event?.startsAt ?? row.dateTo,
       reason: row.reason,
       status: row.status,
-      seenBy: row.seenBy.map((s) => s.seenById),
+      seenBy: row.seenBy.map((s) => s.actorKey),
     }));
   }
 
@@ -206,30 +212,32 @@ export class AbsencesService {
   }
 
   /**
-   * «Увидел» (план 2.3): РЛ/офицер+; фиксация принятия к сведению,
-   * на статус не влияет; один раз на человека (unique absenceId+seenById).
+   * «Увидел» (план 2.3): Глава/Админ; фиксация принятия к сведению,
+   * на статус не влияет; один раз на человека (unique absenceId+actorKey).
    */
   async markSeen(id: string, actor: AbsencesActor): Promise<{ ok: true }> {
-    const allowed =
-      actor.isAdmin ||
-      can(
-        { rank: actor.rank as never, isAdmin: actor.isAdmin, memberId: actor.memberId },
-        'absence.see',
-      );
-    if (!allowed) {
-      throw new ForbiddenException('Отметка «Увидел» — офицерам и выше');
-    }
-
-    await this.mustExist(id);
-    const existing = await this.db.absenceSeen.findUnique({
-      where: { absenceId_seenById: { absenceId: id, seenById: actor.memberId } },
+    const actorKey = absenceSeenActorKey(actor);
+    if (!actorKey || !can({ ...actor, rank: actor.rank as never }, 'absence.see'))
+      throw new ForbiddenException('Отметка «Увидел» — Главе и Админу');
+    return serializable(this.db, async (tx) => {
+      const absence = await tx.absence.findUnique({ where: { id } });
+      if (!absence) throw new NotFoundException('Заявка не найдена');
+      const result = await tx.absenceSeen.createMany({
+        data: [{ absenceId: id, seenById: actor.memberId, actorKey }],
+        skipDuplicates: true,
+      });
+      if (result.count > 0)
+        await tx.auditLog.create({
+          data: {
+            actorMemberId: actor.memberId,
+            action: 'ABSENCE_SEEN',
+            entityType: 'Absence',
+            entityId: id,
+            comment: 'Информация об отсутствии принята к сведению',
+          },
+        });
+      return { ok: true as const };
     });
-    if (existing) {
-      return { ok: true }; // идемпотентно: повторный клик не ошибка
-    }
-    await this.db.absenceSeen.create({ data: { absenceId: id, seenById: actor.memberId } });
-    await this.audit(actor, 'ABSENCE_SEEN', id, 'Информация об отсутствии принята к сведению');
-    return { ok: true };
   }
 
   /**
@@ -239,14 +247,16 @@ export class AbsencesService {
   async forEvent(
     eventStartsAt: Date,
     eventId?: string,
-  ): Promise<Array<{ id: string; memberId: string; memberName: string; reason: string }>> {
+  ): Promise<
+    Array<{ id: string; memberId: string; memberName: string; reason: string; seenBy: string[] }>
+  > {
     // Ищем заявки, пересекающие дату ивента: dateFrom <= старт <= dateTo.
     // Prisma не умеет «поле <= значение <= поле» одним where — берём
     // заявки с dateFrom <= старт и фильтруем по dateTo в памяти.
     const candidates = await this.db.absence.findMany({
       where: { status: 'ACTIVE' },
       orderBy: { dateFrom: 'desc' },
-      include: { member: { select: { nickname: true } }, seenBy: { select: { seenById: true } } },
+      include: { member: { select: { nickname: true } }, seenBy: { select: { actorKey: true } } },
     });
     return candidates
       .filter((absence) =>
@@ -257,6 +267,7 @@ export class AbsencesService {
         memberId: absence.memberId,
         memberName: absence.member.nickname,
         reason: absence.reason,
+        seenBy: absence.seenBy.map((s) => s.actorKey),
       }));
   }
 

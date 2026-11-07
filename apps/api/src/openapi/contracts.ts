@@ -258,7 +258,8 @@ export const contracts: Record<string, Contract> = {
   Absences_markSeen: c('Отметить отсутствие как увиденное', 'Ok', {
     access: leader,
     errors: [404],
-    description: 'Не меняет статус отсутствия; повторный вызов идемпотентен.',
+    description:
+      'Не меняет статус отсутствия. Отметка и аудит атомарны; повторные/одновременные запросы идемпотентны. Доступно также резервному админу без Member. seenBy в обоих списках содержит ID участников и system-admin для резервного администратора.',
   }),
   Dkp_list: c('Получить журнал ДКП', 'DkpPage', {
     query: 'DkpQuery',

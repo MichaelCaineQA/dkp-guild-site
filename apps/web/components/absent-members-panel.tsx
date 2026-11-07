@@ -1,20 +1,10 @@
 'use client';
-
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { absenceSeenActorKey, can } from '@dkp/shared';
 import { api } from '../lib/api';
-
-interface AbsentMember {
-  id: string;
-  memberId: string;
-  memberName: string;
-  reason: string;
-}
-
-/**
- * Список оформленно отсутствующих по ивенту (план 2.3): показывается
- * в карточке ивента и на странице проведения; РЛ их не отмечает вручную —
- * статус EXCUSED_ABSENCE ставится автоматически при закрытии ивента.
- */
+import { useSession } from './session-context';
+import { Button, ErrorText, EventAbsences, type EventAbsenceRow } from './ui';
+/** Одна и та же отметка заявки в карточке, проведении и списке отсутствий. */
 export function AbsentMembersPanel({
   eventStartsAt,
   eventId,
@@ -22,33 +12,66 @@ export function AbsentMembersPanel({
   eventStartsAt: string;
   eventId: string;
 }) {
-  const [absent, setAbsent] = useState<AbsentMember[] | null>(null);
-
+  const { user } = useSession();
+  const [absent, setAbsent] = useState<EventAbsenceRow[] | null>(null);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    const rows = await api<EventAbsenceRow[]>(
+      `/absences/for-event?startsAt=${encodeURIComponent(eventStartsAt)}&eventId=${encodeURIComponent(eventId)}`,
+    );
+    setAbsent(rows);
+    setError('');
+  }, [eventStartsAt, eventId]);
   useEffect(() => {
-    api<AbsentMember[]>(
+    let active = true;
+    api<EventAbsenceRow[]>(
       `/absences/for-event?startsAt=${encodeURIComponent(eventStartsAt)}&eventId=${encodeURIComponent(eventId)}`,
     )
-      .then(setAbsent)
-      .catch(() => setAbsent([]));
+      .then((rows) => {
+        if (active) {
+          setAbsent(rows);
+          setError('');
+        }
+      })
+      .catch(() => {
+        if (active) setError('Не удалось загрузить отсутствия');
+      });
+    return () => {
+      active = false;
+    };
   }, [eventStartsAt, eventId]);
-
-  if (!absent || absent.length === 0) {
-    return null;
-  }
-
+  if (absent?.length === 0 && !error) return null;
+  if (!absent)
+    return error ? (
+      <div role="alert">
+        <ErrorText>{error}</ErrorText>
+        <Button
+          onClick={() => void load().catch(() => setError('Не удалось загрузить отсутствия'))}
+        >
+          Повторить
+        </Button>
+      </div>
+    ) : null;
   return (
-    <div className="mt-3 rounded-lg border border-warning/40 bg-warning-soft p-3">
-      <p className="text-xs font-semibold text-warning">
-        Отсутствуют по уважительной ({absent.length}) — не отмечаются вручную:
-      </p>
-      <ul className="mt-1 flex flex-col gap-0.5 text-sm">
-        {absent.map((member) => (
-          <li key={member.id}>
-            <span className="font-medium">{member.memberName}</span>
-            <span className="text-secondary"> — {member.reason}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <EventAbsences
+      rows={absent}
+      actorKey={user ? absenceSeenActorKey(user) : null}
+      canSee={!!user && can(user, 'absence.see')}
+      busyId={busyId}
+      error={error}
+      onSeen={async (id) => {
+        setBusyId(id);
+        setError('');
+        try {
+          await api(`/absences/${id}/seen`, { method: 'POST' });
+          await load();
+        } catch {
+          setError('Не удалось отметить «Увидел». Попробуйте ещё раз.');
+        } finally {
+          setBusyId(null);
+        }
+      }}
+    />
   );
 }

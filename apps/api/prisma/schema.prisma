@@ -318,16 +318,18 @@ model Absence {
   @@index([memberId, dateFrom])
 }
 
-/// Отметка «Увидел» от РЛ/офицера и выше — фиксация, на статус не влияет.
+/// Отметка «Увидел» от Главы/Админа — фиксация, на статус не влияет.
 model AbsenceSeen {
   id String @id @default(cuid())
   absenceId String
   absence Absence @relation(fields: [absenceId], references: [id], onDelete: Cascade)
-  seenById String
-  seenBy Member @relation(fields: [seenById], references: [id])
+  actorKey String
+  seenById String?
+  seenBy Member? @relation(fields: [seenById], references: [id], onDelete: Restrict)
   createdAt DateTime @default(now())
 
   @@unique([absenceId, seenById])
+  @@unique([absenceId, actorKey])
 }
 
 model Item {

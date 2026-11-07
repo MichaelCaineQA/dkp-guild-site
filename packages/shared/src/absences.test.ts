@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   absenceCoversEvent,
+  absenceSeenActorKey,
   absenceDeadlineError,
   canCancelAbsence,
   createAbsenceSchema,
@@ -140,9 +141,21 @@ describe('canCancelAbsence', () => {
 
 describe('absenceCoversEvent', () => {
   it('старт ивента внутри периода — true, вне — false', () => {
-    const absence = { dateFrom: new Date('2026-03-10T00:00:00Z'), dateTo: new Date('2026-03-12T00:00:00Z') };
+    const absence = {
+      dateFrom: new Date('2026-03-10T00:00:00Z'),
+      dateTo: new Date('2026-03-12T00:00:00Z'),
+    };
     expect(absenceCoversEvent(absence, new Date('2026-03-11T17:00:00Z'))).toBe(true);
     expect(absenceCoversEvent(absence, new Date('2026-03-13T17:00:00Z'))).toBe(false);
     expect(absenceCoversEvent(absence, new Date('2026-03-10T00:00:00Z'))).toBe(true); // граница
+  });
+});
+
+describe('Автор отметки Увидел', () => {
+  it('обычный участник и игровой админ сохраняют ID, резервный — отдельный ключ без логина', () => {
+    expect(absenceSeenActorKey({ memberId: 'm', isAdmin: false })).toBe('m');
+    expect(absenceSeenActorKey({ memberId: 'm', isAdmin: true })).toBe('m');
+    expect(absenceSeenActorKey({ memberId: null, isAdmin: true })).toBe('system-admin');
+    expect(absenceSeenActorKey({ memberId: null, isAdmin: false })).toBeNull();
   });
 });
