@@ -34,6 +34,7 @@ const inputs: Record<string, unknown> = {
   ChangeEventStatus: shared.changeEventStatusSchema,
   EventsQuery: shared.eventsQuerySchema,
   WeekQuery: shared.weekQuerySchema,
+  ParticipationInput: shared.participationInputSchema,
   SubmitCheckIn: shared.submitCheckInSchema,
   SetAttendance: shared.setAttendanceSchema,
   ManualCheckIn: shared.manualCheckInSchema,
@@ -110,7 +111,20 @@ const settings = Object.fromEntries(
 
 export const schemas: Record<string, SchemaObject> = {
   ...generated,
-  WeekEvent: object({ ...event, invitedCount: num, attendingCount: num }),
+  WeekEvent: object({
+    ...event,
+    invitedCount: num,
+    attendingCount: num,
+    canDecline: { type: 'boolean' },
+  }),
+  Participation: object({
+    invited: { type: 'boolean' },
+    attending: { type: 'boolean' },
+    canDecline: { type: 'boolean' },
+    canAttend: { type: 'boolean' },
+    deadlineAt: date,
+    absences: array(object({ id: str, dateFrom: date, dateTo: date, reason: str })),
+  }),
   DashboardTeamMember: object(
     {
       id: str,
@@ -203,6 +217,8 @@ export const schemas: Record<string, SchemaObject> = {
   }),
   Absence: object({
     id: str,
+    eventId: nullable(str),
+    eventName: nullable(str),
     memberId: str,
     memberName: str,
     dateFrom: date,

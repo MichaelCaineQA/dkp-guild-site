@@ -15,14 +15,22 @@ interface AbsentMember {
  * в карточке ивента и на странице проведения; РЛ их не отмечает вручную —
  * статус EXCUSED_ABSENCE ставится автоматически при закрытии ивента.
  */
-export function AbsentMembersPanel({ eventStartsAt }: { eventStartsAt: string }) {
+export function AbsentMembersPanel({
+  eventStartsAt,
+  eventId,
+}: {
+  eventStartsAt: string;
+  eventId: string;
+}) {
   const [absent, setAbsent] = useState<AbsentMember[] | null>(null);
 
   useEffect(() => {
-    api<AbsentMember[]>(`/absences/for-event?startsAt=${encodeURIComponent(eventStartsAt)}`)
+    api<AbsentMember[]>(
+      `/absences/for-event?startsAt=${encodeURIComponent(eventStartsAt)}&eventId=${encodeURIComponent(eventId)}`,
+    )
       .then(setAbsent)
       .catch(() => setAbsent([]));
-  }, [eventStartsAt]);
+  }, [eventStartsAt, eventId]);
 
   if (!absent || absent.length === 0) {
     return null;

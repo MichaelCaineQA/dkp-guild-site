@@ -19,3 +19,5 @@ export * from './dashboard';
 export * from './audit-labels';
 
 export * from './week';
+
+export * from './participation';

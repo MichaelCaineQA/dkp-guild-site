@@ -26,6 +26,7 @@ export const weekQuerySchema = eventsQuerySchema
 export interface WeekEvent extends DashboardEvent {
   invitedCount: number;
   attendingCount: number;
+  canDecline: boolean;
 }
 export interface InvitedMember {
   id: string;
@@ -33,6 +34,7 @@ export interface InvitedMember {
   kpId: string | null;
 }
 export interface ScopedEvent {
+  id?: string;
   scope: 'GUILD' | 'KP' | 'PACK';
   packId: string | null;
   kpId: string | null;
@@ -42,19 +44,27 @@ export interface ScopedEvent {
 export function countEventParticipants(
   event: ScopedEvent,
   members: InvitedMember[],
-  absences: { memberId: string; dateFrom: Date; dateTo: Date }[],
+  absences: { memberId: string; dateFrom: Date; dateTo: Date; eventId?: string | null }[],
 ) {
-  const invited = members.filter(
-    (m) =>
-      event.scope === 'GUILD' ||
-      (event.scope === 'PACK' && event.packId !== null && event.packId === m.packId) ||
-      (event.scope === 'KP' && event.kpId !== null && event.kpId === m.kpId),
-  );
+  const invited = members.filter((m) => isEventInvitee(event, m));
   const absent = new Set(
-    absences.filter((a) => absenceCoversEvent(a, event.startsAt)).map((a) => a.memberId),
+    absences
+      .filter((a) => (a.eventId ? a.eventId === event.id : absenceCoversEvent(a, event.startsAt)))
+      .map((a) => a.memberId),
   );
   return {
     invitedCount: invited.length,
     attendingCount: invited.filter((m) => !absent.has(m.id)).length,
   };
+}
+
+export function isEventInvitee(
+  event: Pick<ScopedEvent, 'scope' | 'kpId' | 'packId'>,
+  member: InvitedMember,
+): boolean {
+  return (
+    event.scope === 'GUILD' ||
+    (event.scope === 'PACK' && event.packId !== null && event.packId === member.packId) ||
+    (event.scope === 'KP' && event.kpId !== null && event.kpId === member.kpId)
+  );
 }

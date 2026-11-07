@@ -60,4 +60,17 @@ describe('Пойдут / приглашены', () => {
       attendingCount: 0,
     });
   });
+  it('отказ относится к ID: не затрагивает одновременное событие и сохраняется при переносе', () => {
+    const scoped = { ...absence, eventId: 'e' };
+    expect(
+      countEventParticipants({ ...event, id: 'other' }, members, [scoped]).attendingCount,
+    ).toBe(3);
+    expect(
+      countEventParticipants(
+        { ...event, id: 'e', startsAt: new Date(+startsAt + 86400000) },
+        members,
+        [scoped],
+      ).attendingCount,
+    ).toBe(2);
+  });
 });

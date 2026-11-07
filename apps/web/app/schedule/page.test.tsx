@@ -60,6 +60,15 @@ describe('SchedulePage', () => {
     };
     vi.clearAllMocks();
     vi.mocked(api).mockImplementation(async (path: string) => {
+      if (path.endsWith('/participation'))
+        return {
+          invited: true,
+          attending: true,
+          canDecline: true,
+          canAttend: true,
+          absences: [],
+          deadlineAt: '2027-01-01T00:00:00Z',
+        };
       if (path.startsWith('/events') && path.endsWith('/checkin/me')) {
         // Чек-ин игрока: окно закрыто (ивент в будущем)
         return { phase: 'START', windowState: 'NOT_OPEN_YET', choices: [], status: 'PENDING' };

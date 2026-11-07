@@ -1,4 +1,6 @@
 'use client';
+import { useSession } from './session-context';
+import { EventParticipation } from './event-participation';
 import { useState } from 'react';
 import {
   isEventEditable,
@@ -36,6 +38,7 @@ export function EventCard({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const { user } = useSession();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -130,6 +133,10 @@ export function EventCard({
         )}
       </dl>
 
+      {user?.memberId && (
+        <EventParticipation key={event.id} eventId={event.id} onChanged={onChanged} />
+      )}
+
       {/* Чек-ин кодами (план 2.2): игрок отмечается, РЛ видит код */}
       {(event.status === 'PLANNED' || event.status === 'RUNNING') && (
         <CheckInPanel eventId={event.id} />
@@ -139,7 +146,7 @@ export function EventCard({
       )}
 
       {/* Оформленно отсутствующие (план 2.3): всем, авто-отметка при закрытии */}
-      <AbsentMembersPanel eventStartsAt={event.startsAt} />
+      <AbsentMembersPanel eventId={event.id} eventStartsAt={event.startsAt} />
 
       {canConduct && event.status === 'PLANNED' && (
         <div className="mt-3 flex gap-2">

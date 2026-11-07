@@ -2,11 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import {
-  ATTENDANCE_STATUSES,
-  can,
-  type AttendanceStatus,
-} from '@dkp/shared';
+import { ATTENDANCE_STATUSES, can, type AttendanceStatus } from '@dkp/shared';
 import { useSession } from '../../../../components/session-context';
 import { api } from '../../../../lib/api';
 import { AbsentMembersPanel } from '../../../../components/absent-members-panel';
@@ -105,11 +101,7 @@ export default function ConductPage() {
   }, [sessionLoading, user, load]);
 
   const canConduct = useMemo(
-    () =>
-      !!user &&
-      !!event &&
-      event.status !== 'CANCELLED' &&
-      can(user, 'events.conduct', event),
+    () => !!user && !!event && event.status !== 'CANCELLED' && can(user, 'events.conduct', event),
     [user, event],
   );
 
@@ -120,7 +112,10 @@ export default function ConductPage() {
   if (!user) {
     return (
       <Page>
-        <PageHeader title="Проведение ивента" subtitle="Раздел доступен членам гильдии после входа." />
+        <PageHeader
+          title="Проведение ивента"
+          subtitle="Раздел доступен членам гильдии после входа."
+        />
       </Page>
     );
   }
@@ -152,7 +147,7 @@ export default function ConductPage() {
       {error && <ErrorText>{error}</ErrorText>}
       {message && <Notice tone="success">{message}</Notice>}
 
-      <AbsentMembersPanel eventStartsAt={event.startsAt} />
+      <AbsentMembersPanel eventId={event.id} eventStartsAt={event.startsAt} />
 
       {canConduct && event.status !== 'FINISHED' && event.status !== 'CANCELLED' && (
         <>
@@ -230,7 +225,9 @@ function ConductActionsPanel({
         { method: 'POST' },
       );
       setEarlyCode(result.code);
-      onDone(`Финальный код запущен: ${result.code} (до ${new Date(result.windowClosesAt).toLocaleTimeString('ru-RU')})`);
+      onDone(
+        `Финальный код запущен: ${result.code} (до ${new Date(result.windowClosesAt).toLocaleTimeString('ru-RU')})`,
+      );
     } catch (err) {
       const status = (err as { status?: number }).status;
       setError(
@@ -254,7 +251,9 @@ function ConductActionsPanel({
       onDone('Ивент завершён; отсутствующим по уважительной проставлено автоматически');
     } catch (err) {
       const status = (err as { status?: number }).status;
-      setError(status === 409 ? 'Сначала переведите ивент в статус «Идёт»' : 'Не удалось завершить');
+      setError(
+        status === 409 ? 'Сначала переведите ивент в статус «Идёт»' : 'Не удалось завершить',
+      );
     } finally {
       setBusy(false);
     }
@@ -321,14 +320,26 @@ function ConductRow({
       <Table.Td className="font-medium">{row.memberName}</Table.Td>
       <Table.Td>
         <Badge
-          tone={row.checkinStart === 'PASSED' ? 'success' : row.checkinStart === 'MANUAL' ? 'accent' : 'neutral'}
+          tone={
+            row.checkinStart === 'PASSED'
+              ? 'success'
+              : row.checkinStart === 'MANUAL'
+                ? 'accent'
+                : 'neutral'
+          }
         >
           {CHECKIN_LABELS[row.checkinStart] ?? row.checkinStart}
         </Badge>
       </Table.Td>
       <Table.Td>
         <Badge
-          tone={row.checkinEnd === 'PASSED' ? 'success' : row.checkinEnd === 'MANUAL' ? 'accent' : 'neutral'}
+          tone={
+            row.checkinEnd === 'PASSED'
+              ? 'success'
+              : row.checkinEnd === 'MANUAL'
+                ? 'accent'
+                : 'neutral'
+          }
         >
           {CHECKIN_LABELS[row.checkinEnd] ?? row.checkinEnd}
         </Badge>
@@ -359,7 +370,11 @@ function ConductRow({
                   () =>
                     api(`/events/${eventId}/conduct/attendance`, {
                       method: 'POST',
-                      body: JSON.stringify({ memberId: row.memberId, status, comment: comment || 'Отметка из чек-листа' }),
+                      body: JSON.stringify({
+                        memberId: row.memberId,
+                        status,
+                        comment: comment || 'Отметка из чек-листа',
+                      }),
                     }),
                   `Отметка «${ATTENDANCE_LABELS[status as AttendanceStatus]}» для ${row.memberName} сохранена`,
                 );
