@@ -30,6 +30,7 @@ const ledger = jest.fn(async () => ({ id: 'dkp1' }));
 const createMember = jest.fn(async () => ({ id: 'member1' }));
 const approve = jest.fn(async () => ({ ok: true }));
 const db = {
+  $transaction: async <T>(work: (tx: unknown) => Promise<T>) => work(db),
   event: { findUnique: async () => event, update, delete: remove },
   auditLog: { create: record },
   dkpEntry: { create: ledger },

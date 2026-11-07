@@ -76,16 +76,6 @@ export class CheckInController {
       { memberId: user.memberId, isAdmin: user.isAdmin },
       user.rank,
     );
-    // Аудит досрочного запуска — вручную (сервис checkin его не пишет)
-    await this.prisma.auditLog.create({
-      data: {
-        actorMemberId: user.memberId,
-        action: 'CHECKIN_END_EARLY',
-        entityType: 'Event',
-        entityId: eventId,
-        comment: `Досрочно запущен финальный код (окно до ${result.windowClosesAt.toISOString()})`,
-      },
-    });
     return result;
   }
 
