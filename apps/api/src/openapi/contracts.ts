@@ -32,6 +32,19 @@ const c = (
 
 /** Ключи привязаны к методам контроллеров; пути и HTTP-статусы сканирует Nest. */
 export const contracts: Record<string, Contract> = {
+  Participation_get: c('Получить своё участие в событии', 'Participation', {
+    access: 'Участник с привязанным Member.',
+    errors: [404],
+    description:
+      'Только собственное участие. canDecline учитывает дедлайн из Setting и приглашённый состав; canAttend учитывает сроки отмены всех перекрывающих периодов. absences содержит только собственные заявки.',
+  }),
+  Participation_update: c('Изменить своё участие в событии', 'Ok', {
+    body: 'ParticipationInput',
+    access: 'Участник с привязанным Member.',
+    errors: [400, 404, 409],
+    description:
+      'attending=false создаёт отсутствие с привязкой к ID события (сохраняется при переносе, не затрагивает одновременные события), причина необязательна (до 500 символов). attending=true требует absenceIds из подтверждённой карточки (при изменении списка — 409) и отменяет все собственные активные отсутствия, покрывающие начало события, целиком — клиент должен показать подтверждение с периодами. Дедлайн отказа — из Setting; отмена невозможна после начала любого события периода. Изменения и аудит атомарны, повторные одинаковые запросы идемпотентны.',
+  }),
   Week_list: c('Получить события недели со счётчиками участников', list('WeekEvent'), {
     query: 'WeekQuery',
     errors: [400],
@@ -224,7 +237,8 @@ export const contracts: Record<string, Contract> = {
   Absences_list: c('Получить активные отсутствия гильдии', list('Absence'), { access: leader }),
   Absences_forEvent: c('Получить отсутствия на момент ивента', list('EventAbsence'), {
     query: 'AbsencesQuery',
-    description: 'При отсутствии startsAt используется текущее время.',
+    description:
+      'eventId укажите для включения отсутствий, привязанных к конкретному ивенту; отсутствие ID возвращает только календарные заявки. При отсутствии startsAt используется текущее время.',
   }),
   Absences_create: c('Оформить отсутствие', 'Id', {
     access: 'Участник с привязанным Member.',
@@ -309,5 +323,5 @@ export const contracts: Record<string, Contract> = {
 };
 
 export const extraSchemas = {
-  AbsencesQuery: object({ startsAt: { type: 'string', format: 'date-time' } }, []),
+  AbsencesQuery: object({ startsAt: { type: 'string', format: 'date-time' }, eventId: str }, []),
 };

@@ -34,13 +34,20 @@ const findMembers = jest.fn(async () => [
 const absence = { memberId: 'b', dateFrom: startsAt, dateTo: startsAt };
 const findAbsences = jest.fn(async () => [absence, absence]);
 const db = {
+  setting: { findUnique: async () => null },
   event: { findMany: findEvents },
   member: { findMany: findMembers },
   absence: { findMany: findAbsences },
 };
 @Module({
   controllers: [WeekController],
-  providers: [{ provide: WeekService, useFactory: () => new WeekService(db as unknown as WeekDb) }],
+  providers: [
+    {
+      provide: WeekService,
+      useFactory: () =>
+        new WeekService(db as unknown as WeekDb, () => new Date(+startsAt - 3600000)),
+    },
+  ],
 })
 class TestModule {}
 describe('Недельное расписание через HTTP', () => {
@@ -76,6 +83,7 @@ describe('Недельное расписание через HTTP', () => {
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     const rows = (await response.json()) as WeekEvent[];
     expect(rows[0]).toMatchObject({
+      canDecline: true,
       invitedCount: 2,
       attendingCount: 1,
       eventTypeName: 'Босс',
@@ -99,8 +107,14 @@ describe('Недельное расписание через HTTP', () => {
       expect.objectContaining({
         where: {
           status: 'ACTIVE',
-          dateFrom: { lt: new Date('2026-11-16') },
-          dateTo: { gte: new Date('2026-11-09') },
+          OR: [
+            { eventId: { in: ['e'] } },
+            {
+              eventId: null,
+              dateFrom: { lt: new Date('2026-11-16') },
+              dateTo: { gte: new Date('2026-11-09') },
+            },
+          ],
         },
       }),
     );

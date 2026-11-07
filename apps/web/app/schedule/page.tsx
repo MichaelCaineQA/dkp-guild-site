@@ -14,6 +14,7 @@ import {
 } from '@dkp/shared';
 import { useSession } from '../../components/session-context';
 import { api } from '../../lib/api';
+import { DeclineEventDialog } from '../../components/event-participation';
 import { EventCard } from '../../components/event-card';
 import { CreateEventDialog } from '../../components/create-event-dialog';
 import {
@@ -45,6 +46,7 @@ export default function SchedulePage() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [decliningId, setDecliningId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createdMessage, setCreatedMessage] = useState('');
   const [weekCursor, setWeekCursor] = useState(() => getLocalWeekBounds(new Date()).start);
@@ -260,6 +262,7 @@ export default function SchedulePage() {
                         event={event}
                         selected={selectedId === event.id}
                         onSelect={() => setSelectedId(event.id)}
+                        onDecline={() => setDecliningId(event.id)}
                       />
                     </li>
                   ))}
@@ -285,6 +288,13 @@ export default function SchedulePage() {
             />
           </Card>
         ))}
+      {decliningId && (
+        <DeclineEventDialog
+          eventId={decliningId}
+          onClose={() => setDecliningId(null)}
+          onChanged={load}
+        />
+      )}
       {view === 'calendar' && detail}
     </Page>
   );

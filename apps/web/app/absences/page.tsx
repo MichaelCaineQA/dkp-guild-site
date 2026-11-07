@@ -18,6 +18,7 @@ import {
 } from '../../components/ui';
 
 interface AbsenceRow {
+  eventName?: string | null;
   id: string;
   memberId: string;
   memberName: string;
@@ -142,7 +143,9 @@ export default function AbsencesPage() {
               await load();
             } catch (err) {
               const status = (err as { status?: number }).status;
-              setError(status === 409 ? 'Ивент уже начался — отменить нельзя' : 'Не удалось отменить');
+              setError(
+                status === 409 ? 'Ивент уже начался — отменить нельзя' : 'Не удалось отменить',
+              );
             } finally {
               setBusy(false);
             }
@@ -258,11 +261,21 @@ function AbsenceTable({
     <table className="w-full border-collapse text-sm">
       <thead>
         <tr>
-          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">Кто</th>
-          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">Период</th>
-          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">Причина</th>
-          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">Увидели</th>
-          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">Действия</th>
+          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">
+            Кто
+          </th>
+          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">
+            Период
+          </th>
+          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">
+            Причина
+          </th>
+          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">
+            Увидели
+          </th>
+          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">
+            Действия
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -273,11 +286,12 @@ function AbsenceTable({
               {myMemberId && row.memberId === myMemberId && <Muted> (вы)</Muted>}
             </td>
             <td className="border-b border-line px-3 py-2">
+              {row.eventName && <span className="block font-medium">{row.eventName}</span>}
               {new Date(row.dateFrom).toLocaleDateString('ru-RU')}
               {row.dateTo !== row.dateFrom &&
                 ` — ${new Date(row.dateTo).toLocaleDateString('ru-RU')}`}
             </td>
-            <td className="border-b border-line px-3 py-2">{row.reason}</td>
+            <td className="border-b border-line px-3 py-2">{row.reason || 'Без причины'}</td>
             <td className="border-b border-line px-3 py-2">
               {row.seenBy.length > 0 ? (
                 <Badge tone="success">{row.seenBy.length} видели</Badge>

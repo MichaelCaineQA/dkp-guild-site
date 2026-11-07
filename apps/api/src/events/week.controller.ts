@@ -1,5 +1,5 @@
-import { Controller, Get, Header, Query, UseGuards } from '@nestjs/common';
-import { AuthGuard } from '../auth/auth.guard';
+import { Controller, Get, Header, Query, Req, UseGuards } from '@nestjs/common';
+import { AuthGuard, type AuthedRequest } from '../auth/auth.guard';
 import { PermissionsGuard, RequirePermission } from '../permissions/permissions.guard';
 import { WeekService } from './week.service';
 @Controller('schedule')
@@ -9,7 +9,7 @@ export class WeekController {
   @Get('week')
   @Header('Cache-Control', 'private, no-store')
   @RequirePermission('members.view_roster')
-  list(@Query() query: Record<string, string>) {
-    return this.week.list(query);
+  list(@Query() query: Record<string, string>, @Req() req: AuthedRequest) {
+    return this.week.list(query, req.session!.user!.memberId);
   }
 }

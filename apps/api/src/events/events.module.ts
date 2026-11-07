@@ -1,3 +1,5 @@
+import { ParticipationController } from './participation.controller';
+import { ParticipationService } from './participation.service';
 import { WeekController } from './week.controller';
 import { WeekService } from './week.service';
 import { Module } from '@nestjs/common';
@@ -7,8 +9,13 @@ import { EventsService, type EventsDb } from './events.service';
 
 /** Расписание ивентов (issue #8). Экспортирует сервис для хука отсутствий (#11). */
 @Module({
-  controllers: [EventsController, WeekController],
+  controllers: [EventsController, WeekController, ParticipationController],
   providers: [
+    {
+      provide: ParticipationService,
+      useFactory: (db: PrismaService) => new ParticipationService(db),
+      inject: [PrismaService],
+    },
     {
       provide: WeekService,
       useFactory: (db: PrismaService) => new WeekService(db),

@@ -30,9 +30,9 @@ export class AbsencesController {
   /** Отсутствующие по конкретному ивенту (для карточки/проведения). */
   @Get('for-event')
   @RequirePermission('members.view_roster')
-  forEvent(@Query('startsAt') startsAt?: string) {
+  forEvent(@Query('startsAt') startsAt?: string, @Query('eventId') eventId?: string) {
     const date = startsAt ? new Date(startsAt) : new Date();
-    return this.absences.forEvent(date);
+    return this.absences.forEvent(date, eventId);
   }
 
   @Post()

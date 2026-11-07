@@ -251,6 +251,7 @@ model Event {
   place String?
   notes String?
 
+  absences Absence[]
   checkInCodes CheckInCode[]
   attendance Attendance[]
   lootDrops LootDrop[]
@@ -301,6 +302,8 @@ model Attendance {
 /// Отсутствие: поданная заявка сразу = уважительная причина (раздел 2.3).
 /// Дедлайн — за 3 минуты до старта ивента, задним числом нельзя (валидация в API).
 model Absence {
+  eventId String?
+  event Event? @relation(fields: [eventId], references: [id], onDelete: Cascade)
   id String @id @default(cuid())
   memberId String
   member Member @relation(fields: [memberId], references: [id])
@@ -311,6 +314,7 @@ model Absence {
   seenBy AbsenceSeen[]
   createdAt DateTime @default(now())
 
+  @@index([eventId])
   @@index([memberId, dateFrom])
 }
 
@@ -318,7 +322,7 @@ model Absence {
 model AbsenceSeen {
   id String @id @default(cuid())
   absenceId String
-  absence Absence @relation(fields: [absenceId], references: [id])
+  absence Absence @relation(fields: [absenceId], references: [id], onDelete: Cascade)
   seenById String
   seenBy Member @relation(fields: [seenById], references: [id])
   createdAt DateTime @default(now())

@@ -6,6 +6,7 @@ import { AbsencesService } from './absences.service';
 const NOW = new Date('2026-03-10T12:00:00Z');
 
 interface AbsenceRecord {
+  eventId?: string | null;
   id: string;
   memberId: string;
   dateFrom: Date;
@@ -48,7 +49,11 @@ function makeDb(seed: Array<Partial<AbsenceRecord> & { id: string }> = []) {
         return found ? { ...found } : null;
       },
       create: async ({ data }) => {
-        const created: AbsenceRecord = { id: `a-${absences.length + 1}`, status: 'ACTIVE', ...data };
+        const created: AbsenceRecord = {
+          id: `a-${absences.length + 1}`,
+          status: 'ACTIVE',
+          ...data,
+        };
         absences.push(created);
         return created;
       },
@@ -186,9 +191,23 @@ describe('AbsencesService.cancel', () => {
     await expect(service.cancel('a-1', ACTOR)).rejects.toThrow(ForbiddenException);
   });
 
+  it('при отмене проверяет также идущие и завершённые события периода', async () => {
+    const { db, events } = makeDb([
+      { id: 'a-1', dateFrom: new Date('2026-03-10'), dateTo: new Date('2026-03-11') },
+    ]);
+    events.push({ startsAt: new Date('2026-03-10T11:00:00Z'), status: 'RUNNING' });
+    await expect(new AbsencesService(db, SETTINGS, clock).cancel('a-1', ACTOR)).rejects.toThrow(
+      ConflictException,
+    );
+  });
+
   it('ивент уже начался — 409', async () => {
     const { db } = makeDb([
-      { id: 'a-1', dateFrom: new Date('2026-03-10T00:00:00Z'), dateTo: new Date('2026-03-11T00:00:00Z') },
+      {
+        id: 'a-1',
+        dateFrom: new Date('2026-03-10T00:00:00Z'),
+        dateTo: new Date('2026-03-11T00:00:00Z'),
+      },
     ]);
     (db.event.findMany as unknown) = async () => [{ startsAt: new Date('2026-03-10T11:00:00Z') }];
     const service = new AbsencesService(db, SETTINGS, clock);
@@ -205,7 +224,11 @@ describe('AbsencesService.markSeen', () => {
     await expect(service.markSeen('a-1', LEADER)).resolves.toEqual({ ok: true }); // повтор — не ошибка
     expect(seen.has('a-1:m-lead')).toBe(true);
     expect(audit).toHaveLength(1);
-    expect(audit[0]).toMatchObject({ action: 'ABSENCE_SEEN', entityId: 'a-1', actorMemberId: 'm-lead' });
+    expect(audit[0]).toMatchObject({
+      action: 'ABSENCE_SEEN',
+      entityId: 'a-1',
+      actorMemberId: 'm-lead',
+    });
     expect(absences[0]!.status).toBe('ACTIVE'); // «Увидел» на статус не влияет
   });
 
@@ -221,13 +244,25 @@ describe('AbsencesService.forEvent / markExcusedForFinishedEvent', () => {
   it('находит заявки, покрывающие дату ивента', async () => {
     const { db } = makeDb([
       { id: 'a-1', memberId: 'm-1' }, // 20–21 марта — покрывает ивент 20-го
-      { id: 'a-2', memberId: 'm-2', dateFrom: new Date('2026-03-25T00:00:00Z'), dateTo: new Date('2026-03-26T00:00:00Z') },
+      {
+        id: 'a-2',
+        memberId: 'm-2',
+        dateFrom: new Date('2026-03-25T00:00:00Z'),
+        dateTo: new Date('2026-03-26T00:00:00Z'),
+      },
     ]);
     const service = new AbsencesService(db, SETTINGS, clock);
 
     const rows = await service.forEvent(new Date('2026-03-20T17:00:00Z'));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: 'a-1', memberId: 'm-1' });
+  });
+
+  it('отсутствие на ивент не переходит на другой одновременный ивент', async () => {
+    const { db } = makeDb([{ id: 'a-1', eventId: 'e-1' }]);
+    const service = new AbsencesService(db, SETTINGS, clock);
+    expect(await service.forEvent(new Date('2026-03-20T17:00:00Z'), 'e-2')).toEqual([]);
+    expect(await service.forEvent(new Date('2026-03-28T17:00:00Z'), 'e-1')).toHaveLength(1);
   });
 
   it('при завершении ивента отсутствующим ставится EXCUSED_ABSENCE', async () => {
@@ -237,7 +272,10 @@ describe('AbsencesService.forEvent / markExcusedForFinishedEvent', () => {
     ]);
     const service = new AbsencesService(db, SETTINGS, clock);
 
-    const marked = await service.markExcusedForFinishedEvent('e-1', new Date('2026-03-20T17:00:00Z'));
+    const marked = await service.markExcusedForFinishedEvent(
+      'e-1',
+      new Date('2026-03-20T17:00:00Z'),
+    );
     expect(marked).toBe(2);
     expect(attendance).toEqual([
       { eventId: 'e-1', memberId: 'm-1', status: 'EXCUSED_ABSENCE' },
@@ -251,7 +289,10 @@ describe('AbsencesService.forEvent / markExcusedForFinishedEvent', () => {
     attendance.push({ eventId: 'e-1', memberId: 'm-1', status: 'PRESENT' });
     const service = new AbsencesService(db, SETTINGS, clock);
 
-    const marked = await service.markExcusedForFinishedEvent('e-1', new Date('2026-03-20T17:00:00Z'));
+    const marked = await service.markExcusedForFinishedEvent(
+      'e-1',
+      new Date('2026-03-20T17:00:00Z'),
+    );
     expect(marked).toBe(0); // никого нового не отметили
     expect(attendance).toEqual([{ eventId: 'e-1', memberId: 'm-1', status: 'PRESENT' }]);
   });
@@ -259,7 +300,10 @@ describe('AbsencesService.forEvent / markExcusedForFinishedEvent', () => {
 
 describe('AbsencesService.list', () => {
   it('свои заявки возвращает с отметками «Увидел»', async () => {
-    const { db, seen } = makeDb([{ id: 'a-1', memberId: 'm-1' }, { id: 'a-2', memberId: 'm-2' }]);
+    const { db, seen } = makeDb([
+      { id: 'a-1', memberId: 'm-1' },
+      { id: 'a-2', memberId: 'm-2' },
+    ]);
     seen.add('a-1:m-off');
     const service = new AbsencesService(db, SETTINGS, clock);
 
