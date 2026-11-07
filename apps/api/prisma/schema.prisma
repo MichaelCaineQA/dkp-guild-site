@@ -177,7 +177,7 @@ model MemberLinkRequest {
   resolvedAt DateTime?
   createdAt DateTime @default(now())
 
-  @@unique([userId, nickname])
+  @@index([userId, status])
 }
 
 enum MemberLinkRequestStatus {

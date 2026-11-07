@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException, StreamableFile } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  PayloadTooLargeException,
+  StreamableFile,
+} from '@nestjs/common';
 import { can, SCREENSHOT_MAX_BYTES, type SessionUser } from '@dkp/shared';
 import type { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -33,7 +39,9 @@ export class ScreenshotsService {
   private readonly directory = resolve(process.env.SCREENSHOT_DIR ?? 'uploads/screenshots');
   constructor(private readonly db: ScreenshotDb) {}
   async upload(userId: string, file?: ScreenshotFile) {
-    if (!file || file.size > SCREENSHOT_MAX_BYTES || !file.buffer.length)
+    if (file && file.size > SCREENSHOT_MAX_BYTES)
+      throw new PayloadTooLargeException('Скриншот должен быть до 10 МБ включительно');
+    if (!file || !file.buffer.length)
       throw new BadRequestException('Файл PNG, JPG или WebP до 10 МБ обязателен');
     const mime = imageMime(file.buffer);
     if (!mime || file.mimetype !== mime)

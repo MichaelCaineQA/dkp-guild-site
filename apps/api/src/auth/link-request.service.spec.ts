@@ -67,8 +67,8 @@ function fixture() {
         Object.assign(row, data);
         return row;
       }),
-      upsert: jest.fn(async ({ create }: { create: object }) => {
-        const row = { id: 'r', status: 'PENDING', ...create } as RequestRow;
+      create: jest.fn(async ({ data }: { data: object }) => {
+        const row = { id: 'r', status: 'PENDING', ...data } as RequestRow;
         draft.requests.push(row);
         return row;
       }),

@@ -76,12 +76,7 @@ export class LinkRequestService {
         orderBy: [...orderBy],
       });
       if (current) await tx.memberLinkRequest.update({ where: { id: current.id }, data: input });
-      else
-        await tx.memberLinkRequest.upsert({
-          where: { userId_nickname: { userId, nickname: input.nickname } },
-          create: { userId, ...input },
-          update: { ...input, status: 'PENDING', resolvedAt: null, resolvedById: null },
-        });
+      else await tx.memberLinkRequest.create({ data: { userId, ...input } });
       await tx.auditLog.create({
         data: {
           action: current ? 'ONBOARDING_UPDATE' : 'ONBOARDING_SUBMIT',

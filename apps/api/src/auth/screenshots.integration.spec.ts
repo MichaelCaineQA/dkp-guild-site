@@ -106,7 +106,7 @@ describe('Приватные скриншоты через HTTP', () => {
     const exact = Buffer.alloc(SCREENSHOT_MAX_BYTES);
     png.copy(exact);
     expect((await upload(exact)).status).toBe(201);
-    const tooBig = Buffer.alloc(SCREENSHOT_MAX_BYTES + 2);
+    const tooBig = Buffer.alloc(SCREENSHOT_MAX_BYTES + 1);
     png.copy(tooBig);
     expect((await upload(tooBig)).status).toBe(413);
     expect(metadata.create).toHaveBeenCalledTimes(1);

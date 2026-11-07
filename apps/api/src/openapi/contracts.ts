@@ -77,7 +77,7 @@ export const contracts: Record<string, Contract> = {
     description:
       'Создаёт или редактирует актуальную ожидающую анкету. Обязательны GS и ранее загруженные собственные скриншоты. До приёма доступа к разделам гильдии нет.',
     access: 'Вошедший Discord-аккаунт.',
-    errors: [400],
+    errors: [400, 409],
   }),
   Auth_listLinkRequests: c('Получить очередь заявок на привязку', list('LinkRequest'), {
     access: leader,

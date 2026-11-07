@@ -82,6 +82,20 @@ suite('Анкеты: настоящая PostgreSQL, транзакции и ко
       await db.auditLog.count({ where: { entityId: request.id, action: 'LINK_REQUEST_APPROVE' } }),
     ).toBe(1);
   });
+  it('старые анкеты сохраняются и не мешают вернуть прежний ник в текущей', async () => {
+    const { userId, input } = await fixture();
+    await db.memberLinkRequest.create({ data: { userId, nickname: input.nickname } });
+    const current = await db.memberLinkRequest.create({
+      data: { userId, nickname: input.nickname + 'new', createdAt: new Date(Date.now() + 1000) },
+    });
+    await service.create(userId, input);
+    expect((await service.mine(userId))!.id).toBe(current.id);
+    expect((await service.mine(userId))!.nickname).toBe(input.nickname);
+    await service.approve(current.id);
+    expect(await service.mine(userId)).toBeNull();
+    expect(await db.memberLinkRequest.count({ where: { userId } })).toBe(2);
+  });
+
   it('ошибка FK в аудите откатывает создание профиля, GS и одобрение', async () => {
     const { userId, input } = await fixture();
     await service.create(userId, input);
