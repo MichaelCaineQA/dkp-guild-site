@@ -1,3 +1,4 @@
+import { WeekService } from './week.service';
 import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { EventsService, type EventsDb } from './events.service';
@@ -31,6 +32,7 @@ suite('Создание ивентов: настоящие транзакции 
     typeId = (await db.eventType.create({ data: { name: 'series-' + randomUUID() } })).id;
   });
   beforeEach(async () => {
+    await db.absence.deleteMany({ where: { memberId } });
     await db.auditLog.deleteMany({ where: { actorMemberId: memberId } });
     await db.event.deleteMany({ where: { eventTypeId: typeId } });
   });
@@ -41,6 +43,7 @@ suite('Создание ивентов: настоящие транзакции 
       await db.event.deleteMany({ where: { eventTypeId: typeId } });
       await db.eventType.delete({ where: { id: typeId } });
     }
+    if (memberId) await db.absence.deleteMany({ where: { memberId } });
     if (memberId) await db.member.delete({ where: { id: memberId } });
     await db.$disconnect();
   });
@@ -79,5 +82,50 @@ suite('Создание ивентов: настоящие транзакции 
       service.create(input(), { memberId: 'missing-author', isAdmin: true }),
     ).rejects.toThrow();
     expect(await db.event.count({ where: { eventTypeId: typeId } })).toBe(0);
+  });
+  it('неделя: активные пересекающиеся отсутствия, отменённые и граница периода в PostgreSQL', async () => {
+    await service.create(input(), { memberId, isAdmin: false, rank: 'OFFICER' });
+    const from = new Date('2026-11-09T00:00:00Z');
+    const to = new Date('2026-11-16T00:00:00Z');
+    for (const status of ['ACTIVE', 'ACTIVE', 'CANCELLED'] as const)
+      await db.absence.create({
+        data: {
+          memberId,
+          dateFrom: new Date(input().startsAt),
+          dateTo: new Date(input().endsAt),
+          reason: 'Тест',
+          status,
+        },
+      });
+    await db.event.create({
+      data: {
+        name: 'Граница',
+        mode: 'PVE',
+        eventTypeId: typeId,
+        raidLeadId: memberId,
+        startsAt: to,
+        endsAt: new Date(+to + 3600000),
+        dkpReward: 10,
+      },
+    });
+    await db.event.create({
+      data: {
+        name: 'Отмена',
+        mode: 'PVE',
+        eventTypeId: typeId,
+        raidLeadId: memberId,
+        startsAt: from,
+        endsAt: new Date(+from + 3600000),
+        dkpReward: 10,
+        status: 'CANCELLED',
+      },
+    });
+    const rows = await new WeekService(db).list({ from, to, eventTypeId: typeId });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].invitedCount).toBeGreaterThanOrEqual(1);
+    expect(rows[0].attendingCount).toBe(rows[0].invitedCount - 1);
+    await db.absence.updateMany({ where: { memberId }, data: { status: 'CANCELLED' } });
+    const restored = await new WeekService(db).list({ from, to, eventTypeId: typeId });
+    expect(restored[0].attendingCount).toBe(restored[0].invitedCount);
   });
 });
