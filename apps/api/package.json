@@ -9,9 +9,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:seed": "prisma db seed",
-    "db:seed:test": "ts-node prisma/seed-test.ts"
+    "db:migrate": "pnpm --filter @dkp/shared build && prisma migrate dev",
+    "db:seed": "pnpm --filter @dkp/shared build && prisma generate && prisma db seed",
+    "db:seed:test": "pnpm --filter @dkp/shared build && prisma generate && ts-node prisma/seed-test.ts"
   },
   "dependencies": {
     "@dkp/shared": "workspace:*",
