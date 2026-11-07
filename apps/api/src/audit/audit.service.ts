@@ -9,7 +9,8 @@ export interface AuditRecord {
   comment: string;
 }
 interface AuditWhere {
-  actorMemberId?: string;
+  actorMemberId?: string | null;
+  entityType?: string;
   action?: string;
   createdAt?: { gte?: Date; lte?: Date };
 }
@@ -53,6 +54,8 @@ export class AuditService {
     if (!parsed.success) throw new BadRequestException('Некорректные фильтры журнала');
     const input = parsed.data;
     const where: AuditWhere = {};
+    if (input.entityType) where.entityType = input.entityType;
+    if (input.system) where.actorMemberId = null;
     if (input.actorMemberId) where.actorMemberId = input.actorMemberId;
     if (input.action) where.action = input.action;
     if (input.from || input.to) where.createdAt = { gte: input.from, lte: input.to };

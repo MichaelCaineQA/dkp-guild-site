@@ -94,6 +94,33 @@ describe('аудит через HTTP: права, фильтры, ровно о�
     expect(count).toHaveBeenCalledWith({ where });
   });
 
+  it('совмещает Систему, сущность и период, не превращает system=false в true', async () => {
+    const response = await fetch(
+      url + '/audit?system=true&entityType=Event&from=2026-11-01&limit=10',
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          actorMemberId: null,
+          entityType: 'Event',
+          createdAt: { gte: new Date('2026-11-01'), lte: undefined },
+        },
+        take: 10,
+      }),
+    );
+    findMany.mockClear();
+    expect((await fetch(url + '/audit?system=false&entityType=Pack')).status).toBe(200);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { entityType: 'Pack' } }),
+    );
+  });
+  it('не принимает двух авторов или некорректный системный фильтр', async () => {
+    expect((await fetch(url + '/audit?system=true&actorMemberId=m1')).status).toBe(400);
+    expect((await fetch(url + '/audit?system=invalid')).status).toBe(400);
+    expect(findMany).not.toHaveBeenCalled();
+  });
   it('неверный период и неограниченный размер страницы отклоняются', async () => {
     expect((await fetch(`${url}/audit?limit=10000`)).status).toBe(400);
     expect((await fetch(`${url}/audit?from=2026-11-07&to=2026-11-01`)).status).toBe(400);

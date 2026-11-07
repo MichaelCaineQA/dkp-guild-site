@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { PermissionsGuard, RequirePermission } from '../permissions/permissions.guard';
 import { AuditService } from './audit.service';
@@ -9,6 +9,7 @@ import { AuditService } from './audit.service';
 export class AuditController {
   constructor(private readonly audit: AuditService) {}
   @Get()
+  @Header('Cache-Control', 'private, no-store')
   list(@Query() query: Record<string, string>) {
     return this.audit.list(query);
   }

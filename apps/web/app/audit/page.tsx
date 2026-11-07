@@ -1,5 +1,5 @@
 'use client';
-import { AUDIT_ACTION_LABELS as ACTION_LABELS } from '@dkp/shared';
+import { AUDIT_ENTITY_LABELS } from '@dkp/shared';
 
 import { useEffect, useState } from 'react';
 import { can, type AuditRow } from '@dkp/shared';
@@ -11,28 +11,11 @@ import {
   ErrorText,
   Field,
   Input,
-  Muted,
   Page,
   PageHeader,
   Select,
-  Table,
+  AuditFeed,
 } from '../../components/ui';
-
-const ENTITY_LABELS: Record<string, string> = {
-  RulesPage: 'Страница правил',
-  User: 'Аккаунт',
-  Member: 'Участник',
-  Event: 'Ивент',
-  EventSeries: 'Серия',
-  EventType: 'Тип ивента',
-  Setting: 'Настройка',
-  Guild: 'Гильдия',
-  Absence: 'Отсутствие',
-  MemberLinkRequest: 'Привязка',
-  Attendance: 'Посещение',
-  DkpEntry: 'Операция ДКП',
-};
-const LIMIT = 50;
 
 export default function AuditPage() {
   const { user, loading: sessionLoading } = useSession();
@@ -42,30 +25,25 @@ export default function AuditPage() {
   const [entries, setEntries] = useState<AuditRow[]>([]);
   const [total, setTotal] = useState(0);
   const [members, setMembers] = useState<Array<{ id: string; nickname: string }>>([]);
-  const [actions, setActions] = useState<string[]>([]);
+  const [limit, setLimit] = useState(50);
   const [actor, setActor] = useState('');
-  const [action, setAction] = useState('');
+  const [entity, setEntity] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [offset, setOffset] = useState(0);
   const [error, setError] = useState('');
+  const [filterError, setFilterError] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!allowed) return;
     let active = true;
-    Promise.all([
-      api<Array<{ id: string; nickname: string }>>('/members'),
-      api<string[]>('/audit/actions'),
-    ])
-      .then(([roster, kinds]) => {
-        if (active) {
-          setMembers(roster);
-          setActions(kinds);
-        }
+    api<Array<{ id: string; nickname: string }>>('/members')
+      .then((roster) => {
+        if (active) setMembers(roster);
       })
       .catch(() => {
-        if (active) setError('Не удалось загрузить справочники фильтров');
+        if (active) setFilterError('Не удалось загрузить список авторов');
       });
     return () => {
       active = false;
@@ -81,9 +59,10 @@ export default function AuditPage() {
       return;
     }
     setLoading(true);
-    const params = new URLSearchParams({ limit: String(LIMIT), offset: String(offset) });
-    if (actor) params.set('actorMemberId', actor);
-    if (action) params.set('action', action);
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (actor === '__system__') params.set('system', 'true');
+    else if (actor) params.set('actorMemberId', actor);
+    if (entity) params.set('entityType', entity);
     if (from) params.set('from', new Date(from).toISOString());
     if (to) params.set('to', new Date(to).toISOString());
     api<{ entries: AuditRow[]; total: number }>(`/audit?${params}`)
@@ -106,7 +85,7 @@ export default function AuditPage() {
     return () => {
       active = false;
     };
-  }, [allowed, actor, action, from, to, offset]);
+  }, [allowed, actor, entity, from, to, offset, limit]);
 
   if (sessionLoading) return <Page>Загрузка…</Page>;
   if (!allowed)
@@ -134,7 +113,8 @@ export default function AuditPage() {
                 setOffset(0);
               }}
             >
-              <option value="">Все участники</option>
+              <option value="">Все авторы</option>
+              <option value="__system__">Система</option>
               {members.map((member) => (
                 <option key={member.id} value={member.id}>
                   {member.nickname}
@@ -142,18 +122,33 @@ export default function AuditPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Действие">
+          <Field label="Сущность">
             <Select
-              value={action}
+              value={entity}
               onChange={(e) => {
-                setAction(e.target.value);
+                setEntity(e.target.value);
                 setOffset(0);
               }}
             >
-              <option value="">Все действия</option>
-              {actions.map((kind) => (
-                <option key={kind} value={kind}>
-                  {ACTION_LABELS[kind] ?? 'Другое действие'}
+              <option value="">Все сущности</option>
+              {Object.entries(AUDIT_ENTITY_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Записей на странице">
+            <Select
+              value={limit}
+              onChange={(e) => {
+                setLimit(Number(e.target.value));
+                setOffset(0);
+              }}
+            >
+              {[10, 50, 100].map((size) => (
+                <option key={size} value={size}>
+                  {size}
                 </option>
               ))}
             </Select>
@@ -180,6 +175,7 @@ export default function AuditPage() {
           </Field>
         </div>
       </Card>
+      {filterError && <ErrorText>{filterError}</ErrorText>}
       {error && (
         <div role="alert">
           <ErrorText>{error}</ErrorText>
@@ -190,46 +186,20 @@ export default function AuditPage() {
       ) : (
         !error && (
           <Card>
-            <Muted>Найдено записей: {total}</Muted>
             {entries.length === 0 ? (
               <p>Записей по выбранным фильтрам нет</p>
             ) : (
-              <Table>
-                <thead>
-                  <tr>
-                    {['Когда', 'Кто', 'Действие', 'Объект', 'Комментарий'].map((label) => (
-                      <Table.Th key={label}>{label}</Table.Th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.map((entry) => (
-                    <tr key={entry.id}>
-                      <Table.Td>{new Date(entry.createdAt).toLocaleString('ru-RU')}</Table.Td>
-                      <Table.Td>{entry.actorName ?? 'Без участника'}</Table.Td>
-                      <Table.Td>{ACTION_LABELS[entry.action] ?? 'Другое действие'}</Table.Td>
-                      <Table.Td>
-                        <span className="break-all">
-                          {ENTITY_LABELS[entry.entityType] ?? 'Объект'}: {entry.entityId}
-                        </span>
-                      </Table.Td>
-                      <Table.Td className="min-w-48 break-words">
-                        {entry.comment ?? 'Без комментария'}
-                      </Table.Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
+              <AuditFeed entries={entries} />
             )}
             <div className="mt-4 flex items-center gap-3">
               <Button
                 disabled={offset === 0}
-                onClick={() => setOffset(Math.max(0, offset - LIMIT))}
+                onClick={() => setOffset(Math.max(0, offset - limit))}
               >
                 Назад
               </Button>
-              <span>Страница {Math.floor(offset / LIMIT) + 1}</span>
-              <Button disabled={offset + LIMIT >= total} onClick={() => setOffset(offset + LIMIT)}>
+              <span>Страница {Math.floor(offset / limit) + 1}</span>
+              <Button disabled={offset + limit >= total} onClick={() => setOffset(offset + limit)}>
                 Далее
               </Button>
             </div>

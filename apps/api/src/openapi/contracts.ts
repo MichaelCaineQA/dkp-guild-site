@@ -264,6 +264,8 @@ export const contracts: Record<string, Contract> = {
   Audit_list: c('Получить журнал действий', 'AuditPage', {
     access: officer,
     query: 'AuditQuery',
+    description:
+      'Фильтры объединяются через И: entityType, actorMemberId либо system=true, from/to (UTC). system=true выбирает записи без actorMemberId; не сочетается с actorMemberId. action сохранён для API-клиентов. Новые записи первыми. UI использует размеры 10/50/100 и не показывает total.',
     errors: [400],
   }),
   Audit_actions: c('Получить доступные действия аудита', array(str), { access: officer }),
