@@ -1,4 +1,6 @@
+import { serializable } from '../prisma/serializable';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -20,10 +22,18 @@ import type { EventsActor } from '../events/events.service';
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
 export interface ConductDb {
+  setting: {
+    findMany(args: {
+      where: { key: { in: string[] } };
+      select: { key: true; value: true };
+    }): Promise<{ key: string; value: unknown }[]>;
+  };
+  $transaction<T>(
+    work: (tx: Omit<ConductDb, '$transaction'>) => Promise<T>,
+    options: { isolationLevel: 'Serializable' },
+  ): Promise<T>;
   event: {
-    findUnique(args: {
-      where: { id: string };
-    }): Promise<{
+    findUnique(args: { where: { id: string } }): Promise<{
       id: string;
       status: string;
       startsAt: Date;
@@ -59,16 +69,16 @@ export interface ConductDb {
     }): Promise<unknown>;
   };
   dkpEntry: {
-    findMany(args: { where: { eventId: string } }): Promise<
-      Array<{ memberId: string; amount: number; type: string; eventId: string | null }>
-    >;
+    findMany(args: {
+      where: { eventId: string };
+    }): Promise<Array<{ memberId: string; amount: number; type: string; eventId: string | null }>>;
     create(args: {
       data: {
         memberId: string;
         type: string;
         amount: number;
         eventId: string;
-        createdById: string;
+        createdById: string | null;
         comment: string;
       };
     }): Promise<{ id: string }>;
@@ -101,8 +111,52 @@ export interface ConductSettings {
 export class ConductService {
   constructor(
     private readonly db: ConductDb,
-    private readonly settings: ConductSettings,
+    private readonly settings: ConductSettings | ((db: ConductDb) => Promise<ConductSettings>),
   ) {}
+
+  async setAttendance(
+    eventId: string,
+    body: unknown,
+    actor: EventsActor,
+    actorRank: string | null,
+  ): Promise<{ ok: true }> {
+    return this.transact((service) =>
+      service.setAttendanceInTransaction(eventId, body, actor, actorRank),
+    );
+  }
+  async manualCheckIn(
+    eventId: string,
+    body: unknown,
+    actor: EventsActor,
+    actorRank: string | null,
+  ): Promise<{ ok: true }> {
+    return this.transact((service) =>
+      service.manualCheckInInTransaction(eventId, body, actor, actorRank),
+    );
+  }
+  async manualDkp(
+    eventId: string,
+    body: unknown,
+    actor: EventsActor,
+    actorRank: string | null,
+  ): Promise<{ id: string }> {
+    return this.transact((service) =>
+      service.manualDkpInTransaction(eventId, body, actor, actorRank),
+    );
+  }
+  private transact<T>(work: (service: ConductService) => Promise<T>): Promise<T> {
+    return serializable(
+      this.db,
+      (tx) =>
+        work(
+          new ConductService(
+            { ...tx, $transaction: this.db.$transaction.bind(this.db) },
+            this.settings,
+          ),
+        ),
+      true,
+    );
+  }
 
   /** Чек-лист ивента: все члены + их отметки + отсутствующие. */
   async checklist(eventId: string): Promise<EventSummaryRow[]> {
@@ -120,13 +174,15 @@ export class ConductService {
    * неявка. Отсутствие по уважительной отдельно не ставится — только
    * автоматически при закрытии (issue #11).
    */
-  async setAttendance(
+  private async setAttendanceInTransaction(
     eventId: string,
     body: unknown,
     actor: EventsActor,
     actorRank: string | null,
   ): Promise<{ ok: true }> {
-    const input: SetAttendanceInput = setAttendanceSchema.parse(body);
+    const parsed = setAttendanceSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('Проверьте поля и обязательный комментарий');
+    const input: SetAttendanceInput = parsed.data;
     await this.assertCanConduct(eventId, actor, actorRank);
 
     await this.db.attendance.upsert({
@@ -158,13 +214,15 @@ export class ConductService {
    * сам. Начисляет ту же долю фазы (50/50), что и верный код, но без
    * перезаписи PASSED/FAILED и без повторного начисления.
    */
-  async manualCheckIn(
+  private async manualCheckInInTransaction(
     eventId: string,
     body: unknown,
     actor: EventsActor,
     actorRank: string | null,
   ): Promise<{ ok: true }> {
-    const input: ManualCheckInInput = manualCheckInSchema.parse(body);
+    const parsed = manualCheckInSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('Проверьте поля и обязательный комментарий');
+    const input: ManualCheckInInput = parsed.data;
     const event = await this.assertCanConduct(eventId, actor, actorRank);
 
     const existing = await this.db.attendance.findUnique({
@@ -195,14 +253,18 @@ export class ConductService {
       },
     });
 
-    const amount = checkInShareAmount(event.dkpReward, input.phase, this.settings);
+    const amount = checkInShareAmount(
+      event.dkpReward,
+      input.phase,
+      typeof this.settings === 'function' ? await this.settings(this.db) : this.settings,
+    );
     await this.db.dkpEntry.create({
       data: {
         memberId: input.memberId,
         type: 'CHECKIN_EARN',
         amount,
         eventId,
-        createdById: actor.memberId!,
+        createdById: actor.memberId,
         comment: `Ручной чек-ин (${input.phase === 'START' ? 'старт' : 'финал'}). ${input.comment}`,
       },
     });
@@ -216,13 +278,15 @@ export class ConductService {
   }
 
   /** Ручное начисление/корректировка ДКП (журнал append-only). */
-  async manualDkp(
+  private async manualDkpInTransaction(
     eventId: string,
     body: unknown,
     actor: EventsActor,
     actorRank: string | null,
   ): Promise<{ id: string }> {
-    const input: ManualDkpInput = manualDkpSchema.parse(body);
+    const parsed = manualDkpSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('Проверьте поля и обязательный комментарий');
+    const input: ManualDkpInput = parsed.data;
     await this.assertCanConduct(eventId, actor, actorRank);
 
     const created = await this.db.dkpEntry.create({
@@ -231,7 +295,7 @@ export class ConductService {
         type: input.type,
         amount: input.amount,
         eventId,
-        createdById: actor.memberId!,
+        createdById: actor.memberId,
         comment: input.comment,
       },
     });
@@ -244,18 +308,13 @@ export class ConductService {
     return created;
   }
 
-  private async assertCanConduct(
-    eventId: string,
-    actor: EventsActor,
-    actorRank: string | null,
-  ) {
+  private async assertCanConduct(eventId: string, actor: EventsActor, actorRank: string | null) {
     const event = await this.mustGetEvent(eventId);
-    const allowed =
-      can(
-        { rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId },
-        'events.conduct',
-        event,
-      );
+    const allowed = can(
+      { rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId },
+      'events.conduct',
+      event,
+    );
     if (!allowed) {
       throw new ForbiddenException('Проведение — Главе, Админу и РЛ ивента');
     }
@@ -273,12 +332,7 @@ export class ConductService {
     return event;
   }
 
-  private async audit(
-    actor: EventsActor,
-    action: string,
-    entityId: string,
-    comment: string,
-  ) {
+  private async audit(actor: EventsActor, action: string, entityId: string, comment: string) {
     await this.db.auditLog.create({
       data: {
         actorMemberId: actor.memberId,

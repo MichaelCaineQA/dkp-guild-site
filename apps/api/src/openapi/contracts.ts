@@ -202,7 +202,8 @@ export const contracts: Record<string, Contract> = {
     access: 'Участник с привязанным Member.',
     body: 'SubmitCheckIn',
     errors: [404, 409, 429],
-    description: 'Одна попытка на фазу. Лимит: 10 запросов в минуту.',
+    description:
+      'Одна попытка на фазу. Проверка, отметка, начисление и аудит атомарны; одновременные попытки не удваивают ДКП. Лимит: 10 запросов в минуту.',
   }),
   CheckIn_raidLeadView: c('Получить чек-ин код для РЛ', 'RaidLeadCheckIn', {
     access: rl,
@@ -211,17 +212,21 @@ export const contracts: Record<string, Contract> = {
   CheckIn_startEndCodeEarly: c('Открыть финальный код досрочно', 'RaidLeadCheckIn', {
     access: rl,
     errors: [404, 409, 429],
-    description: 'Без тела запроса. 5 запросов в минуту. Действие фиксируется в аудите.',
+    description:
+      'Без тела запроса. 5 запросов в минуту. Код и факт запуска в аудите создаются атомарно, сам код не журналируется.',
   }),
   Conduct_checklist: c('Получить чек-лист посещения', list('ChecklistRow'), { errors: [404] }),
   Conduct_setAttendance: c('Отметить посещение вручную', 'Ok', {
     access: rl,
     body: 'SetAttendance',
+    description: 'Отметка и аудит записываются одной транзакцией.',
     errors: [404, 409],
   }),
   Conduct_manualCheckIn: c('Подтвердить чек-ин вручную', 'Ok', {
     access: rl,
     body: 'ManualCheckIn',
+    description:
+      'Отметка, доля ДКП из Setting и аудит атомарны. Повтор уже принятой фазы даёт 409, включая гонку с самостоятельным чек-ином.',
     errors: [404, 409],
   }),
   Conduct_manualDkp: c('Добавить ручное начисление или корректировку ДКП', 'Id', {
@@ -229,7 +234,7 @@ export const contracts: Record<string, Contract> = {
     body: 'ManualDkp',
     errors: [404, 409],
     description:
-      'Новая запись append-only журнала; существующие записи не меняются. Комментарий обязателен.',
+      'Новая запись append-only журнала и аудит сохраняются атомарно; существующие записи не меняются. Комментарий обязателен.',
   }),
   Absences_mine: c('Получить свои активные отсутствия', list('Absence'), {
     access: 'Участник с привязанным Member.',

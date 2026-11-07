@@ -1,4 +1,6 @@
+import { serializable } from '../prisma/serializable';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -62,10 +64,12 @@ export interface RaidLeadCheckInView {
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
 export interface CheckInDb {
+  $transaction<T>(
+    work: (tx: Omit<CheckInDb, '$transaction'>) => Promise<T>,
+    options: { isolationLevel: 'Serializable' },
+  ): Promise<T>;
   event: {
-    findUnique(args: {
-      where: { id: string };
-    }): Promise<{
+    findUnique(args: { where: { id: string } }): Promise<{
       id: string;
       status: string;
       startsAt: Date;
@@ -142,12 +146,60 @@ export class CheckInService {
     private readonly encKeyHex: string = '',
   ) {}
 
+  async playerView(eventId: string, memberId: string): Promise<PlayerCheckInView> {
+    return this.transact((service) => service.playerViewInTransaction(eventId, memberId));
+  }
+  async raidLeadView(
+    eventId: string,
+    actor: EventsActor,
+    actorRank: string | null,
+  ): Promise<RaidLeadCheckInView> {
+    return this.transact((service) => service.raidLeadViewInTransaction(eventId, actor, actorRank));
+  }
+  async submit(
+    eventId: string,
+    memberId: string,
+    body: unknown,
+  ): Promise<{ result: 'PASSED' | 'FAILED' }> {
+    return this.transact((service) => service.submitInTransaction(eventId, memberId, body));
+  }
+  async startEndCodeEarly(
+    eventId: string,
+    actor: EventsActor,
+    actorRank: string | null,
+  ): Promise<RaidLeadCheckInView> {
+    return this.transact((service) =>
+      service.startEndCodeEarlyInTransaction(eventId, actor, actorRank),
+    );
+  }
+  private transact<T>(work: (service: CheckInService) => Promise<T>): Promise<T> {
+    return serializable(
+      this.db,
+      (tx) =>
+        work(
+          new CheckInService(
+            { ...tx, $transaction: this.db.$transaction.bind(this.db) },
+            this.settings,
+            this.clock,
+            this.encKeyHex,
+          ),
+        ),
+      true,
+    );
+  }
+
   /**
    * Вид игрока: статус окна текущей фазы + перемешанные 4 варианта
    * (верный + 3 обманки). Варианты отдаются только в активном окне.
    */
-  async playerView(eventId: string, memberId: string): Promise<PlayerCheckInView> {
+  private async playerViewInTransaction(
+    eventId: string,
+    memberId: string,
+  ): Promise<PlayerCheckInView> {
+    if (!memberId) throw new ForbiddenException('Для отметки нужен профиль игрока');
     const event = await this.mustGetEvent(eventId);
+    if (event.status === 'CANCELLED' || event.status === 'FINISHED')
+      throw new ConflictException('Чек-ин недоступен');
     const now = this.clock();
     const phase = (await this.currentPhase(event, now)) ?? 'START';
 
@@ -178,7 +230,7 @@ export class CheckInService {
    * Ленивая генерация: код создаётся при первом запросе в окне;
    * повторный показ — расшифровкой codeEnc.
    */
-  async raidLeadView(
+  private async raidLeadViewInTransaction(
     eventId: string,
     actor: EventsActor,
     actorRank: string | null,
@@ -187,12 +239,11 @@ export class CheckInService {
     if (event.status === 'CANCELLED' || event.status === 'FINISHED') {
       throw new ConflictException('Ивент отменён или завершён — чек-ин недоступен');
     }
-    const allowed =
-      can(
-        { rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId },
-        'events.conduct',
-        event,
-      );
+    const allowed = can(
+      { rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId },
+      'events.conduct',
+      event,
+    );
     if (!allowed) {
       throw new ForbiddenException('Код видит только РЛ ивента, Глава или Админ');
     }
@@ -230,12 +281,15 @@ export class CheckInService {
    * DkpEntry CHECKIN_EARN на долю фазы (50/50, решение №7). Неверный →
    * FAILED, повтор блокируется (дальше только ручная отметка РЛ).
    */
-  async submit(
+  private async submitInTransaction(
     eventId: string,
     memberId: string,
     body: unknown,
   ): Promise<{ result: 'PASSED' | 'FAILED' }> {
-    const input: SubmitCheckInInput = submitCheckInSchema.parse(body);
+    if (!memberId) throw new ForbiddenException('Для отметки нужен профиль игрока');
+    const parsed = submitCheckInSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('Некорректный код');
+    const input: SubmitCheckInInput = parsed.data;
     const event = await this.mustGetEvent(eventId);
     if (event.status === 'CANCELLED' || event.status === 'FINISHED') {
       throw new ConflictException('Ивент отменён или завершён — чек-ин недоступен');
@@ -293,6 +347,15 @@ export class CheckInService {
       });
     }
 
+    await this.db.auditLog.create({
+      data: {
+        actorMemberId: memberId,
+        action: 'CHECKIN_SUBMIT',
+        entityType: 'Event',
+        entityId: eventId,
+        comment: `Отметка ${phase === 'START' ? 'старта' : 'финала'}: ${correct ? 'код верный' : 'код неверный'}`,
+      },
+    });
     return { result: status };
   }
 
@@ -341,18 +404,17 @@ export class CheckInService {
    * уже открыто/прошло или код уже сгенерирован — 409 (нет смысла).
    * Возвращает код один раз — РЛ видит его на странице проведения.
    */
-  async startEndCodeEarly(
+  private async startEndCodeEarlyInTransaction(
     eventId: string,
     actor: EventsActor,
     actorRank: string | null,
   ): Promise<RaidLeadCheckInView> {
     const event = await this.mustGetEvent(eventId);
-    const allowed =
-      can(
-        { rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId },
-        'events.conduct',
-        event,
-      );
+    const allowed = can(
+      { rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId },
+      'events.conduct',
+      event,
+    );
     if (!allowed) {
       throw new ForbiddenException('Досрочный код — РЛ ивента, Главе или Админу');
     }
@@ -364,7 +426,11 @@ export class CheckInService {
       where: { eventId_phase: { eventId: event.id, phase: 'END' } },
     });
     if (existing) {
-      const windowState = checkInWindowState(this.clock(), existing.windowOpensAt, existing.windowClosesAt);
+      const windowState = checkInWindowState(
+        this.clock(),
+        existing.windowOpensAt,
+        existing.windowClosesAt,
+      );
       if (windowState !== 'CLOSED') {
         throw new ConflictException('Финальный код уже сгенерирован');
       }
@@ -400,6 +466,15 @@ export class CheckInService {
         codeEnc: stored.codeEnc,
         windowOpensAt: bounds.windowOpensAt,
         windowClosesAt: bounds.windowClosesAt,
+      },
+    });
+    await this.db.auditLog.create({
+      data: {
+        actorMemberId: actor.memberId,
+        action: 'CHECKIN_END_EARLY',
+        entityType: 'Event',
+        entityId: eventId,
+        comment: `Досрочно запущен финальный код (окно до ${bounds.windowClosesAt.toISOString()})`,
       },
     });
     return {
@@ -451,6 +526,15 @@ export class CheckInService {
         codeEnc: stored.codeEnc,
         windowOpensAt: bounds.windowOpensAt,
         windowClosesAt: bounds.windowClosesAt,
+      },
+    });
+    await this.db.auditLog.create({
+      data: {
+        actorMemberId: null,
+        action: 'CHECKIN_CODE_GENERATE',
+        entityType: 'Event',
+        entityId: event.id,
+        comment: `Сгенерирован ${phase === 'START' ? 'стартовый' : 'финальный'} код`,
       },
     });
     return stored;

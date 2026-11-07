@@ -26,6 +26,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   MANUAL_ATTENDANCE: 'Ручная отметка посещения',
   MANUAL_CHECKIN: 'Ручной чек-ин',
   MANUAL_DKP: 'Ручное изменение ДКП',
+  CHECKIN_CODE_GENERATE: 'Генерация чек-ин кода',
+  CHECKIN_SUBMIT: 'Самостоятельная отметка кодом',
   CHECKIN_END_EARLY: 'Досрочный финальный код',
   ABSENCE_CREATE: 'Создание отсутствия',
   ABSENCE_CANCEL: 'Отмена отсутствия',

@@ -33,11 +33,29 @@ function makeDb() {
   const dkp: Array<{ memberId: string; amount: number; type: string; eventId: string }> = [];
   const audit: Array<Record<string, string | null>> = [];
   const db: CheckInDb = {
+    $transaction: async (work) => {
+      const previousAttendance = structuredClone([...attendance]);
+      const previousCodes = structuredClone([...codes]);
+      const previousDkp = structuredClone(dkp);
+      const previousAudit = structuredClone(audit);
+      try {
+        return await work(db);
+      } catch (error) {
+        attendance.clear();
+        for (const [key, value] of previousAttendance) attendance.set(key, value);
+        codes.clear();
+        for (const [key, value] of previousCodes) codes.set(key, value);
+        dkp.splice(0, dkp.length, ...previousDkp);
+        audit.splice(0, audit.length, ...previousAudit);
+        throw error;
+      }
+    },
     event: {
       findUnique: async ({ where }) => (where.id === 'e-1' ? { ...EVENT } : null),
     },
     checkInCode: {
-      findUnique: async ({ where }) => codes.get(`${where.eventId_phase.eventId}:${where.eventId_phase.phase}`) ?? null,
+      findUnique: async ({ where }) =>
+        codes.get(`${where.eventId_phase.eventId}:${where.eventId_phase.phase}`) ?? null,
       create: async ({ data }) => {
         codes.set(`${data.eventId}:${data.phase}`, {
           codeHash: data.codeHash,
@@ -49,7 +67,9 @@ function makeDb() {
       },
     },
     attendance: {
-      findUnique: async ({ where }) => attendance.get(`${where.eventId_memberId.eventId}:${where.eventId_memberId.memberId}`) ?? null,
+      findUnique: async ({ where }) =>
+        attendance.get(`${where.eventId_memberId.eventId}:${where.eventId_memberId.memberId}`) ??
+        null,
       upsert: async ({ where, create, update }) => {
         const key = `${where.eventId_memberId.eventId}:${where.eventId_memberId.memberId}`;
         const current = attendance.get(key) ?? { checkinStart: 'PENDING', checkinEnd: 'PENDING' };
@@ -74,7 +94,8 @@ function makeDb() {
 const ACTOR = { memberId: 'm-officer', isAdmin: false };
 
 describe('CheckInService.raidLeadView', () => {
-  it('РЛ видит код в стартовом окне (генерация ленивая, хэш в БД)', async () => {    const { db, codes } = makeDb();
+  it('РЛ видит код в стартовом окне (генерация ленивая, хэш в БД)', async () => {
+    const { db, codes } = makeDb();
     const clock: Clock = () => new Date('2026-03-03T16:58:00Z'); // окно 16:57–17:00
     const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
 
@@ -92,7 +113,12 @@ describe('CheckInService.raidLeadView', () => {
 
   it('рядовой-не-РЛ код не видит — 403', async () => {
     const { db } = makeDb();
-    const service = new CheckInService(db, SETTINGS, () => new Date('2026-03-03T16:58:00Z'), ENC_KEY);
+    const service = new CheckInService(
+      db,
+      SETTINGS,
+      () => new Date('2026-03-03T16:58:00Z'),
+      ENC_KEY,
+    );
 
     await expect(
       service.raidLeadView('e-1', { memberId: 'm-other', isAdmin: false }, 'MEMBER'),
@@ -101,7 +127,12 @@ describe('CheckInService.raidLeadView', () => {
 
   it('Глава видит код (events.conduct)', async () => {
     const { db } = makeDb();
-    const service = new CheckInService(db, SETTINGS, () => new Date('2026-03-03T16:58:00Z'), ENC_KEY);
+    const service = new CheckInService(
+      db,
+      SETTINGS,
+      () => new Date('2026-03-03T16:58:00Z'),
+      ENC_KEY,
+    );
 
     const view = await service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER');
     expect(view.code).toMatch(/^\d{3}$/);
@@ -135,7 +166,12 @@ describe('CheckInService.raidLeadView', () => {
 
   it('до окна код не генерируется, РЛ видит NOT_OPEN_YET без кода', async () => {
     const { db, codes } = makeDb();
-    const service = new CheckInService(db, SETTINGS, () => new Date('2026-03-03T16:00:00Z'), ENC_KEY);
+    const service = new CheckInService(
+      db,
+      SETTINGS,
+      () => new Date('2026-03-03T16:00:00Z'),
+      ENC_KEY,
+    );
 
     const view = await service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER');
     expect(view.windowState).toBe('NOT_OPEN_YET');
@@ -166,7 +202,12 @@ describe('CheckInService.playerView', () => {
 
   it('вне окна вариантов нет', async () => {
     const { db } = makeDb();
-    const service = new CheckInService(db, SETTINGS, () => new Date('2026-03-03T18:30:00Z'), ENC_KEY);
+    const service = new CheckInService(
+      db,
+      SETTINGS,
+      () => new Date('2026-03-03T18:30:00Z'),
+      ENC_KEY,
+    );
 
     const view = await service.playerView('e-1', 'm-player');
     expect(view.choices).toHaveLength(0);
@@ -226,7 +267,12 @@ describe('CheckInService.submit', () => {
 
   it('вне окна — 409', async () => {
     const { db } = makeDb();
-    const service = new CheckInService(db, SETTINGS, () => new Date('2026-03-03T18:30:00Z'), ENC_KEY);
+    const service = new CheckInService(
+      db,
+      SETTINGS,
+      () => new Date('2026-03-03T18:30:00Z'),
+      ENC_KEY,
+    );
 
     await expect(service.submit('e-1', 'm-player', { code: '123' })).rejects.toThrow(
       ConflictException,
@@ -240,7 +286,12 @@ describe('CheckInService.submit', () => {
       ...EVENT,
       status: 'CANCELLED',
     });
-    const service = new CheckInService(db, SETTINGS, () => new Date('2026-03-03T16:58:00Z'), ENC_KEY);
+    const service = new CheckInService(
+      db,
+      SETTINGS,
+      () => new Date('2026-03-03T16:58:00Z'),
+      ENC_KEY,
+    );
 
     await expect(service.submit('e-1', 'm-player', { code: '123' })).rejects.toThrow(
       ConflictException,
@@ -330,4 +381,17 @@ describe('CheckInService.startEndCodeEarly', () => {
       service.startEndCodeEarly('e-1', { memberId: 'm-other', isAdmin: false }, 'MEMBER'),
     ).rejects.toThrow(ForbiddenException);
   });
+});
+
+it('при ошибке начисления самоотметка откатывается, код не попадает в аудит', async () => {
+  const { db, attendance, audit } = makeDb();
+  const service = new CheckInService(db, SETTINGS, () => new Date('2026-03-03T16:58:00Z'), ENC_KEY);
+  const view = await service.raidLeadView('e-1', { memberId: 'm-rl', isAdmin: false }, 'MEMBER');
+  db.dkpEntry.create = async () => {
+    throw new Error('ledger failure');
+  };
+  await expect(service.submit('e-1', 'm-1', { code: view.code })).rejects.toThrow('ledger failure');
+  expect(attendance.size).toBe(0);
+  expect(audit.map((a) => a.action)).toEqual(['CHECKIN_CODE_GENERATE']);
+  expect(audit[0]!.comment).toBe('Сгенерирован стартовый код');
 });

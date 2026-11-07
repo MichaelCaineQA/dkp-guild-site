@@ -1,8 +1,7 @@
 import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
-import { SETTING_DEFAULTS } from '@dkp/shared';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard';
 import { PermissionsGuard, RequirePermission } from '../permissions/permissions.guard';
-import { ConductService, type ConductSettings } from './conduct.service';
+import { ConductService } from './conduct.service';
 
 /**
  * Проведение ивента (issue #10, план 2.2 п.6): чек-лист, ручные отметки
@@ -57,11 +56,7 @@ export class ConductController {
   /** Ручное начисление/корректировка ДКП. */
   @Post('dkp')
   @RequirePermission('members.view_roster')
-  manualDkp(
-    @Param('eventId') eventId: string,
-    @Body() body: unknown,
-    @Req() req: AuthedRequest,
-  ) {
+  manualDkp(@Param('eventId') eventId: string, @Body() body: unknown, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
     return this.conduct.manualDkp(
       eventId,
@@ -70,12 +65,4 @@ export class ConductController {
       user.rank,
     );
   }
-}
-
-/** Настройки долей чек-ина из реестра (50/50) — для фабрики сервиса. */
-export function conductSettings(): ConductSettings {
-  return {
-    startSharePct: SETTING_DEFAULTS['checkin.startSharePct'],
-    endSharePct: SETTING_DEFAULTS['checkin.endSharePct'],
-  };
 }

@@ -32,11 +32,26 @@ function makeDb() {
     type: string;
     amount: number;
     eventId: string;
-    createdById: string;
+    createdById: string | null;
     comment: string;
   }> = [];
   const audit: Array<Record<string, string | null>> = [];
   const db: ConductDb = {
+    setting: { findMany: async () => [] },
+    $transaction: async (work) => {
+      const previousAttendance = structuredClone([...attendance]);
+      const previousDkp = structuredClone(dkp);
+      const previousAudit = structuredClone(audit);
+      try {
+        return await work(db);
+      } catch (error) {
+        attendance.clear();
+        for (const [key, value] of previousAttendance) attendance.set(key, value);
+        dkp.splice(0, dkp.length, ...previousDkp);
+        audit.splice(0, audit.length, ...previousAudit);
+        throw error;
+      }
+    },
     event: {
       findUnique: async ({ where }) => (where.id === 'e-1' ? { ...EVENT } : null),
     },
@@ -49,8 +64,12 @@ function makeDb() {
       findUnique: async ({ where }) => attendance.get(where.eventId_memberId.memberId) ?? null,
       upsert: async ({ where, create, update }) => {
         const key = where.eventId_memberId.memberId;
-        const current =
-          attendance.get(key) ?? { memberId: key, status: null, checkinStart: 'PENDING', checkinEnd: 'PENDING' };
+        const current = attendance.get(key) ?? {
+          memberId: key,
+          status: null,
+          checkinStart: 'PENDING',
+          checkinEnd: 'PENDING',
+        };
         attendance.set(key, { ...current, ...create, ...update } as typeof current);
       },
     },
@@ -111,7 +130,12 @@ describe('ConductService.setAttendance', () => {
     const service = new ConductService(db, SETTINGS);
 
     await expect(
-      service.setAttendance('e-1', { memberId: 'm-1', status: 'EXCUSED_ABSENCE', comment: 'Вручную' }, LEADER, 'GUILD_LEADER'),
+      service.setAttendance(
+        'e-1',
+        { memberId: 'm-1', status: 'EXCUSED_ABSENCE', comment: 'Вручную' },
+        LEADER,
+        'GUILD_LEADER',
+      ),
     ).rejects.toThrow();
   });
 });
@@ -141,20 +165,40 @@ describe('ConductService.manualCheckIn', () => {
     const { db, dkp } = makeDb();
     const service = new ConductService(db, SETTINGS);
 
-    await service.manualCheckIn('e-1', { memberId: 'm-1', phase: 'END', comment: 'Ушёл на работу' }, LEADER, 'GUILD_LEADER');
+    await service.manualCheckIn(
+      'e-1',
+      { memberId: 'm-1', phase: 'END', comment: 'Ушёл на работу' },
+      LEADER,
+      'GUILD_LEADER',
+    );
     await expect(
-      service.manualCheckIn('e-1', { memberId: 'm-1', phase: 'END', comment: 'Ещё раз' }, LEADER, 'GUILD_LEADER'),
+      service.manualCheckIn(
+        'e-1',
+        { memberId: 'm-1', phase: 'END', comment: 'Ещё раз' },
+        LEADER,
+        'GUILD_LEADER',
+      ),
     ).rejects.toThrow(ConflictException);
     expect(dkp).toHaveLength(1);
   });
 
   it('после PASSED-самоотметки ручная — 409', async () => {
     const { db, attendance } = makeDb();
-    attendance.set('m-1', { memberId: 'm-1', status: null, checkinStart: 'PASSED', checkinEnd: 'PENDING' });
+    attendance.set('m-1', {
+      memberId: 'm-1',
+      status: null,
+      checkinStart: 'PASSED',
+      checkinEnd: 'PENDING',
+    });
     const service = new ConductService(db, SETTINGS);
 
     await expect(
-      service.manualCheckIn('e-1', { memberId: 'm-1', phase: 'START', comment: 'Двойная отметка' }, LEADER, 'GUILD_LEADER'),
+      service.manualCheckIn(
+        'e-1',
+        { memberId: 'm-1', phase: 'START', comment: 'Двойная отметка' },
+        LEADER,
+        'GUILD_LEADER',
+      ),
     ).rejects.toThrow(ConflictException);
   });
 });
@@ -187,7 +231,12 @@ describe('ConductService.manualDkp', () => {
     const service = new ConductService(db, SETTINGS);
 
     await expect(
-      service.manualDkp('e-1', { memberId: 'm-1', type: 'MANUAL_EARN', amount: 5, comment: 'Сам себе' }, MEMBER, 'MEMBER'),
+      service.manualDkp(
+        'e-1',
+        { memberId: 'm-1', type: 'MANUAL_EARN', amount: 5, comment: 'Сам себе' },
+        MEMBER,
+        'MEMBER',
+      ),
     ).rejects.toThrow(ForbiddenException);
   });
 });
@@ -195,8 +244,20 @@ describe('ConductService.manualDkp', () => {
 describe('ConductService.checklist', () => {
   it('сводит всех членов, отметки и ДКП ивента', async () => {
     const { db, attendance, dkp } = makeDb();
-    attendance.set('m-1', { memberId: 'm-1', status: 'PRESENT', checkinStart: 'PASSED', checkinEnd: 'PASSED' });
-    dkp.push({ memberId: 'm-1', type: 'CHECKIN_EARN', amount: 10, eventId: 'e-1', createdById: 'm-1', comment: '' });
+    attendance.set('m-1', {
+      memberId: 'm-1',
+      status: 'PRESENT',
+      checkinStart: 'PASSED',
+      checkinEnd: 'PASSED',
+    });
+    dkp.push({
+      memberId: 'm-1',
+      type: 'CHECKIN_EARN',
+      amount: 10,
+      eventId: 'e-1',
+      createdById: 'm-1',
+      comment: '',
+    });
     const service = new ConductService(db, SETTINGS);
 
     const rows = await service.checklist('e-1');
@@ -207,5 +268,45 @@ describe('ConductService.checklist', () => {
       dkpEarned: 10,
     });
     expect(rows.find((r) => r.memberName === 'Второй')!.dkpEarned).toBe(0);
+  });
+});
+
+describe('Атомарность ручного чек-ина', () => {
+  it('сбой аудита откатывает отметку и начисление', async () => {
+    const { db, attendance, dkp } = makeDb();
+    db.auditLog.create = async () => {
+      throw new Error('audit failure');
+    };
+    await expect(
+      new ConductService(db, SETTINGS).manualCheckIn(
+        'e-1',
+        { memberId: 'm-1', phase: 'START', comment: 'Помощь' },
+        RL,
+        'MEMBER',
+      ),
+    ).rejects.toThrow('audit failure');
+    expect(attendance.size).toBe(0);
+    expect(dkp).toHaveLength(0);
+  });
+  it('настройки запрашиваются для каждого ручного начисления', async () => {
+    const { db, dkp } = makeDb();
+    let share = 20;
+    const settings = jest.fn(async () => ({ startSharePct: share, endSharePct: 100 - share }));
+    const service = new ConductService(db, settings);
+    await service.manualCheckIn(
+      'e-1',
+      { memberId: 'm-1', phase: 'START', comment: 'Старт' },
+      RL,
+      'MEMBER',
+    );
+    share = 30;
+    await service.manualCheckIn(
+      'e-1',
+      { memberId: 'm-2', phase: 'START', comment: 'Старт' },
+      RL,
+      'MEMBER',
+    );
+    expect(dkp.map((e) => e.amount)).toEqual([2, 3]);
+    expect(settings).toHaveBeenCalledTimes(2);
   });
 });
