@@ -67,62 +67,40 @@ export type EventsQuery = z.infer<typeof eventsQuerySchema>;
  * в таймзоне гильдии не нужны: клиент шлёт готовые UTC-интервалы первого
  * ивента, серия сдвигает их на недели.
  */
-export const createEventSeriesSchema = z.object({
-  name: z.string().trim().min(1).max(120),
-  eventTypeId: z.string().min(1),
-  mode: z.enum(EVENT_MODES),
-  /** Первый ивент серии: его интервал задаёт время и длительность. */
-  startsAt: z.coerce.date(),
-  endsAt: z.coerce.date(),
-  dkpReward: z.number().int().positive(),
-  raidLeadId: z.string().min(1),
-  place: z.string().max(200).optional(),
-  notes: z.string().max(2000).optional(),
-  /** Дни недели серии; если пусто — только первый ивент. */
-  weekdays: z.array(z.number().int().min(0).max(6)).max(7).default([]),
-  /** Сколько недель генерировать (1 = без повторов). */
-  weeks: z.number().int().min(1).max(26).default(1),
-});
+export const createEventSeriesSchema = createEventApiSchema
+  .extend({
+    repeat: z.enum(['DAILY', 'WEEKLY']),
+    until: z.coerce.date(),
+    /** Дни недели UTC. При пустом выборе еженедельно в день первого ивента. */
+    weekdays: z.array(z.number().int().min(0).max(6)).max(7).default([]),
+  })
+  .refine((input) => input.until >= input.startsAt, {
+    message: 'Дата окончания серии раньше первого ивента',
+    path: ['until'],
+  });
 export type CreateEventSeriesInput = z.infer<typeof createEventSeriesSchema>;
 
-/** Интервал ивента серии в ms — серии генерируются сдвигом недели. */
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-
-/**
- * Генератор серии: сначала первый ивент, затем — по выбранным дням недели
- * (время и длительность как у первого), в пределах `weeks` недель.
- * Чистая функция — покрывается юнит-тестами.
- */
+/** Технический предел объёма одного запроса; не ограничивает даты будущих серий. */
+export const MAX_SERIES_OCCURRENCES = 1000;
 export function generateSeriesEvents(
   input: CreateEventSeriesInput,
 ): Array<Pick<CreateEventApiInput, 'startsAt' | 'endsAt'>> {
-  const durationMs = input.endsAt.getTime() - input.startsAt.getTime();
-  if (durationMs <= 0) {
-    throw new Error('Ивент должен заканчиваться позже начала');
-  }
-
-  const weekdays = new Set(input.weekdays);
+  const duration = +input.endsAt - +input.startsAt;
+  if (duration <= 0) throw new Error('Ивент должен заканчиваться позже начала');
+  if (input.until < input.startsAt) throw new Error('Дата окончания серии раньше первого ивента');
+  const days = Math.floor((+input.until - +input.startsAt) / 86400000);
+  if (days > MAX_SERIES_OCCURRENCES * 7)
+    throw new RangeError('Слишком много событий. Разбейте серию на части (до 1000 за запрос).');
+  const weekdays = new Set(input.weekdays.length ? input.weekdays : [input.startsAt.getUTCDay()]);
   const events: Array<{ startsAt: Date; endsAt: Date }> = [];
-
-  for (let week = 0; week < input.weeks; week++) {
-    for (let day = 0; day < 7; day++) {
-      const date = new Date(input.startsAt.getTime() + day * 24 * 60 * 60 * 1000);
-      if (week === 0 && day === 0) {
-        events.push({ startsAt: input.startsAt, endsAt: input.endsAt });
-        continue;
-      }
-      if (!weekdays.has(date.getUTCDay())) {
-        continue;
-      }
-      // Время суток — как у первого ивента, день недели — из календаря.
-      const startsAt = new Date(
-        input.startsAt.getTime() + week * WEEK_MS + day * 24 * 60 * 60 * 1000,
-      );
-      events.push({ startsAt, endsAt: new Date(startsAt.getTime() + durationMs) });
-    }
+  for (let day = 0; day <= days; day++) {
+    const startsAt = new Date(+input.startsAt + day * 86400000);
+    if (day > 0 && input.repeat === 'WEEKLY' && !weekdays.has(startsAt.getUTCDay())) continue;
+    events.push({ startsAt, endsAt: new Date(+startsAt + duration) });
+    if (events.length > MAX_SERIES_OCCURRENCES)
+      throw new RangeError('Слишком много событий. Разбейте серию на части (до 1000 за запрос).');
   }
-
-  return events.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  return events;
 }
 
 /** Отрезок интервала в одной фазе игрового времени — для раскраски календаря. */

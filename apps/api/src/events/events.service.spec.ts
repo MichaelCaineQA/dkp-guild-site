@@ -34,6 +34,17 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
   }));
   const audit: Array<Record<string, string | null>> = [];
   const db: EventsDb = {
+    $transaction: async (work) => {
+      const snapshot = structuredClone(events);
+      const logs = [...audit];
+      try {
+        return await work({ event: db.event, auditLog: db.auditLog });
+      } catch (error) {
+        events.splice(0, events.length, ...snapshot);
+        audit.splice(0, audit.length, ...logs);
+        throw error;
+      }
+    },
     eventType: {
       findUnique: async ({ where }) =>
         where.id === 'et-1' ? { id: 'et-1', name: 'Гильдбосс' } : null,
@@ -82,6 +93,10 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
         };
         events.push(created);
         return created;
+      },
+      createMany: async ({ data }) => {
+        for (const input of data) await db.event.create({ data: input });
+        return { count: data.length };
       },
       update: async ({ where, data }) => {
         const event = events.find((e) => e.id === where.id)!;
@@ -186,7 +201,7 @@ describe('EventsService.createSeries / deleteSeries', () => {
     const service = new EventsService(db);
 
     const result = await service.createSeries(
-      { ...createBody(), weekdays: [2, 4], weeks: 4 },
+      { ...createBody(), weekdays: [2, 4], repeat: 'WEEKLY', until: '2026-03-30T23:59:59Z' },
       ACTOR,
     );
     expect(result.created).toBe(8);
@@ -200,7 +215,7 @@ describe('EventsService.createSeries / deleteSeries', () => {
     const service = new EventsService(db);
 
     const { seriesId } = await service.createSeries(
-      { ...createBody(), weekdays: [2], weeks: 2 },
+      { ...createBody(), weekdays: [2], repeat: 'WEEKLY', until: '2026-03-16T23:59:59Z' },
       ACTOR,
     );
     const result = await service.deleteSeries(seriesId, ACTOR);
@@ -213,7 +228,7 @@ describe('EventsService.createSeries / deleteSeries', () => {
     const service = new EventsService(db);
 
     const { seriesId } = await service.createSeries(
-      { ...createBody(), weekdays: [2], weeks: 2 },
+      { ...createBody(), weekdays: [2], repeat: 'WEEKLY', until: '2026-03-16T23:59:59Z' },
       ACTOR,
     );
     events.find((e) => e.seriesId === seriesId)!.status = 'RUNNING';
@@ -366,5 +381,40 @@ describe('назначенный РЛ и финальные состояния',
     ).rejects.toThrow(ConflictException);
     expect(events[0].place).toBeNull();
     expect(audit).toHaveLength(0);
+  });
+});
+
+describe('Атомарное создание', () => {
+  it('сбой аудита откатывает одиночный ивент', async () => {
+    const { db, events } = makeDb();
+    db.auditLog.create = async () => {
+      throw new Error('audit failed');
+    };
+    await expect(new EventsService(db).create(createBody(), ACTOR)).rejects.toThrow('audit failed');
+    expect(events).toEqual([]);
+  });
+  it('сбой аудита откатывает всю ежедневную серию', async () => {
+    const { db, events } = makeDb();
+    db.auditLog.create = async () => {
+      throw new Error('audit failed');
+    };
+    await expect(
+      new EventsService(db).createSeries(
+        { ...createBody(), repeat: 'DAILY', until: '2026-03-06T23:59:59Z' },
+        ACTOR,
+      ),
+    ).rejects.toThrow('audit failed');
+    expect(events).toEqual([]);
+  });
+  it('слишком большая серия отвергается без записей и аудита', async () => {
+    const { db, events, audit } = makeDb();
+    await expect(
+      new EventsService(db).createSeries(
+        { ...createBody(), repeat: 'DAILY', until: '9999-01-01' },
+        ACTOR,
+      ),
+    ).rejects.toThrow('Разбейте серию');
+    expect(events).toEqual([]);
+    expect(audit).toEqual([]);
   });
 });
