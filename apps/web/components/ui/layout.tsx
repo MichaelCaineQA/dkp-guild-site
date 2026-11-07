@@ -9,7 +9,7 @@ export function SiteHeader({
   children: ReactNode;
 }) {
   return (
-    <header className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 border-b border-line bg-surface px-4 py-3 sm:px-6">
+    <header className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 border-b border-line bg-surface py-3 pl-16 pr-4 md:px-6">
       {navigation}
       <div className="flex min-w-0 flex-wrap items-center gap-3">{children}</div>
     </header>

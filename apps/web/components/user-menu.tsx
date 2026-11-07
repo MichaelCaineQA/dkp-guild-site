@@ -1,54 +1,102 @@
 'use client';
-
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { RANK_LABELS, type DkpBalanceRow } from '@dkp/shared';
 import { useSession } from './session-context';
-import { Badge, Button } from './ui';
-
-const RANK_LABELS: Record<string, string> = {
-  GUILD_LEADER: 'Глава',
-  ADMIN: 'Админ',
-  OFFICER: 'Офицер',
-  MEMBER: 'Рядовой',
-};
-
-/** Меню пользователя в шапке: вход через Discord / данные сессии / выход. */
+import { api } from '../lib/api';
+import { Badge, Button, ErrorText, HeaderIdentity, Modal, Stack } from './ui';
 export function UserMenu() {
   const { user, loading, reload } = useSession();
-
-  if (loading) {
-    return <span className="text-sm text-secondary">…</span>;
+  const router = useRouter();
+  const [identity, setIdentity] = useState<DkpBalanceRow | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    setIdentity(null);
+    if (!user?.memberId) return;
+    let active = true;
+    const load = () =>
+      api<DkpBalanceRow>(`/dkp/balances/${encodeURIComponent(user.memberId!)}`)
+        .then((value) => {
+          if (active) setIdentity(value);
+        })
+        .catch(() => {});
+    void load();
+    const timer = setInterval(() => {
+      void load();
+    }, 60000);
+    window.addEventListener('focus', load);
+    window.addEventListener('dkp:changed', load);
+    return () => {
+      active = false;
+      clearInterval(timer);
+      window.removeEventListener('focus', load);
+      window.removeEventListener('dkp:changed', load);
+    };
+  }, [user?.memberId]);
+  if (loading || !user || (!user.memberId && !user.isAdmin)) return null;
+  async function logout() {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api('/auth/logout', { method: 'POST' });
+      await reload();
+      router.replace('/');
+      setConfirm(false);
+    } catch {
+      setError('Не удалось выйти. Повторите попытку.');
+    } finally {
+      setBusy(false);
+    }
   }
-
-  if (!user) {
-    return (
-      <a
-        className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
-        href={`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/auth/discord`}
-      >
-        Войти через Discord
-      </a>
-    );
-  }
-
   return (
-    <span className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-primary">
-      {user.memberId ? <a aria-label="Мой профиль" className="min-w-0 break-all text-accent hover:underline" href={`/profiles/${encodeURIComponent(user.memberId)}`}>{user.username}</a> : user.username}
-      {user.rank && <Badge tone="accent">{RANK_LABELS[user.rank]}</Badge>}
-      {user.isAdmin && <Badge>админ</Badge>}
-      {!user.memberId && !user.isAdmin && (
-        <a className="text-accent hover:underline" href="/link">
-          привязать ник
-        </a>
-      )}
+    <HeaderIdentity
+      name={identity?.memberName ?? user.username}
+      memberId={user.memberId}
+      balance={identity?.balance ?? null}
+    >
+      <Badge tone="accent">
+        {user.isAdmin ? 'Админ' : user.rank ? RANK_LABELS[user.rank] : ''}
+      </Badge>
       <Button
-        variant="secondary"
-        onClick={async () => {
-          const { api } = await import('../lib/api');
-          await api('/auth/logout', { method: 'POST' }).catch(() => {});
-          await reload();
+        onClick={() => {
+          setError('');
+          setConfirm(true);
         }}
       >
-        Выйти
+        Выход
       </Button>
-    </span>
+      {confirm && (
+        <Modal
+          title="Выйти из аккаунта?"
+          onClose={() => {
+            if (!busy) setConfirm(false);
+          }}
+        >
+          <Stack>
+            <p>Вы вернётесь на экран приветствия.</p>
+            {error && (
+              <div role="alert">
+                <ErrorText>{error}</ErrorText>
+              </div>
+            )}
+            <Button
+              variant="primary"
+              disabled={busy}
+              onClick={() => {
+                void logout();
+              }}
+            >
+              Выйти
+            </Button>
+            <Button disabled={busy} onClick={() => setConfirm(false)}>
+              Отмена
+            </Button>
+          </Stack>
+        </Modal>
+      )}
+    </HeaderIdentity>
   );
 }
