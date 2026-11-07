@@ -5,6 +5,8 @@ interface Contract {
   summary: string;
   response?: SchemaObject | ReferenceObject;
   body?: string;
+  bodyType?: string;
+  responseTypes?: string[];
   query?: string;
   access?: string;
   public?: boolean;
@@ -72,6 +74,8 @@ export const contracts: Record<string, Contract> = {
   }),
   Auth_createLinkRequest: c('Подать заявку на привязку Discord', 'Ok', {
     body: 'CreateLinkRequest',
+    description:
+      'Создаёт или редактирует актуальную ожидающую анкету. Обязательны GS и ранее загруженные собственные скриншоты. До приёма доступа к разделам гильдии нет.',
     access: 'Вошедший Discord-аккаунт.',
     errors: [400],
   }),
@@ -81,23 +85,40 @@ export const contracts: Record<string, Contract> = {
   Auth_approveLinkRequest: c('Подтвердить привязку Discord', 'Ok', {
     access: leader,
     errors: [404, 409],
-    description: 'Старую заявку без роли или пары оружия нужно подать заново.',
+    description:
+      'Приём атомарно переносит анкету и подтверждение GS в профиль и пишет аудит. Старую неполную анкету игрок должен обновить; отклонения нет.',
   }),
-  Auth_rejectLinkRequest: c('Отклонить заявку на привязку', 'Ok', {
+  Auth_myLinkRequest: c('Получить собственную ожидающую анкету', 'MyLinkRequest', {
+    access: 'Любой вошедший аккаунт. Только своя анкета; null, если её нет.',
+  }),
+  Auth_getLinkRequest: c('Получить профиль заявителя', 'LinkRequest', {
     access: leader,
-    errors: [404, 409],
+    errors: [404],
   }),
+  Screenshots_upload: c('Загрузить приватный скриншот', 'Id', {
+    body: 'ScreenshotUpload',
+    bodyType: 'multipart/form-data',
+    access: 'Вошедший Discord-аккаунт.',
+    errors: [400, 413],
+    description:
+      'Поле file: PNG, JPG/JPEG или WebP до 10 МБ включительно. Возвращённый id указывается в screenshotIds анкеты. Проверяется сигнатура формата.',
+  }),
+  Screenshots_download: c(
+    'Открыть приватный скриншот',
+    { type: 'string', format: 'binary' },
+    {
+      responseTypes: ['image/png', 'image/jpeg', 'image/webp'],
+      access: 'Владелец файла, Глава или Админ.',
+      errors: [404],
+      description:
+        'Для остальных — 404. Cache-Control: private, no-store. Прямые ссылки проверяют те же права.',
+    },
+  ),
   Members_roster: c('Получить состав гильдии', list('RosterMember'), {
     query: 'RosterQuery',
     errors: [400],
   }),
   Members_getOne: c('Получить участника', 'RosterMember', { errors: [404] }),
-  Members_create: c('Добавить участника', 'Member', {
-    access: leader,
-    body: 'CreateMember',
-    errors: [400, 409],
-    description: 'Создаваемый ранг — MEMBER или OFFICER. Запись действия в аудит.',
-  }),
   Members_update: c('Изменить участника', 'Member', {
     access: leader,
     body: 'UpdateMember',
@@ -138,7 +159,8 @@ export const contracts: Record<string, Contract> = {
     access: 'Глава, Админ, Офицер или назначенный РЛ своего ивента.',
     body: 'UpdateEvent',
     errors: [404, 409],
-    description: 'Плата ДКП не редактируется. Параметры завершённых/отменённых ивентов закрыты для правки. Назначать другого РЛ могут только Глава, Админ и Офицер.',
+    description:
+      'Плата ДКП не редактируется. Параметры завершённых/отменённых ивентов закрыты для правки. Назначать другого РЛ могут только Глава, Админ и Офицер.',
   }),
   Events_changeStatus: c('Изменить статус ивента', 'EventStatus', {
     access: 'Глава, Админ, Офицер или назначенный РЛ своего ивента.',

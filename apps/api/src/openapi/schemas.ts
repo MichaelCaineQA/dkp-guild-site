@@ -132,18 +132,23 @@ export const schemas: Record<string, SchemaObject> = {
   LoginResult: object({ ok: { type: 'boolean' } }),
   TestLogin: object({ username: { type: 'string', description: 'Имя начинается с test-.' } }, []),
   TestLoginResult: object({ ok: { type: 'boolean' }, error: str }, ['ok']),
-  LinkRequest: object({
-    id: str,
-    userId: str,
-    nickname: str,
-    combatRole: role,
-    weapons,
-    status: enumeration(['PENDING', 'APPROVED', 'REJECTED']),
-    resolvedById: nullable(str),
-    resolvedAt: nullable(date),
-    createdAt: date,
-    user: object({ username: str }),
+  ScreenshotUpload: object({ file: { type: 'string', format: 'binary' } }),
+  MyLinkRequest: object({
+    request: { type: 'object', allOf: [ref('LinkRequest')], nullable: true },
   }),
+  LinkRequest: object(
+    {
+      id: str,
+      nickname: str,
+      combatRole: role,
+      weapons,
+      gearScore: nullable(num),
+      screenshotIds: array({ type: 'string', format: 'uuid' }),
+      createdAt: date,
+      user: object({ username: str }),
+    },
+    ['id', 'nickname', 'combatRole', 'weapons', 'gearScore', 'screenshotIds', 'createdAt'],
+  ),
   RosterMember: object(roster),
   Member: object({
     id: str,
@@ -196,11 +201,25 @@ export const schemas: Record<string, SchemaObject> = {
     createdAt: date,
   }),
   AuditPage: object({ entries: array(ref('AuditEntry')), total: num }),
-  Profile: object({
-    ...roster,
-    balance: num,
-    recentEntries: { ...array(object(entry)), maxItems: 10 },
-  }),
+  Profile: object(
+    {
+      ...roster,
+      balance: num,
+      recentEntries: { ...array(object(entry)), maxItems: 10 },
+      gearScore: {
+        ...nullable(
+          object({
+            value: num,
+            screenshotIds: array({ type: 'string', format: 'uuid' }),
+            createdAt: date,
+          }),
+        ),
+        description:
+          'Поле отсутствует у пользователей без права на GS. У владельца и Главы/Админа — последняя запись либо null.',
+      },
+    },
+    [...Object.keys(roster), 'balance', 'recentEntries'],
+  ),
   RulesPage: object({
     slug: enumeration(shared.RULES_SLUGS),
     title: str,

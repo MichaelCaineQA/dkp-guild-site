@@ -32,6 +32,13 @@ function member(id: string, combatRole: CombatRole | null) {
     : null;
 }
 const db: ProfilesDb = {
+  gearScoreRecord: {
+    findFirst: async () => ({
+      value: 1234,
+      screenshotIds: ['11111111-1111-4111-8111-111111111111'],
+      createdAt: new Date('2026-11-07T00:00:00Z'),
+    }),
+  },
   member: {
     findUnique: async ({ where }) => member(where.id, role),
     update: async () => {
@@ -128,6 +135,27 @@ describe('профили через HTTP', () => {
     expect(profile.balance).toBe(9995);
     expect(profile.recentEntries).toHaveLength(10);
     expect(profile.discord).toBe('discord-player');
+  });
+
+  it('GS отсутствует в чужом профиле у рядового и Офицера, но есть в своём и у Главы/Админа', async () => {
+    for (const rank of ['MEMBER', 'OFFICER'] as const) {
+      actor!.rank = rank;
+      expect(await (await fetch(`${url}/profiles/m2`)).json()).not.toHaveProperty('gearScore');
+    }
+    expect(await (await fetch(`${url}/profiles/m1`)).json()).toHaveProperty(
+      'gearScore.value',
+      1234,
+    );
+    actor!.rank = 'GUILD_LEADER';
+    expect(await (await fetch(`${url}/profiles/m2`)).json()).toHaveProperty(
+      'gearScore.value',
+      1234,
+    );
+    actor = { userId: 'admin:a', username: 'a', isAdmin: true, memberId: null, rank: null };
+    expect(await (await fetch(`${url}/profiles/m2`)).json()).toHaveProperty(
+      'gearScore.value',
+      1234,
+    );
   });
 
   it('чужую роль менять нельзя, даже через собственный endpoint офицера', async () => {

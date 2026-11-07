@@ -1,11 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { GameTimeWidget } from '../components/game-time-widget';
-import { NavMenu } from '../components/nav-menu';
 import { SessionProvider } from '../components/session-context';
-import { ThemeToggle } from '../components/theme-toggle';
-import { UserMenu } from '../components/user-menu';
-import { SiteHeader } from '../components/ui/layout';
+import { AppShell } from '../components/app-shell';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -24,12 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <SessionProvider>
-          <SiteHeader navigation={<NavMenu />}>
-            <GameTimeWidget />
-            <ThemeToggle />
-            <UserMenu />
-          </SiteHeader>
-          {children}
+          <AppShell>{children}</AppShell>
         </SessionProvider>
       </body>
     </html>

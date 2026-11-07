@@ -11,7 +11,19 @@ export const updateOwnProfileSchema = z
   })
   .strict();
 
+export function canViewProfileGearScore(
+  actor: import('./permissions').PermissionActor,
+  memberId: string,
+): boolean {
+  return (
+    !!actor.isAdmin ||
+    actor.rank === 'GUILD_LEADER' ||
+    actor.rank === 'ADMIN' ||
+    (!!actor.rank && !!actor.memberId && actor.memberId === memberId)
+  );
+}
 export interface PlayerProfile {
+  gearScore?: { value: number; screenshotIds: string[]; createdAt: string } | null;
   id: string;
   nickname: string;
   discord: string | null;

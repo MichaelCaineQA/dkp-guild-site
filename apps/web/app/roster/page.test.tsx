@@ -53,7 +53,7 @@ describe('RosterPage', () => {
     expect(screen.queryByText('Добавить члена')).toBeNull();
   });
 
-  it('Глава видит форму добавления', async () => {
+  it('Глава видит заявки вместо ручного добавления', async () => {
     mockSession({
       userId: 'u2',
       username: 'test-leader',
@@ -65,7 +65,8 @@ describe('RosterPage', () => {
 
     render(<RosterPage />);
 
-    expect(await screen.findByText('Добавить члена')).toBeDefined();
+    expect(await screen.findByText('Заявки')).toBeDefined();
+    expect(screen.queryByText('Добавить члена')).toBeNull();
   });
 
   it('не для членов гильдии — подсказка про привязку', async () => {
@@ -81,8 +82,23 @@ describe('RosterPage', () => {
   });
 
   it('Офицер читает состав без формы добавления и правки игроков', async () => {
-    mockSession({ userId: 'off', username: 'Офицер', memberId: 'off', rank: 'OFFICER', isAdmin: false });
-    vi.mocked(api).mockResolvedValue([{ id: 'm1', nickname: 'Alpha', rank: 'MEMBER', combatRole: 'DPS', weapons: [], discord: null }]);
+    mockSession({
+      userId: 'off',
+      username: 'Офицер',
+      memberId: 'off',
+      rank: 'OFFICER',
+      isAdmin: false,
+    });
+    vi.mocked(api).mockResolvedValue([
+      {
+        id: 'm1',
+        nickname: 'Alpha',
+        rank: 'MEMBER',
+        combatRole: 'DPS',
+        weapons: [],
+        discord: null,
+      },
+    ]);
     render(<RosterPage />);
     expect(await screen.findByText('Alpha')).toBeDefined();
     expect(screen.queryByText('Добавить члена')).toBeNull();

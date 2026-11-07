@@ -157,12 +157,15 @@ model User {
   username String
   member Member?
   linkRequests MemberLinkRequest[]
+  screenshots Screenshot[]
   createdAt DateTime @default(now())
 }
 
 /// Заявка на привязку «Discord ↔ профиль члена гильдии» (план 2.9):
-/// вошедший без Member указывает свой игровой ник, офицер подтверждает.
+/// вошедший без Member заполняет анкету; Глава/Админ подтверждает допуск.
 model MemberLinkRequest {
+  gearScore Float?
+  screenshotIds String[] @default([])
   combatRole CombatRole?
   weapons Weapon[] @default([])
   id String @id @default(cuid())
@@ -416,14 +419,25 @@ model GearScoreRecord {
   id String @id @default(cuid())
   memberId String
   member Member @relation(fields: [memberId], references: [id])
-  value Int
+  value Float
 
   /// Путь к скрину профиля. GS без модерации (раздел 2.5): правило — на скрине
   /// видны ник и GS; скрин старше 2 недель помечается иконкой «GS устарел».
   screenshotPath String?
+  screenshotIds String[] @default([])
   createdAt DateTime @default(now())
 
   @@index([memberId, createdAt])
+}
+
+/// Приватный файл: содержимое в SCREENSHOT_DIR, доступ проверяется на API.
+model Screenshot {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields: [userId], references: [id])
+  mime String
+  createdAt DateTime @default(now())
+  @@index([userId])
 }
 
 /// Прайм-тайм: интервалы по дням недели, редактирует сам игрок (раздел 2.5).

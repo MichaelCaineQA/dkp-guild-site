@@ -108,7 +108,7 @@ describe('PLAN 1.1: права через реальные HTTP-маршруты
   };
 
   it('Офицер не создаёт/изменяет состав и не подтверждает заявки прямым запросом', async () => {
-    expect((await request('/members')).status).toBe(403);
+    expect((await request('/members')).status).toBe(404);
     expect((await request('/members/m1', 'PATCH')).status).toBe(403);
     expect((await request('/auth/link-requests', 'GET')).status).toBe(401);
     expect((await request('/auth/link-requests/r1/approve')).status).toBe(401);
@@ -120,7 +120,7 @@ describe('PLAN 1.1: права через реальные HTTP-маршруты
     actor = { userId: 'admin:a', username: 'a', rank: null, memberId: null, isAdmin: true };
     expect((await request('/auth/link-requests', 'GET')).status).toBe(200);
     expect((await request('/auth/link-requests/r1/approve')).status).toBe(201);
-    expect(approve).toHaveBeenCalledWith('r1');
+    expect(approve).toHaveBeenCalledWith('r1', null);
   });
   it('Офицер без назначения РЛ не видит код, не запускает ивент и не меняет ДКП', async () => {
     expect((await request('/events/e1/checkin/code', 'GET')).status).toBe(403);

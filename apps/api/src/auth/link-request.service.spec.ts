@@ -1,209 +1,219 @@
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { LinkRequestService, type LinkRequestDb } from './link-request.service';
-
-interface DbState {
-  users: Array<{ id: string; username: string; member: { id: string } | null }>;
-  members: Array<{
-    id: string;
-    nickname: string;
-    userId: string | null;
-    combatRole?: import('@dkp/shared').CombatRole;
-    weapons?: import('@dkp/shared').Weapon[];
-  }>;
-  requests: Array<{
-    id: string;
-    userId: string;
-    nickname: string;
-    status: string;
-    resolvedAt: Date | null;
-    combatRole?: import('@dkp/shared').CombatRole;
-    weapons?: import('@dkp/shared').Weapon[];
-  }>;
+const file = '11111111-1111-4111-8111-111111111111';
+const input = {
+  nickname: 'Игрок',
+  combatRole: 'HEALER',
+  weapons: ['STAFF', 'WAND'],
+  gearScore: 1,
+  screenshotIds: [file],
+};
+interface RequestRow {
+  id: string;
+  userId: string;
+  nickname: string;
+  status: string;
+  combatRole?: string;
+  weapons?: string[];
+  gearScore?: number | null;
+  screenshotIds?: string[];
 }
-
-function makeDb(state: DbState): LinkRequestDb {
-  return {
+interface State {
+  requests: RequestRow[];
+  members: Array<{ id: string; userId: string | null; nickname: string; rank?: string }>;
+  gs: unknown[];
+  audits: Array<{ action: string; comment: string }>;
+}
+function fixture() {
+  let state: State = { requests: [], members: [], gs: [], audits: [] };
+  let failAudit = false;
+  let ownFiles = true;
+  const txFor = (draft: State) => ({
     user: {
-      findUnique: async ({ where }) => state.users.find((u) => u.id === where.id) ?? null,
+      findUnique: jest.fn(async () => ({
+        id: 'u',
+        discordId: 'discord',
+        member: draft.members.find((m) => m.userId === 'u') ?? null,
+      })),
     },
+    screenshot: { count: jest.fn(async () => (ownFiles ? 1 : 0)) },
     member: {
-      findFirst: async ({ where }: { where: { userId?: string; nickname?: string } }) =>
-        state.members.find((m) =>
-          where.userId ? m.userId === where.userId : m.nickname === where.nickname,
-        ) ?? null,
-      update: async ({ where, data }) => {
-        const member = state.members.find((m) => m.id === where.id)!;
-        Object.assign(member, data);
-      },
-      create: async ({ data }) => {
-        const member = {
-          id: `member-${state.members.length + 1}`,
-          ...data,
-        };
-        state.members.push(member);
-        return member;
-      },
+      findUnique: jest.fn(
+        async ({ where }: { where: { nickname: string } }) =>
+          draft.members.find((m) => m.nickname === where.nickname) ?? null,
+      ),
+      create: jest.fn(async ({ data }: { data: { nickname: string; userId: string } }) => {
+        const row = { id: 'm', ...data };
+        draft.members.push(row);
+        return row;
+      }),
+      update: jest.fn(async ({ where, data }: { where: { id: string }; data: object }) => {
+        const row = draft.members.find((m) => m.id === where.id)!;
+        Object.assign(row, data);
+        return row;
+      }),
     },
     memberLinkRequest: {
-      findUnique: async ({ where }) => state.requests.find((r) => r.id === where.id) ?? null,
-      upsert: async ({ create: data, update }) => {
-        const found = state.requests.find(
-          (r) => r.userId === data.userId && r.nickname === data.nickname,
-        );
-        if (found) {
-          Object.assign(found, update);
-          return;
-        }
-        state.requests.push({
-          id: `req-${state.requests.length + 1}`,
-          userId: data.userId,
-          nickname: data.nickname,
-          combatRole: data.combatRole,
-          weapons: data.weapons,
-          status: 'PENDING',
-          resolvedAt: null,
-        });
-      },
-      update: async ({ where, data }) => {
-        const request = state.requests.find((r) => r.id === where.id)!;
-        request.status = data.status;
-        request.resolvedAt = data.resolvedAt;
-      },
-      findMany: async ({ where }) =>
-        state.requests
-          .filter((r) => r.status === where.status)
-          .map((r) => ({
-            id: r.id,
-            nickname: r.nickname,
-            createdAt: new Date(),
-            user: { username: state.users.find((u) => u.id === r.userId)?.username ?? '' },
-          })),
+      findUnique: jest.fn(
+        async ({ where }: { where: { id: string } }) =>
+          draft.requests.find((r) => r.id === where.id) ?? null,
+      ),
+      findFirst: jest.fn(
+        async () => [...draft.requests].reverse().find((r) => r.status === 'PENDING') ?? null,
+      ),
+      update: jest.fn(async ({ where, data }: { where: { id: string }; data: object }) => {
+        const row = draft.requests.find((r) => r.id === where.id)!;
+        Object.assign(row, data);
+        return row;
+      }),
+      upsert: jest.fn(async ({ create }: { create: object }) => {
+        const row = { id: 'r', status: 'PENDING', ...create } as RequestRow;
+        draft.requests.push(row);
+        return row;
+      }),
+    },
+    gearScoreRecord: {
+      create: jest.fn(async ({ data }: { data: unknown }) => {
+        draft.gs.push(data);
+        return data;
+      }),
+    },
+    auditLog: {
+      create: jest.fn(async ({ data }: { data: State['audits'][number] }) => {
+        if (failAudit) throw new Error('audit unavailable');
+        draft.audits.push(data);
+        return data;
+      }),
+    },
+  });
+  const transaction = jest.fn(async (work: (tx: unknown) => Promise<unknown>) => {
+    const draft = structuredClone(state);
+    const result = await work(txFor(draft));
+    state = draft;
+    return result;
+  });
+  const service = new LinkRequestService({ $transaction: transaction } as unknown as LinkRequestDb);
+  return {
+    service,
+    transaction,
+    state: () => state,
+    failAudit: () => {
+      failAudit = true;
+    },
+    foreignFiles: () => {
+      ownFiles = false;
     },
   };
 }
-
-function makeState(): DbState {
-  return {
-    users: [
-      { id: 'u1', username: 'linked', member: { id: 'm1' } },
-      { id: 'u2', username: 'orphan', member: null },
-    ],
-    members: [{ id: 'm1', nickname: 'linked', userId: 'u1' }],
-    requests: [],
-  };
-}
-
-describe('LinkRequestService', () => {
-  it('старая заявка без пары не принимается; повторная подача заполняет её без дубля', async () => {
-    const state = makeState();
-    state.requests.push({
-      id: 'req-1',
-      userId: 'u2',
-      nickname: 'Игрок',
+describe('Анкета вступления', () => {
+  it('редактирует одну ожидающую анкету даже при смене ника; аудит без значения GS', async () => {
+    const f = fixture();
+    await f.service.create('u', input);
+    await f.service.create('u', { ...input, nickname: 'НовыйНик', gearScore: 1234 });
+    expect(f.state().requests).toHaveLength(1);
+    expect(f.state().requests[0]).toMatchObject({
+      nickname: 'НовыйНик',
+      gearScore: 1234,
       status: 'PENDING',
-      resolvedAt: null,
     });
-    const service = new LinkRequestService(makeDb(state));
-    await expect(service.approve('req-1')).rejects.toThrow(ConflictException);
-    await service.reject('req-1');
-    await service.create('u2', {
-      nickname: 'Игрок',
-      combatRole: 'HEALER',
-      weapons: ['STAFF', 'WAND'],
-    });
-    expect(state.requests).toHaveLength(1);
-    await service.approve('req-1');
-    expect(state.members[1]).toMatchObject({
-      combatRole: 'HEALER',
-      weapons: ['STAFF', 'WAND'],
-      userId: 'u2',
+    expect(f.state().audits.map((a) => a.action)).toEqual([
+      'ONBOARDING_SUBMIT',
+      'ONBOARDING_UPDATE',
+    ]);
+    expect(JSON.stringify(f.state().audits)).not.toContain('1234');
+    expect(f.transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
     });
   });
-  it('непривязанный пользователь подаёт заявку на ник', async () => {
-    const state = makeState();
-    const service = new LinkRequestService(makeDb(state));
-
-    const result = await service.create('u2', {
-      nickname: 'Игрок',
-      combatRole: 'DPS',
-      weapons: ['STAFF', 'WAND'],
+  it('переносит анкету и GS в новый профиль MEMBER при одобрении и повторно не принимает', async () => {
+    const f = fixture();
+    await f.service.create('u', input);
+    await f.service.approve('r', 'head');
+    expect(f.state().members[0]).toMatchObject({
+      nickname: input.nickname,
+      userId: 'u',
+      weapons: input.weapons,
     });
-
-    expect(result).toEqual({ ok: true });
-    expect(state.requests).toHaveLength(1);
-    expect(state.requests[0]).toMatchObject({ userId: 'u2', nickname: 'Игрок', status: 'PENDING' });
+    expect(f.state().gs).toEqual([{ memberId: 'm', value: 1, screenshotIds: [file] }]);
+    expect(f.state().requests[0].status).toBe('APPROVED');
+    expect(f.state().audits.at(-1)).toMatchObject({
+      action: 'LINK_REQUEST_APPROVE',
+      actorMemberId: 'head',
+    });
+    await expect(f.service.approve('r')).rejects.toThrow();
+    expect(f.state().gs).toHaveLength(1);
   });
-
-  it('уже привязанный аккаунт заявку подать не может', async () => {
-    const state = makeState();
-    const service = new LinkRequestService(makeDb(state));
-
-    await expect(
-      service.create('u1', { nickname: 'Игрок', combatRole: 'DPS', weapons: ['STAFF', 'WAND'] }),
-    ).rejects.toThrow(UnauthorizedException);
+  it('при сбое аудита откатывает приём, профиль и GS', async () => {
+    const f = fixture();
+    await f.service.create('u', input);
+    f.failAudit();
+    await expect(f.service.approve('r')).rejects.toThrow('audit unavailable');
+    expect(f.state().requests[0].status).toBe('PENDING');
+    expect(f.state().members).toEqual([]);
+    expect(f.state().gs).toEqual([]);
   });
-
-  it('approve привязывает существующего непривязанного Member по нику', async () => {
-    const state = makeState();
-    const service = new LinkRequestService(makeDb(state));
-    // офицер заранее завёл Member «officer-made» без аккаунта
-    state.members.push({ id: 'officer-made', nickname: 'officer-made', userId: null });
-    await service.create('u2', {
-      nickname: 'officer-made',
-      combatRole: 'DPS',
-      weapons: ['STAFF', 'WAND'],
-    });
-
-    await service.approve('req-1');
-
-    expect(state.members.find((m) => m.id === 'officer-made')?.userId).toBe('u2');
-    expect(state.requests[0].status).toBe('APPROVED');
+  it('при сбое аудита не сохраняет изменения анкеты', async () => {
+    const f = fixture();
+    await f.service.create('u', input);
+    f.failAudit();
+    await expect(f.service.create('u', { ...input, nickname: 'НовоеИмя' })).rejects.toThrow();
+    expect(f.state().requests[0].nickname).toBe(input.nickname);
   });
-
-  it('approve создаёт нового Member, если такого ника нет', async () => {
-    const state = makeState();
-    const service = new LinkRequestService(makeDb(state));
-    await service.create('u2', {
-      nickname: 'brand-new',
-      combatRole: 'DPS',
-      weapons: ['STAFF', 'WAND'],
-    });
-
-    await service.approve('req-1');
-
-    expect(state.members).toContainEqual({
-      id: 'member-2',
-      nickname: 'brand-new',
-      userId: 'u2',
-      combatRole: 'DPS',
-      weapons: ['STAFF', 'WAND'],
-    });
+  it('старую неполную анкету можно обновить, но нельзя принять без GS и скриншота', async () => {
+    const f = fixture();
+    f.state().requests.push({ id: 'old', userId: 'u', nickname: 'Игрок', status: 'PENDING' });
+    await expect(f.service.approve('old')).rejects.toThrow(ConflictException);
+    await f.service.create('u', input);
+    await f.service.approve('old');
+    expect(f.state().members).toHaveLength(1);
   });
-
-  it('занятый другим аккаунтом ник не привязывается', async () => {
-    const state = makeState();
-    const service = new LinkRequestService(makeDb(state));
-    await service.create('u2', {
-      nickname: 'linked',
-      combatRole: 'DPS',
-      weapons: ['STAFF', 'WAND'],
-    });
-
-    await expect(service.approve('req-1')).rejects.toThrow(UnauthorizedException);
+  it('не использует чужие файлы ни при подаче, ни при одобрении', async () => {
+    const f = fixture();
+    await f.service.create('u', input);
+    f.foreignFiles();
+    await expect(f.service.create('u', input)).rejects.toThrow(BadRequestException);
+    await expect(f.service.approve('r')).rejects.toThrow(ConflictException);
+    expect(f.state().members).toEqual([]);
   });
-
-  it('reject закрывает заявку без привязки', async () => {
-    const state = makeState();
-    const service = new LinkRequestService(makeDb(state));
-    await service.create('u2', {
-      nickname: 'Игрок',
-      combatRole: 'DPS',
-      weapons: ['STAFF', 'WAND'],
-    });
-
-    await service.reject('req-1');
-
-    expect(state.requests[0].status).toBe('REJECTED');
-    expect(state.members).toHaveLength(1);
+  it('привязывает старый непривязанный профиль, сохраняя его ранг', async () => {
+    const f = fixture();
+    f.state().members.push({ id: 'legacy', userId: null, nickname: 'Игрок', rank: 'OFFICER' });
+    await f.service.create('u', input);
+    await f.service.approve('r');
+    expect(f.state().members).toHaveLength(1);
+    expect(f.state().members[0]).toMatchObject({ id: 'legacy', userId: 'u', rank: 'OFFICER' });
+  });
+  it('занятый ник и уже принятый аккаунт не подают новую анкету', async () => {
+    const f = fixture();
+    f.state().members.push({ id: 'other', userId: 'other', nickname: 'Игрок' });
+    await expect(f.service.create('u', input)).rejects.toThrow(ConflictException);
+    f.state().members[0].userId = 'u';
+    await expect(f.service.create('u', input)).rejects.toThrow(UnauthorizedException);
+  });
+  it('проверяет занятый ник ещё раз при одобрении', async () => {
+    const f = fixture();
+    await f.service.create('u', input);
+    f.state().members.push({ id: 'other', userId: 'other', nickname: 'Игрок' });
+    await expect(f.service.approve('r')).rejects.toThrow(ConflictException);
+    expect(f.state().requests[0].status).toBe('PENDING');
+  });
+  it('после конфликта сериализации повторяет всю транзакцию', async () => {
+    const f = fixture();
+    f.transaction.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('conflict', { code: 'P2034', clientVersion: '6' }),
+    );
+    await f.service.create('u', input);
+    expect(f.transaction).toHaveBeenCalledTimes(2);
+    expect(f.state().requests).toHaveLength(1);
+  });
+  it.each([
+    { ...input, gearScore: 0 },
+    { ...input, gearScore: 1.5 },
+    { ...input, screenshotIds: [] },
+  ])('неполная анкета не пишет в БД', async (body) => {
+    const f = fixture();
+    await expect(f.service.create('u', body)).rejects.toThrow(BadRequestException);
+    expect(f.transaction).not.toHaveBeenCalled();
   });
 });

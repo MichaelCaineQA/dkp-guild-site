@@ -22,12 +22,6 @@ export class MembersController {
     return this.members.getOne(id);
   }
 
-  @Post()
-  @RequirePermission('members.manage')
-  create(@Body() body: unknown, @Req() req: AuthedRequest) {
-    return this.members.create(body, toActor(req));
-  }
-
   @Patch(':id')
   @RequirePermission('members.manage')
   update(@Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest) {

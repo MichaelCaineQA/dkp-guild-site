@@ -18,6 +18,7 @@ import { useSession } from '../../components/session-context';
 import { api } from '../../lib/api';
 import {
   Badge,
+  RosterTabs,
   Button,
   Card,
   ErrorText,
@@ -120,7 +121,7 @@ export default function RosterPage() {
   }, [rankFilter, roleFilter, weaponFilter]);
 
   useEffect(() => {
-    if (!sessionLoading && user?.memberId) {
+    if (!sessionLoading && (user?.memberId || user?.isAdmin)) {
       void loadRoster();
     }
   }, [sessionLoading, user, loadRoster]);
@@ -167,6 +168,7 @@ export default function RosterPage() {
         subtitle="Все члены гильдии: ранги, роли в бою, привязка Discord"
       />
 
+      <RosterTabs requests={!!user && can(user, 'link_requests.review')} current="members" />
       <div className="mb-4 flex flex-wrap items-center gap-4">
         <Field label="Ранг:">
           <Select
@@ -310,8 +312,6 @@ export default function RosterPage() {
         )}
       </Card>
 
-      {canManage && <CreateMemberForm onCreated={loadRoster} />}
-
       {selected && (
         <MemberCard
           row={selected}
@@ -331,72 +331,6 @@ export default function RosterPage() {
         />
       )}
     </Page>
-  );
-}
-
-/** Создание члена — офицерам и выше (members.manage). */
-function CreateMemberForm({ onCreated }: { onCreated: () => void }) {
-  const [weapons, setWeapons] = useState<Array<Weapon | ''>>([]);
-  const [nickname, setNickname] = useState('');
-  const [combatRole, setCombatRole] = useState<CombatRole | ''>('');
-  const [result, setResult] = useState<string | null>(null);
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setResult(null);
-    try {
-      await api('/members', {
-        method: 'POST',
-        body: JSON.stringify({ nickname, combatRole, weapons }),
-      });
-      setNickname('');
-      setResult('Член добавлен');
-      onCreated();
-    } catch (err) {
-      const status = (err as { status?: number }).status;
-      setResult(status === 409 ? 'Член с таким ником уже есть' : 'Не получилось добавить');
-    }
-  };
-
-  return (
-    <Card className="mt-4">
-      <h2 className="mb-3 text-lg font-semibold text-primary">Добавить члена</h2>
-      <form className="flex flex-wrap items-center gap-2" onSubmit={submit}>
-        <Input
-          value={nickname}
-          onChange={(e) => setNickname(e.target.value)}
-          placeholder="Игровой ник"
-          minLength={2}
-          maxLength={40}
-          required
-        />
-        <Select
-          value={combatRole}
-          onChange={(e) => setCombatRole(e.target.value as CombatRole | '')}
-        >
-          <option value="">роль —</option>
-          {COMBAT_ROLES.map((role) => (
-            <option key={role} value={role}>
-              {COMBAT_ROLE_LABELS[role]}
-            </option>
-          ))}
-        </Select>
-        <WeaponPicker value={weapons} onChange={setWeapons} />
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={
-            nickname.length < 2 ||
-            !combatRole ||
-            weapons.length !== 2 ||
-            weapons.some((weapon) => !weapon)
-          }
-        >
-          Добавить
-        </Button>
-      </form>
-      {result && <p className="mt-2 text-sm text-primary">{result}</p>}
-    </Card>
   );
 }
 

@@ -131,11 +131,6 @@ export class AuthController {
 
   /** Заявка на привязку своего Discord к нику члена гильдии. */
   @Post('link-request')
-  @AuditAction({
-    action: 'LINK_REQUEST_CREATE',
-    entityType: 'User',
-    comment: 'Заявка на привязку Discord',
-  })
   @UseGuards(AuthGuard)
   createLinkRequest(@Body() body: unknown, @Req() req: AuthedRequest) {
     return this.linkRequests.create(req.session!.user!.userId, body);
@@ -151,27 +146,21 @@ export class AuthController {
 
   /** Подтвердить заявку — Главе и Админу. */
   @Post('link-requests/:id/approve')
-  @AuditAction({
-    action: 'LINK_REQUEST_APPROVE',
-    entityType: 'MemberLinkRequest',
-    comment: 'Привязка Discord подтверждена',
-  })
   @MinRank('GUILD_LEADER')
   @UseGuards(AuthGuard)
-  approveLinkRequest(@Param('id') id: string) {
-    return this.linkRequests.approve(id);
+  approveLinkRequest(@Param('id') id: string, @Req() req: AuthedRequest) {
+    return this.linkRequests.approve(id, req.session!.user!.memberId);
   }
 
-  /** Отклонить заявку — Главе и Админу. */
-  @Post('link-requests/:id/reject')
-  @AuditAction({
-    action: 'LINK_REQUEST_REJECT',
-    entityType: 'MemberLinkRequest',
-    comment: 'Привязка Discord отклонена',
-  })
+  @Get('link-request')
+  @UseGuards(AuthGuard)
+  async myLinkRequest(@Req() req: AuthedRequest) {
+    return { request: await this.linkRequests.mine(req.session!.user!.userId) };
+  }
+  @Get('link-requests/:id')
   @MinRank('GUILD_LEADER')
   @UseGuards(AuthGuard)
-  rejectLinkRequest(@Param('id') id: string) {
-    return this.linkRequests.reject(id);
+  getLinkRequest(@Param('id') id: string) {
+    return this.linkRequests.getPending(id);
   }
 }

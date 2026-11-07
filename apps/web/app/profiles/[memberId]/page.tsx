@@ -13,6 +13,7 @@ import {
   type PlayerProfile,
 } from '@dkp/shared';
 import { useSession } from '../../../components/session-context';
+import { ScreenshotLinks } from '../../../components/onboarding';
 import { api } from '../../../lib/api';
 import {
   Button,
@@ -134,6 +135,15 @@ export default function ProfilePage() {
       <Stack>
         <PageHeader title={`Профиль: ${profile.nickname}`} />
         <ProfileDetails profile={profile} />
+        {profile.gearScore && (
+          <Card>
+            <SectionTitle>GS: {profile.gearScore.value}</SectionTitle>
+            <p className="mb-3 text-sm text-secondary">
+              Обновлён {new Date(profile.gearScore.createdAt).toLocaleDateString('ru-RU')}
+            </p>
+            <ScreenshotLinks ids={profile.gearScore.screenshotIds} />
+          </Card>
+        )}
         {canEditOwnProfile(actor, memberId) && (
           <Card>
             <SectionTitle>Изменить роль и оружия</SectionTitle>
