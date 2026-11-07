@@ -7,3 +7,4 @@ export { WeaponPicker } from './weapon-picker';
 
 export * from './modal';
 export * from './dashboard';
+export * from './settings';

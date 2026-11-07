@@ -168,3 +168,6 @@ export const updateSettingsSchema = z.record(
   z.number(),
 );
 export type UpdateSettingsInput = z.infer<typeof updateSettingsSchema>;
+
+/** Дефолтные длительности Guild; якорь при сбросе не заменяется. */
+export const GAME_TIME_DEFAULTS = { gameTimeDayMinutes: 90, gameTimeNightMinutes: 30 } as const;

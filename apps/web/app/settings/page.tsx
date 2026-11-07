@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { SETTINGS_REGISTRY, can, type SettingKey } from '@dkp/shared';
+import { can, type SettingKey } from '@dkp/shared';
 import { useSession } from '../../components/session-context';
+import { SettingsEditor } from '../../components/settings-editor';
 import { api } from '../../lib/api';
 import {
   Button,
@@ -85,7 +86,10 @@ export default function SettingsPage() {
   if (!user) {
     return (
       <Page>
-        <PageHeader title="Справочники и настройки" subtitle="Раздел доступен членам гильдии после входа." />
+        <PageHeader
+          title="Справочники и настройки"
+          subtitle="Раздел доступен членам гильдии после входа."
+        />
       </Page>
     );
   }
@@ -93,7 +97,7 @@ export default function SettingsPage() {
   if (!canManageSettings) {
     return (
       <Page>
-          <PageHeader title="Справочники и настройки" subtitle="Раздел доступен Главе и Админу." />
+        <PageHeader title="Справочники и настройки" subtitle="Раздел доступен Главе и Админу." />
       </Page>
     );
   }
@@ -104,11 +108,11 @@ export default function SettingsPage() {
       {error && <ErrorText>{error}</ErrorText>}
 
       {settings && gameTime && (
-        <SettingsSection
+        <SettingsEditor
           settings={settings}
           gameTime={gameTime}
-          canEdit={!!canManageSettings}
-          onSaved={load}
+          onSettingsSaved={setSettings}
+          onGameTimeSaved={setGameTime}
         />
       )}
 
@@ -116,192 +120,6 @@ export default function SettingsPage() {
 
       <EventTypesSection types={eventTypes} canEdit={!!canManageTypes} onChanged={load} />
     </Page>
-  );
-}
-
-/** Значения настроек по группам реестра + игровой цикл. */
-function SettingsSection({
-  settings,
-  gameTime,
-  canEdit,
-  onSaved,
-}: {
-  settings: SettingsMap;
-  gameTime: GameTimeSettings;
-  canEdit: boolean;
-  onSaved: () => void;
-}) {
-  const [draft, setDraft] = useState<Partial<SettingsMap>>({});
-  const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const groups: Array<{ title: string; keys: SettingKey[] }> = [
-    {
-      title: 'Чек-ин кодами (план 2.2)',
-      keys: [
-        'checkin.generateBeforeStartSec',
-        'checkin.windowSec',
-        'checkin.attempts',
-        'checkin.startSharePct',
-        'checkin.endSharePct',
-      ],
-    },
-    { title: 'Отсутствия (план 2.3)', keys: ['absence.deadlineBeforeStartSec'] },
-    {
-      title: 'Аукцион (план 6)',
-      keys: [
-        'auction.step',
-        'auction.liveDurationSec',
-        'auction.longDurationDays',
-        'auction.antiSnipeLiveSec',
-        'auction.antiSnipeLongSec',
-        'auction.foreignClassMarkupPct',
-        'auction.noBidTimeoutSec',
-      ],
-    },
-  ];
-
-  const save = async () => {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await api('/settings', { method: 'PUT', body: JSON.stringify(draft) });
-      setDraft({});
-      setMessage('Сохранено');
-      onSaved();
-    } catch (err) {
-      const status = (err as { status?: number }).status;
-      setMessage(status === 403 ? 'Недостаточно прав' : 'Не получилось сохранить');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Card>
-      <SectionTitle>Настройки системы</SectionTitle>
-      {!canEdit && <Muted>Изменение — только Глава и Админ.</Muted>}
-      {groups.map((group) => (
-        <div key={group.title} className="mt-4">
-          <h3 className="mb-2 text-sm font-semibold text-secondary">{group.title}</h3>
-          <div className="flex flex-col gap-1.5">
-            {group.keys.map((key) => (
-              <label key={key} className="flex items-center justify-between gap-4 text-sm">
-                <span>
-                  {SETTINGS_REGISTRY[key].label}
-                  {SETTINGS_REGISTRY[key].unit && (
-                    <span className="text-secondary">, {SETTINGS_REGISTRY[key].unit}</span>
-                  )}
-                </span>
-                <Input
-                  type="number"
-                  className="w-32 shrink-0"
-                  value={draft[key] ?? settings[key]}
-                  disabled={!canEdit || busy}
-                  onChange={(e) =>
-                    setDraft((prev) => ({ ...prev, [key]: Number(e.target.value) }))
-                  }
-                />
-              </label>
-            ))}
-          </div>
-        </div>
-      ))}
-      {canEdit && (
-        <div className="mt-4">
-          <Button variant="primary" onClick={save} disabled={busy || Object.keys(draft).length === 0}>
-            Сохранить настройки
-          </Button>
-          {message && <span className="ml-3 inline-block"><Notice>{message}</Notice></span>}
-        </div>
-      )}
-
-      <GameTimeEditor gameTime={gameTime} canEdit={canEdit} onSaved={onSaved} />
-    </Card>
-  );
-}
-
-/** Игровой цикл: якорь + длительности фаз (план 2.1). */
-function GameTimeEditor({
-  gameTime,
-  canEdit,
-  onSaved,
-}: {
-  gameTime: GameTimeSettings;
-  canEdit: boolean;
-  onSaved: () => void;
-}) {
-  const [anchor, setAnchor] = useState(gameTime.gameTimeAnchor.slice(0, 16));
-  const [day, setDay] = useState(gameTime.gameTimeDayMinutes);
-  const [night, setNight] = useState(gameTime.gameTimeNightMinutes);
-  const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const save = async () => {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await api('/settings/game-time', {
-        method: 'PUT',
-        body: JSON.stringify({
-          gameTimeAnchor: new Date(anchor).toISOString(),
-          gameTimeDayMinutes: day,
-          gameTimeNightMinutes: night,
-        }),
-      });
-      setMessage('Игровой цикл сохранён');
-      onSaved();
-    } catch {
-      setMessage('Не получилось сохранить цикл');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="mt-6">
-      <h3 className="mb-2 text-sm font-semibold text-secondary">Игровой цикл (план 2.1)</h3>
-      <div className="flex flex-col gap-1.5">
-        <label className="flex items-center justify-between gap-4 text-sm">
-          <span>Якорь цикла (момент начала дневной фазы)</span>
-          <Input
-            type="datetime-local"
-            className="w-56 shrink-0"
-            value={anchor}
-            disabled={!canEdit || busy}
-            onChange={(e) => setAnchor(e.target.value)}
-          />
-        </label>
-        <label className="flex items-center justify-between gap-4 text-sm">
-          <span>Дневная фаза, мин</span>
-          <Input
-            type="number"
-            className="w-32 shrink-0"
-            value={day}
-            disabled={!canEdit || busy}
-            onChange={(e) => setDay(Number(e.target.value))}
-          />
-        </label>
-        <label className="flex items-center justify-between gap-4 text-sm">
-          <span>Ночная фаза, мин</span>
-          <Input
-            type="number"
-            className="w-32 shrink-0"
-            value={night}
-            disabled={!canEdit || busy}
-            onChange={(e) => setNight(Number(e.target.value))}
-          />
-        </label>
-      </div>
-      {canEdit && (
-        <div className="mt-3">
-          <Button variant="primary" onClick={save} disabled={busy}>
-            Сохранить цикл
-          </Button>
-          {message && <span className="ml-3 inline-block"><Notice>{message}</Notice></span>}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -327,9 +145,11 @@ function EventTypesSection({
       await action();
       setMessage(okMessage);
       onChanged();
+      return true;
     } catch (err) {
       const status = (err as { status?: number }).status;
       setMessage(status === 409 ? 'Конфликт: такое название уже есть' : 'Не получилось');
+      return false;
     } finally {
       setBusy(false);
     }
@@ -353,9 +173,7 @@ function EventTypesSection({
                 {canEdit ? (
                   <Input
                     value={renames[type.id] ?? type.name}
-                    onChange={(e) =>
-                      setRenames((prev) => ({ ...prev, [type.id]: e.target.value }))
-                    }
+                    onChange={(e) => setRenames((prev) => ({ ...prev, [type.id]: e.target.value }))}
                   />
                 ) : (
                   type.name
@@ -383,10 +201,7 @@ function EventTypesSection({
                       variant="danger"
                       disabled={busy}
                       onClick={() =>
-                        act(
-                          () => api(`/event-types/${type.id}`, { method: 'DELETE' }),
-                          'Удалено',
-                        )
+                        act(() => api(`/event-types/${type.id}`, { method: 'DELETE' }), 'Удалено')
                       }
                     >
                       Удалить
@@ -413,7 +228,9 @@ function EventTypesSection({
             void act(
               () => api('/event-types', { method: 'POST', body: JSON.stringify({ name }) }),
               'Добавлено',
-            ).then(() => setName(''));
+            ).then((ok) => {
+              if (ok) setName('');
+            });
           }}
         >
           <Input
