@@ -5,7 +5,7 @@ import { AbsencesService } from './absences.service';
 
 /**
  * Отсутствия (issue #11): свои заявки — всем членам, список всех —
- * офицерам+; «Увидел» — absence.see. Настройки читаются на запрос.
+ * Главе/Админу; «Увидел» — absence.see. Настройки читаются на запрос.
  */
 @Controller('absences')
 @UseGuards(AuthGuard, PermissionsGuard)
@@ -20,7 +20,7 @@ export class AbsencesController {
     return this.absences.list(user.memberId!);
   }
 
-  /** Все активные заявки — офицерам и выше. */
+  /** Все активные заявки — Главе и Админу. */
   @Get()
   @RequirePermission('absence.see')
   list() {
@@ -51,12 +51,12 @@ export class AbsencesController {
     return this.absences.cancel(id, actor);
   }
 
-  /** Отметка «Увидел» — РЛ/офицерам+ (право absence.see). */
+  /** Отметка «Увидел» — Главе/Админу; лидеры групп — этап 3. */
   @Post(':id/seen')
   @RequirePermission('absence.see')
   markSeen(@Param('id') id: string, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
-    const actor = { memberId: user.memberId!, isAdmin: user.isAdmin, rank: user.rank };
+    const actor = { memberId: user.memberId, isAdmin: user.isAdmin, rank: user.rank };
     return this.absences.markSeen(id, actor);
   }
 }

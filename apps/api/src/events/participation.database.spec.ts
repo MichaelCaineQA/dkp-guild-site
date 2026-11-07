@@ -147,7 +147,9 @@ suite('Участие: PostgreSQL, атомарность и конкурент�
     });
     await service.update(extra.id, memberId, { attending: false });
     const absence = await db.absence.findFirstOrThrow({ where: { eventId: extra.id, memberId } });
-    await db.absenceSeen.create({ data: { absenceId: absence.id, seenById: memberId } });
+    await db.absenceSeen.create({
+      data: { absenceId: absence.id, seenById: memberId, actorKey: memberId },
+    });
     await db.event.delete({ where: { id: extra.id } });
     expect(await db.absence.count({ where: { id: absence.id } })).toBe(0);
     expect(await db.absenceSeen.count({ where: { absenceId: absence.id } })).toBe(0);

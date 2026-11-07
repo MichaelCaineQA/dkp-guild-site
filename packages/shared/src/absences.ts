@@ -87,3 +87,11 @@ export function absenceCoversEvent(
     eventStartsAt.getTime() <= absence.dateTo.getTime()
   );
 }
+
+/** Резервный админ — одна системная учётная запись, без игрового Member. */
+export function absenceSeenActorKey(actor: {
+  memberId: string | null;
+  isAdmin: boolean;
+}): string | null {
+  return actor.memberId ?? (actor.isAdmin ? 'system-admin' : null);
+}

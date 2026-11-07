@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { can } from '@dkp/shared';
+import { can, absenceSeenActorKey } from '@dkp/shared';
 import { useSession } from '../../components/session-context';
 import { api } from '../../lib/api';
 import {
@@ -51,7 +51,9 @@ export default function AbsencesPage() {
 
   const load = useCallback(async () => {
     try {
-      const requests: Promise<AbsenceRow[]>[] = [api<AbsenceRow[]>('/absences/mine')];
+      const requests: Promise<AbsenceRow[]>[] = [
+        user?.memberId ? api<AbsenceRow[]>('/absences/mine') : Promise.resolve([]),
+      ];
       if (canSee) {
         requests.push(api<AbsenceRow[]>('/absences'));
       }
@@ -62,10 +64,10 @@ export default function AbsencesPage() {
     } catch {
       setError('Не удалось загрузить отсутствия');
     }
-  }, [canSee]);
+  }, [canSee, user?.memberId]);
 
   useEffect(() => {
-    if (!sessionLoading && user?.memberId) {
+    if (!sessionLoading && (user?.memberId || user?.isAdmin)) {
       void load();
     }
   }, [sessionLoading, user, load]);
@@ -102,30 +104,32 @@ export default function AbsencesPage() {
       {error && <ErrorText>{error}</ErrorText>}
       {message && <Notice tone="success">{message}</Notice>}
 
-      <AbsenceForm
-        busy={busy}
-        onSubmit={async (body) => {
-          setBusy(true);
-          setMessage(null);
-          try {
-            await api('/absences', { method: 'POST', body: JSON.stringify(body) });
-            setMessage('Заявка подана');
-            await load();
-          } catch (err) {
-            const status = (err as { status?: number }).status;
+      {user.memberId && (
+        <AbsenceForm
+          busy={busy}
+          onSubmit={async (body) => {
+            setBusy(true);
             setMessage(null);
-            setError(
-              status === 409
-                ? 'Нельзя: период прошёл или до старта ивента меньше 3 минут'
-                : status === 400
-                  ? 'Проверьте даты и причину (от 3 символов)'
-                  : 'Не удалось подать заявку',
-            );
-          } finally {
-            setBusy(false);
-          }
-        }}
-      />
+            try {
+              await api('/absences', { method: 'POST', body: JSON.stringify(body) });
+              setMessage('Заявка подана');
+              await load();
+            } catch (err) {
+              const status = (err as { status?: number }).status;
+              setMessage(null);
+              setError(
+                status === 409
+                  ? 'Нельзя: период прошёл или до старта ивента меньше 3 минут'
+                  : status === 400
+                    ? 'Проверьте даты и причину (от 3 символов)'
+                    : 'Не удалось подать заявку',
+              );
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      )}
 
       <div className="mt-4" />
 
@@ -170,7 +174,7 @@ export default function AbsencesPage() {
                 }
               }}
               busy={busy}
-              myMemberId={user.memberId}
+              myMemberId={absenceSeenActorKey(user)}
             />
           </Card>
         </>
