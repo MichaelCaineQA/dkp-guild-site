@@ -8,6 +8,18 @@ function makeDb(stored: Record<string, number> = {}) {
   const state = new Map(Object.entries(stored));
   const audit: Array<Record<string, string | null>> = [];
   const db: SettingsDb = {
+    $transaction: async (work) => {
+      const snapshot = new Map(state);
+      const logs = [...audit];
+      try {
+        return await work({ setting: db.setting, guild: db.guild, auditLog: db.auditLog });
+      } catch (error) {
+        state.clear();
+        for (const [key, value] of snapshot) state.set(key, value);
+        audit.splice(0, audit.length, ...logs);
+        throw error;
+      }
+    },
     setting: {
       findMany: async () => Array.from(state, ([key, value]) => ({ key, value })),
       upsert: async ({ where, create, update }) => {
@@ -133,4 +145,26 @@ describe('settingsMetadata', () => {
     expect(meta[0]).toHaveProperty('label');
     expect(meta.find((m) => m.key === 'auction.step')!.unit).toBe('очк.');
   });
+});
+
+it('невалидное второе поле не оставляет первое сохранённым', async () => {
+  const { db, audit } = makeDb({ 'auction.step': 1 });
+  const service = new SettingsService(db);
+  await expect(
+    service.update({ 'auction.step': 2, 'checkin.attempts': 5 }, ACTOR),
+  ).rejects.toThrow();
+  expect((await service.getAll())['auction.step']).toBe(1);
+  expect(audit).toEqual([]);
+});
+it('сбой аудита откатывает все значения настроек', async () => {
+  const { db } = makeDb({ 'auction.step': 1 });
+  db.auditLog.create = async () => {
+    throw new Error('audit failed');
+  };
+  const service = new SettingsService(db);
+  await expect(
+    service.update({ 'auction.step': 2, 'checkin.windowSec': 240 }, ACTOR),
+  ).rejects.toThrow('audit failed');
+  expect((await service.getAll())['auction.step']).toBe(1);
+  expect((await service.getAll())['checkin.windowSec']).toBe(180);
 });

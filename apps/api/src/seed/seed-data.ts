@@ -1,4 +1,4 @@
-import { SETTING_DEFAULTS } from '@dkp/shared';
+import { GAME_TIME_DEFAULTS, SETTING_DEFAULTS } from '@dkp/shared';
 
 /**
  * Стартовые данные (docs/PLAN.md: 2.1 типы ивентов, 2.2 окна чек-ина,
@@ -25,8 +25,7 @@ export interface SeedSetting {
 export const SEED_GUILD: SeedGuild = {
   name: 'Гильдия',
   gameTimeAnchor: new Date('2026-01-01T00:00:00Z'),
-  gameTimeDayMinutes: 90,
-  gameTimeNightMinutes: 30,
+  ...GAME_TIME_DEFAULTS,
 };
 
 /** Справочник типов ивентов — редактируется офицерами дальше сам. */
@@ -36,9 +35,9 @@ export const EVENT_TYPE_NAMES = ['Гильдбосс', 'Осада', 'Контр
  * Ключи настроек с дефолтами из реестра @dkp/shared (задача #7):
  * единственный источник дефолтов — SETTINGS_REGISTRY/SETTING_DEFAULTS.
  */
-export const SEED_SETTINGS: SeedSetting[] = (Object.keys(
-  SETTING_DEFAULTS,
-) as Array<keyof typeof SETTING_DEFAULTS>).map((key) => ({
+export const SEED_SETTINGS: SeedSetting[] = (
+  Object.keys(SETTING_DEFAULTS) as Array<keyof typeof SETTING_DEFAULTS>
+).map((key) => ({
   key,
   value: SETTING_DEFAULTS[key],
 }));

@@ -275,14 +275,17 @@ export const contracts: Record<string, Contract> = {
   Settings_update: c('Изменить настройки системы', 'Settings', {
     access: leader,
     body: 'UpdateSettings',
+    errors: [400],
     description:
-      'Частичное обновление известных ключей. Значения проверяются реестром; изменения записываются в аудит.',
+      'Частичное обновление известных ключей. Весь запрос проверяется реестром до записи; изменения и аудит атомарны. Неизменённые значения не создают аудит.',
   }),
   Settings_getGameTime: c('Получить настройки игрового цикла', 'GuildGameTime', { errors: [404] }),
   Settings_updateGameTime: c('Изменить настройки игрового цикла', 'GuildGameTime', {
     access: leader,
     body: 'GameTimeSettings',
-    errors: [404],
+    errors: [400, 404],
+    description:
+      'Якорь и длительности сохраняются вместе с аудитом в транзакции. Повтор тех же значений не создаёт аудит.',
   }),
   EventTypes_list: c('Получить типы ивентов', list('EventType')),
   EventTypes_create: c('Создать тип ивента', 'EventType', {

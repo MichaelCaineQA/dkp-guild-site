@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   SETTINGS_REGISTRY,
   SETTING_DEFAULTS,
@@ -29,6 +29,9 @@ export interface SettingsDb {
     }): Promise<GameTimeSettings>;
   };
   auditLog: AuditWriter;
+  $transaction<T>(
+    work: (tx: Pick<SettingsDb, 'setting' | 'guild' | 'auditLog'>) => Promise<T>,
+  ): Promise<T>;
 }
 
 /** Действующий пользователь сессии — как в members.service. */
@@ -48,8 +51,8 @@ export class SettingsService {
   constructor(private readonly db: SettingsDb) {}
 
   /** Все настройки с дефолтами для отсутствующих. */
-  async getAll(): Promise<Record<SettingKey, number>> {
-    const rows = await this.db.setting.findMany();
+  async getAll(db: Pick<SettingsDb, 'setting'> = this.db): Promise<Record<SettingKey, number>> {
+    const rows = await db.setting.findMany();
     const stored = new Map(rows.map((row) => [row.key, row.value]));
     const result = { ...SETTING_DEFAULTS };
     for (const key of Object.keys(result) as SettingKey[]) {
@@ -67,40 +70,40 @@ export class SettingsService {
    * читается на запросе, без деплоя.
    */
   async update(body: unknown, actor: SettingsActor): Promise<Record<SettingKey, number>> {
-    const input: UpdateSettingsInput = updateSettingsSchema.parse(body);
-
-    const current = await this.getAll();
-    const changes: string[] = [];
-    for (const [key, rawValue] of Object.entries(input)) {
-      const value = parseSettingValue(key, rawValue);
-      if (current[key as SettingKey] === value) {
-        continue; // не трогаем и не шумим в аудите неизменённое
+    const parsed = updateSettingsSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('Некорректные настройки');
+    const input: UpdateSettingsInput = parsed.data;
+    // Проверяем весь запрос до первой записи, включая ограничения общего реестра.
+    try {
+      for (const [key, raw] of Object.entries(input)) parseSettingValue(key, raw);
+    } catch {
+      throw new BadRequestException('Значение настройки вне допустимого диапазона');
+    }
+    return this.db.$transaction(async (tx) => {
+      const current = await this.getAll(tx);
+      const changes: string[] = [];
+      for (const [key, value] of Object.entries(input)) {
+        if (current[key as SettingKey] === value) continue;
+        changes.push(`${key}: ${current[key as SettingKey]} → ${value}`);
+        await tx.setting.upsert({ where: { key }, create: { key, value }, update: { value } });
       }
-      changes.push(`${key}: ${current[key as SettingKey]} → ${value}`);
-      await this.db.setting.upsert({
-        where: { key },
-        create: { key, value },
-        update: { value },
-      });
-    }
-
-    if (changes.length > 0) {
-      await this.db.auditLog.create({
-        data: {
-          actorMemberId: actor.memberId,
-          action: 'SETTINGS_UPDATE',
-          entityType: 'Setting',
-          entityId: 'batch',
-          comment: changes.join('; '),
-        },
-      });
-    }
-    return this.getAll();
+      if (changes.length)
+        await tx.auditLog.create({
+          data: {
+            actorMemberId: actor.memberId,
+            action: 'SETTINGS_UPDATE',
+            entityType: 'Setting',
+            entityId: 'batch',
+            comment: changes.join('; '),
+          },
+        });
+      return { ...current, ...input };
+    });
   }
 
   /** Игровой цикл (план 2.1): хранится на Guild, редактируется через настройки. */
-  async getGameTime(): Promise<GameTimeSettings> {
-    const guild = await this.db.guild.findFirst();
+  async getGameTime(db: Pick<SettingsDb, 'guild'> = this.db): Promise<GameTimeSettings> {
+    const guild = await db.guild.findFirst();
     if (!guild) {
       throw new NotFoundException('Гильдия не найдена');
     }
@@ -108,27 +111,30 @@ export class SettingsService {
   }
 
   async updateGameTime(body: unknown, actor: SettingsActor): Promise<GameTimeSettings> {
-    const input = gameTimeSettingsSchema.parse(body);
-    const guild = await this.getGameTime();
-
-    const updated = await this.db.guild.update({
-      where: { id: (guild as GameTimeSettings & { id: string }).id },
-      data: {
-        gameTimeAnchor: input.gameTimeAnchor,
-        gameTimeDayMinutes: input.gameTimeDayMinutes,
-        gameTimeNightMinutes: input.gameTimeNightMinutes,
-      },
+    const parsed = gameTimeSettingsSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('Проверьте якорь и длительности фаз');
+    const input = parsed.data;
+    return this.db.$transaction(async (tx) => {
+      const guild = await this.getGameTime(tx);
+      if (
+        +guild.gameTimeAnchor === +input.gameTimeAnchor &&
+        guild.gameTimeDayMinutes === input.gameTimeDayMinutes &&
+        guild.gameTimeNightMinutes === input.gameTimeNightMinutes
+      )
+        return guild;
+      const id = (guild as GameTimeSettings & { id: string }).id;
+      const updated = await tx.guild.update({ where: { id }, data: input });
+      await tx.auditLog.create({
+        data: {
+          actorMemberId: actor.memberId,
+          action: 'SETTINGS_UPDATE',
+          entityType: 'Guild',
+          entityId: id,
+          comment: `Игровой цикл: якорь ${input.gameTimeAnchor.toISOString()}, день ${input.gameTimeDayMinutes} мин, ночь ${input.gameTimeNightMinutes} мин`,
+        },
+      });
+      return updated;
     });
-    await this.db.auditLog.create({
-      data: {
-        actorMemberId: actor.memberId,
-        action: 'SETTINGS_UPDATE',
-        entityType: 'Guild',
-        entityId: (guild as GameTimeSettings & { id: string }).id,
-        comment: `Игровой цикл: якорь ${input.gameTimeAnchor.toISOString()}, день ${input.gameTimeDayMinutes} мин, ночь ${input.gameTimeNightMinutes} мин`,
-      },
-    });
-    return updated;
   }
 }
 
