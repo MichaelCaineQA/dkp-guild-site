@@ -58,8 +58,19 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.ts$": "ts-jest"
+      "^.+\\.[tj]s$": [
+        "ts-jest",
+        {
+          "tsconfig": {
+            "allowJs": true
+          }
+        }
+      ]
     },
+    "transformIgnorePatterns": [
+      "node_modules/(?!\\.pnpm|@nestjs/(?:passport|config))",
+      "node_modules/\\.pnpm/(?!@nestjs\\+(?:passport|config)@)"
+    ],
     "testEnvironment": "node"
   }
 }

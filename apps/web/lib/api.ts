@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api';
 
 /** Клиент к API с сессионной cookie (credentials: include). */
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {

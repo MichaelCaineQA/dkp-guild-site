@@ -1,0 +1,68 @@
+name: dkp-guild
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dkp
+      POSTGRES_PASSWORD: ${DKP_DB_PASSWORD:?}
+      POSTGRES_DB: dkp
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U dkp -d dkp']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+  api:
+    image: ${DKP_API_IMAGE:?}
+    restart: unless-stopped
+    command: ['node', 'dist/main.js']
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://dkp:${DKP_DB_PASSWORD:?}@db:5432/dkp?schema=public
+      REDIS_URL: redis://redis:6379
+      SESSION_SECRET: ${DKP_SESSION_SECRET:?}
+      CHECKIN_ENC_KEY: ${DKP_CHECKIN_KEY:?}
+      ADMIN_LOGIN: ${DKP_ADMIN_LOGIN:?}
+      ADMIN_PASSWORD: ${DKP_ADMIN_PASSWORD:?}
+      DISCORD_CLIENT_ID: ${DKP_DISCORD_ID:-}
+      DISCORD_CLIENT_SECRET: ${DKP_DISCORD_SECRET:-}
+      DISCORD_CALLBACK_URL: https://${DKP_DOMAIN}/api/auth/discord/callback
+      WEB_URL: https://${DKP_DOMAIN}
+      INITIAL_GUILD_NAME: ${DKP_GUILD_NAME:?}
+      COOKIE_SECURE: 'true'
+      TRUST_PROXY: '1'
+      SCREENSHOT_DIR: /app/uploads/screenshots
+    volumes:
+      - screenshot-data:/app/uploads/screenshots
+    depends_on:
+      db:
+        condition: service_healthy
+  web:
+    image: ${DKP_WEB_IMAGE:?}
+    restart: unless-stopped
+    depends_on:
+      - api
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DKP_DOMAIN: ${DKP_DOMAIN:?}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+volumes:
+  db-data:
+  screenshot-data:
+  caddy-data:
+  caddy-config:

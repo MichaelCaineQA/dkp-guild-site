@@ -69,6 +69,18 @@ function makeFakeDb(): { db: SeedDb; state: FakeDbState } {
 }
 
 describe('applySeed (идемпотентность)', () => {
+  it('использует имя при создании и не меняет его при повторной инициализации', async () => {
+    const { db, state } = makeFakeDb();
+    await applySeed(db, '  Новая гильдия  ');
+    await applySeed(db, 'Другое имя');
+    expect(state.guilds).toHaveLength(1);
+    expect(state.guilds[0].data).toMatchObject({ name: 'Новая гильдия' });
+  });
+  it('отклоняет пустое начальное имя до создания гильдии', async () => {
+    const { db, state } = makeFakeDb();
+    await expect(applySeed(db, '  ')).rejects.toThrow('Название гильдии');
+    expect(state.guilds).toHaveLength(0);
+  });
   it('создаёт две страницы и историю, повторный seed не затирает публикации', async () => {
     const { db, state } = makeFakeDb();
     await applySeed(db);

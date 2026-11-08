@@ -11,7 +11,8 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { AuthGuard as PassportAuthGuard } from '@nestjs/passport';
+import { DiscordGuard } from './discord.guard';
+import { isDiscordConfigured } from './discord-config';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { type SessionUser } from '@dkp/shared';
@@ -33,16 +34,22 @@ export class AuthController {
     private readonly audit: AuditService,
   ) {}
 
+  /** Публичное состояние входа: только флаг, без параметров и секретов OAuth. */
+  @Get('providers')
+  providers(): { discord: boolean } {
+    return { discord: isDiscordConfigured() };
+  }
+
   /** Запуск Discord OAuth2 — редирект на discord.com. */
   @Get('discord')
-  @UseGuards(PassportAuthGuard('discord'))
+  @UseGuards(DiscordGuard)
   discordLogin(): void {
     // passport сам редиректит на Discord
   }
 
   /** Возврат с Discord: стратегия уже прогнала логику входа, кладём в сессию. */
   @Get('discord/callback')
-  @UseGuards(PassportAuthGuard('discord'))
+  @UseGuards(DiscordGuard)
   async discordCallback(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
     // req.user — SessionUser, собранный DiscordStrategy.validate
     const user = req.user as SessionUser;

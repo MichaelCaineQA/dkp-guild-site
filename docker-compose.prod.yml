@@ -31,9 +31,10 @@ services:
       CHECKIN_ENC_KEY: ${CHECKIN_ENC_KEY:?Укажите CHECKIN_ENC_KEY}
       ADMIN_LOGIN: ${ADMIN_LOGIN:?Укажите ADMIN_LOGIN}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Укажите ADMIN_PASSWORD}
-      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?Укажите DISCORD_CLIENT_ID}
-      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:?Укажите DISCORD_CLIENT_SECRET}
-      DISCORD_CALLBACK_URL: ${PUBLIC_API_URL:-https://${API_HOST}}/auth/discord/callback
+      # Оба поля можно оставить пустыми и настроить Discord после установки.
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      DISCORD_CALLBACK_URL: ${DISCORD_CALLBACK_URL:-${PUBLIC_WEB_URL:-https://${WEB_HOST}}/api/auth/discord/callback}
       WEB_URL: ${PUBLIC_WEB_URL:-https://${WEB_HOST}}
       COOKIE_SECURE: 'true'
       TRUST_PROXY: '1'
@@ -47,8 +48,6 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-https://${API_HOST:?Укажите API_HOST}}
     restart: unless-stopped
     depends_on:
       - api

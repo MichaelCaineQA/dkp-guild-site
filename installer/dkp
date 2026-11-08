@@ -1,0 +1,883 @@
+#!/usr/bin/env python3
+"""Управление отдельной установкой ДКП. Требуется Python 3 из Ubuntu."""
+import contextlib
+import datetime as dt
+import fcntl
+import getpass
+import hashlib
+import hmac
+import json
+import os
+import re
+import secrets
+import shutil
+import shlex
+import socket
+import subprocess
+import sys
+import tempfile
+import tarfile
+import time
+import urllib.request
+import urllib.parse
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+STATE = Path(os.environ.get('DKP_STATE_DIR', '/var/lib/dkp-guild'))
+CONFIG = STATE / 'config.json'
+ENV = STATE / 'compose.env'
+MANIFEST = ROOT / 'release-manifest.json'
+PROJECT = 'dkp-guild'
+
+class Failure(Exception):
+    pass
+
+def fail(message):
+    raise Failure(message)
+
+def run(args, **kwargs):
+    try:
+        return subprocess.run(args, check=True, **kwargs)
+    except FileNotFoundError:
+        fail('Не найдена программа: ' + args[0])
+    except subprocess.CalledProcessError as exc:
+        fail(f'Команда {args[0]} завершилась с кодом {exc.returncode}')
+
+def prompt(label, default=None):
+    value = input(label + (f' [{default}]' if default else '') + ': ').strip()
+    return value or default or ''
+
+def secret(label, required=True):
+    while True:
+        first = getpass.getpass(label + ': ')
+        if not first and not required:
+            return ''
+        if first and first == getpass.getpass('Повторите ввод: '):
+            if '\n' not in first and '\r' not in first:
+                return first
+        print('Значения не совпали или пусты. Повторите ввод.')
+
+def atomic_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(path.parent, 0o700)
+    fd, tmp = tempfile.mkstemp(prefix='.config-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as out:
+            os.fchmod(out.fileno(), 0o600)
+            json.dump(data, out, ensure_ascii=False, indent=2)
+            out.write('\n')
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+def load():
+    if not CONFIG.exists():
+        fail('Установка ещё не настроена. Запустите dkp start.')
+    with CONFIG.open(encoding='utf-8') as f:
+        return json.load(f)
+
+def manifest():
+    try:
+        with MANIFEST.open(encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        fail('Не удалось прочитать манифест релиза.')
+
+def verify_release():
+    sums = ROOT / 'SHA256SUMS'
+    if not sums.exists():
+        fail('В релизе нет SHA256SUMS.')
+    expected = {'dkp', 'Caddyfile', 'compose.yml', 'README.md', 'release-manifest.json'}
+    seen = set()
+    for line in sums.read_text(encoding='utf-8').splitlines():
+        match = re.fullmatch(r'([a-f0-9]{64})  ([A-Za-z0-9._-]+)', line)
+        if not match or match[2] not in expected or match[2] in seen:
+            fail('Некорректный список контрольных сумм релиза.')
+        path = ROOT / match[2]
+        if path.is_symlink() or not path.is_file():
+            fail('Файл релиза отсутствует или является ссылкой: ' + match[2])
+        if not hmac.compare_digest(hashlib.sha256(path.read_bytes()).hexdigest(), match[1]):
+            fail('Контрольная сумма файла релиза не совпадает: ' + match[2])
+        seen.add(match[2])
+    if seen != expected:
+        fail('Список контрольных сумм релиза неполон.')
+    release = manifest()
+    if not re.fullmatch(r'v\d+\.\d+\.\d+(?:[-.][A-Za-z0-9.-]+)?', release.get('version', '')):
+        fail('Некорректная версия в манифесте релиза.')
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', release.get('repository', '')):
+        fail('Некорректный репозиторий в манифесте релиза.')
+    for name in ('api', 'web'):
+        if not re.fullmatch(r'[^\s@]+@sha256:[a-f0-9]{64}', release['images'][name]):
+            fail('В манифесте отсутствует digest образа ' + name)
+    architecture = {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(os.uname().machine)
+    if not architecture or 'linux/' + architecture not in release['platforms']:
+        fail('Архитектура сервера не поддерживается этим релизом.')
+    return release
+
+def prerequisites():
+    data = {}
+    try:
+        for line in Path('/etc/os-release').read_text().splitlines():
+            if '=' in line:
+                k, v = line.split('=', 1)
+                data[k] = v.strip('"')
+    except OSError:
+        fail('Не удалось определить версию ОС.')
+    if data.get('ID') != 'ubuntu' or data.get('VERSION_ID') not in ('22.04', '24.04'):
+        fail('Поддерживаются Ubuntu 22.04 и 24.04 на amd64 или arm64.')
+    for cmd in ('openssl', 'sha256sum', 'tar'):
+        if not shutil.which(cmd):
+            fail(f'Не найдена {cmd}. Установите необходимые пакеты и повторите запуск.')
+    has_docker = bool(shutil.which('docker'))
+    has_compose = has_docker and subprocess.run(['docker', 'compose', 'version'],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    if not has_docker or not has_compose:
+        print('Для работы требуются пакеты Ubuntu docker.io и docker-compose-v2. '
+              'Будет выполнено обновление индекса apt и установка недостающих пакетов.')
+        if os.geteuid() != 0:
+            fail('Для установки Docker перезапустите установщик от root.')
+        if prompt('Установить Docker Engine и Compose? Введите да', 'нет').lower() != 'да':
+            fail('Установка Docker отменена.')
+        run(['apt-get', 'update'])
+        run(['apt-get', 'install', '-y', 'docker.io', 'docker-compose-v2'])
+    run(['docker', 'compose', 'version'], stdout=subprocess.DEVNULL)
+    run(['docker', 'info'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+def env_file(c, release):
+    values = {
+        'DKP_DOMAIN': c['domain'], 'DKP_GUILD_NAME': c['guild'],
+        'DKP_DB_PASSWORD': c['db_password'], 'DKP_SESSION_SECRET': c['session_secret'],
+        'DKP_CHECKIN_KEY': c['checkin_key'], 'DKP_ADMIN_LOGIN': c['admin_login'],
+        'DKP_ADMIN_PASSWORD': c['admin_password'], 'DKP_DISCORD_ID': c.get('discord_id', ''),
+        'DKP_DISCORD_SECRET': c.get('discord_secret', ''),
+        'DKP_API_IMAGE': release['images']['api'], 'DKP_WEB_IMAGE': release['images']['web'],
+    }
+    # Значения передаются через окружение процесса Compose. Файл env пустой:
+    # Docker не должен случайно прочитать .env из текущего каталога.
+    fd, tmp = tempfile.mkstemp(prefix='.env-', dir=STATE)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as out:
+            os.fchmod(out.fileno(), 0o600)
+            for value in values.values():
+                if '\n' in value or '\r' in value:
+                    fail('Перенос строки в параметрах конфигурации недопустим.')
+        os.replace(tmp, ENV)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+    return values
+
+def compose(c, release, *args, **kwargs):
+    values = env_file(c, release)
+    environment = dict(os.environ)
+    environment.update(values)
+    return run(['docker', 'compose', '--project-name', PROJECT, '--env-file', str(ENV),
+                '-f', str(ROOT / 'compose.yml'), *args], env=environment, **kwargs)
+
+def persist_release(release):
+    global ROOT, MANIFEST
+    current = STATE / 'current'
+    if current.exists():
+        ROOT = current.resolve()
+        MANIFEST = ROOT / 'release-manifest.json'
+        return
+    releases = STATE / 'releases'
+    releases.mkdir(mode=0o700, exist_ok=True)
+    destination = releases / release['version']
+    if not destination.exists():
+        with tempfile.TemporaryDirectory(prefix='.initial-', dir=releases) as temp:
+            staged = Path(temp) / 'release'
+            staged.mkdir()
+            for name in ('dkp', 'compose.yml', 'Caddyfile', 'README.md', 'release-manifest.json', 'SHA256SUMS'):
+                shutil.copy2(ROOT / name, staged / name)
+            os.replace(staged, destination)
+    old_root, old_manifest = ROOT, MANIFEST
+    try:
+        ROOT, MANIFEST = destination, destination / 'release-manifest.json'
+        if verify_release() != release:
+            fail('Постоянный каталог релиза содержит другую версию.')
+    finally:
+        ROOT, MANIFEST = old_root, old_manifest
+    link = STATE / '.current-new'
+    link.unlink(missing_ok=True)
+    link.symlink_to(destination, target_is_directory=True)
+    os.replace(link, current)
+    ROOT = destination
+    MANIFEST = ROOT / 'release-manifest.json'
+
+def configure(c=None):
+    initial = c is None
+    c = dict(c or {})
+    domain = prompt('Домен сайта', c.get('domain')).lower()
+    if not re.fullmatch(r'(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}', domain):
+        fail('Укажите корректное доменное имя.')
+    try:
+        addresses = sorted({entry[4][0] for entry in socket.getaddrinfo(domain, 443, type=socket.SOCK_STREAM)})
+    except socket.gaierror:
+        fail('Домен не разрешается в DNS. Настройте DNS и повторите.')
+    print('DNS:', ', '.join(addresses))
+    if prompt('DNS указывает на этот сервер? Введите да', 'нет').lower() != 'да':
+        fail('Настройка остановлена до подтверждения DNS.')
+    guild = prompt('Название гильдии') if initial else c['guild']
+    login = prompt('Логин администратора', c.get('admin_login', 'admin'))
+    if not guild or not login or any('\n' in v or '\r' in v for v in (guild, login)):
+        fail('Название и логин обязательны.')
+    if initial or prompt('Изменить пароль администратора? да/нет', 'нет').lower() == 'да':
+        c['admin_password'] = secret('Пароль администратора')
+    print('Discord Redirect URI: https://' + domain + '/api/auth/discord/callback')
+    if prompt('Настроить Discord сейчас? да/нет', 'нет').lower() == 'да':
+        discord_id = prompt('Discord Client ID', c.get('discord_id'))
+        if not re.fullmatch(r'\d+', discord_id):
+            fail('Discord Client ID должен состоять из цифр.')
+        c['discord_id'] = discord_id
+        if not c.get('discord_secret') or prompt('Заменить Discord Client Secret? да/нет', 'нет').lower() == 'да':
+            c['discord_secret'] = secret('Discord Client Secret')
+    elif initial:
+        c['discord_id'] = c['discord_secret'] = ''
+    c.update(domain=domain, guild=guild, admin_login=login)
+    if initial:
+        c.update(db_password=secrets.token_hex(32), session_secret=secrets.token_hex(32),
+                 checkin_key=secrets.token_hex(32), leader_pending=True)
+    atomic_json(CONFIG, c)
+    return c
+
+def check_ports():
+    for port in (80, 443):
+        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as s:
+            try:
+                s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+                s.bind(('::', port))
+            except OSError as exc:
+                fail(f'Порт {port} недоступен: {exc}. Освободите порт и повторите запуск.')
+
+def start(c, release, first=False):
+    if (STATE / 'migration-failed').exists():
+        fail('Предыдущее обновление прервалось на миграции. Восстановите резервную копию перед запуском.')
+    installed = STATE / 'installed-version'
+    if installed.exists() and installed.read_text().strip() != release['version']:
+        fail('Версия релиза изменилась. Используйте dkp update после создания резервной копии.')
+    if first:
+        check_ports()
+    compose(c, release, 'pull')
+    compose(c, release, 'up', '-d', '--wait', 'db', 'redis')
+    compose(c, release, 'run', '--rm', '--no-deps', 'api', './node_modules/.bin/prisma', 'migrate', 'deploy')
+    compose(c, release, 'run', '--rm', '--no-deps', 'api', 'node', 'dist-seed/prisma/seed.js')
+    compose(c, release, 'up', '-d', '--wait', 'api', 'web', 'caddy')
+    check_https(c)
+    installed.write_text(release['version'] + '\n')
+    print('Сайт: https://' + c['domain'])
+    if c.get('leader_pending'):
+        print('Глава ещё не назначен. Необходимо завершить его явное назначение.')
+
+def check_https(c):
+    url = 'https://' + c['domain'] + '/api/health'
+    deadline = time.monotonic() + 90
+    while True:
+        try:
+            with urllib.request.urlopen(url, timeout=5) as response:
+                data = json.load(response)
+            if data.get('db') == 'up':
+                return
+        except (OSError, ValueError):
+            pass
+        if time.monotonic() >= deadline:
+            fail('HTTPS или API/БД не ответили успешно. Проверьте DNS, порты, сертификат и dkp logs.')
+        time.sleep(3)
+
+def backup_setup(c):
+    mode = prompt('Хранилище: ssh или local', c.get('backup', {}).get('mode', 'ssh'))
+    if mode not in ('ssh', 'local'):
+        fail('Выберите ssh или local.')
+    target = prompt('Каталог хранения', c.get('backup', {}).get('target', '/var/backups/dkp-guild'))
+    if not re.fullmatch(r'/[a-zA-Z0-9_./-]+', target) or '..' in Path(target).parts:
+        fail('Каталог должен быть абсолютным путём без пробелов и ..')
+    key_path = Path(prompt('Абсолютный путь к файлу ключа восстановления', '/root/dkp-recovery.key'))
+    if not key_path.is_absolute():
+        fail('Путь к ключу восстановления должен быть абсолютным.')
+    if not key_path.exists():
+        fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, 'w') as f:
+            f.write(secrets.token_hex(32) + '\n')
+        print('Ключ создан:', key_path, '. Сохраните отдельную копию вне VPS.')
+    if not key_path.is_file():
+        fail('Ключ восстановления должен быть обычным файлом.')
+    if key_path.stat().st_mode & 0o077:
+        fail('Файл ключа должен иметь права 600 или строже.')
+    if not key_path.read_bytes().strip():
+        fail('Файл ключа восстановления пуст.')
+    backup = {'mode': mode, 'target': target, 'key': str(key_path)}
+    if mode == 'ssh':
+        host = prompt('SSH-сервер (имя или IPv4)')
+        user = prompt('Пользователь SSH')
+        port = prompt('Порт SSH', '22')
+        identity = prompt('Абсолютный путь к SSH-ключу')
+        if not re.fullmatch(r'[a-zA-Z0-9.-]+', host) or not re.fullmatch(r'[a-z_][a-z0-9_-]*', user):
+            fail('Некорректные сервер или пользователь SSH.')
+        if not port.isdigit() or not 1 <= int(port) <= 65535 or not Path(identity).is_absolute() or not Path(identity).is_file():
+            fail('Проверьте порт SSH и путь к ключу.')
+        backup.update(host=host, user=user, port=port, identity=identity)
+        print('SSH проверяет известный ключ сервера через known_hosts; неизвестный ключ не принимается автоматически.')
+        probe = target + '/.dkp-write-test.XXXXXXXX'
+        ssh(backup, 'umask 077; p=$(mktemp ' + shlex.quote(probe) + ') && rm -f -- "$p"')
+    else:
+        print('Внимание: локальная копия находится на том же сервере.')
+        Path(target).mkdir(parents=True, exist_ok=True, mode=0o700)
+    time_of_day = prompt('Ежедневное время бэкапа (ЧЧ:ММ)', '03:00')
+    if not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', time_of_day):
+        fail('Время должно иметь формат ЧЧ:ММ.')
+    timezone = prompt('Часовой пояс IANA', 'Europe/Moscow')
+    try:
+        ZoneInfo(timezone)
+    except (ZoneInfoNotFoundError, ValueError):
+        fail('Неизвестный часовой пояс.')
+    days = prompt('Срок хранения в днях', '30')
+    if not days.isdigit() or not 1 <= int(days) <= 3650:
+        fail('Срок хранения должен быть от 1 до 3650 дней.')
+    backup.update(time=time_of_day, timezone=timezone, retention_days=int(days))
+    if os.geteuid() != 0 or not shutil.which('systemctl'):
+        fail('Для установки расписания требуется запуск от root и systemd.')
+    # Оба unit принадлежат только DKP и не управляют посторонними службами.
+    if any(ch in str(path) for path in (ROOT, STATE) for ch in ('\n', '\r')):
+        fail('Пути с переводами строк для systemd не поддерживаются.')
+    executable = str(STATE / 'current' / 'dkp').replace('%', '%%').replace('\\', '\\\\').replace('"', '\\"')
+    state = str(STATE).replace('%', '%%').replace('\\', '\\\\').replace('"', '\\"')
+    service = ('[Unit]\nDescription=DKP guild backup\n[Service]\nType=oneshot\n'
+               f'Environment="DKP_STATE_DIR={state}"\nExecStart="{executable}" backup now\n')
+    timer = ('[Unit]\nDescription=Daily DKP guild backup\n[Timer]\n'
+             f'OnCalendar=*-*-* {time_of_day}:00 {timezone}\nPersistent=true\n'
+             '[Install]\nWantedBy=timers.target\n')
+    Path('/etc/systemd/system/dkp-guild-backup.service').write_text(service, encoding='utf-8')
+    Path('/etc/systemd/system/dkp-guild-backup.timer').write_text(timer, encoding='utf-8')
+    c['backup'] = backup
+    atomic_json(CONFIG, c)
+    run(['systemctl', 'daemon-reload'])
+    run(['systemctl', 'enable', '--now', 'dkp-guild-backup.timer'])
+    print('Хранилище настроено. Храните ключ восстановления отдельно от этого сервера.')
+
+def ssh(b, command, **kwargs):
+    return run(['ssh', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
+                '-i', b['identity'], '-p', b['port'], b['user'] + '@' + b['host'], command], **kwargs)
+
+def key_bytes(b):
+    key = Path(b['key']).read_bytes().strip()
+    if not key:
+        fail('Ключ восстановления пуст.')
+    return key
+
+def mac_file(path, key):
+    mac = hmac.new(key, digestmod=hashlib.sha256)
+    with path.open('rb') as f:
+        for block in iter(lambda: f.read(1024 * 1024), b''):
+            mac.update(block)
+    return mac.hexdigest()
+
+def backup_now(c, release):
+    b = c.get('backup')
+    if not b:
+        fail('Сначала настройте хранилище командой dkp backup setup.')
+    backup_dir = STATE / 'backups'
+    backup_dir.mkdir(mode=0o700, exist_ok=True)
+    stamp = dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    final = backup_dir / (stamp + '.enc')
+    digest = backup_dir / (stamp + '.hmac')
+    with tempfile.TemporaryDirectory(prefix='.backup-', dir=STATE) as tmp:
+        work = Path(tmp)
+        status = compose(c, release, 'ps', '--status', 'running', '--services', 'api',
+                         stdout=subprocess.PIPE, text=True)
+        was_running = 'api' in status.stdout.splitlines()
+        if was_running:
+            compose(c, release, 'stop', 'api')
+        try:
+            with (work / 'database.dump').open('wb') as f:
+                compose(c, release, 'exec', '-T', 'db', 'sh', '-c',
+                        'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc', stdout=f)
+            if not (work / 'database.dump').stat().st_size:
+                fail('Получена пустая копия базы данных.')
+            with (work / 'screenshots.tar.gz').open('wb') as f:
+                compose(c, release, 'run', '-T', '--rm', '--no-deps', '--entrypoint', 'tar', 'api',
+                        '-C', '/app/uploads/screenshots', '-czf', '-', '.', stdout=f)
+            shutil.copyfile(CONFIG, work / 'config.json')
+            shutil.copyfile(MANIFEST, work / 'release-manifest.json')
+            with tarfile.open(work / 'backup.tar', 'w') as archive:
+                for name in ('database.dump', 'screenshots.tar.gz', 'config.json', 'release-manifest.json'):
+                    archive.add(work / name, arcname=name)
+            encrypted = work / 'backup.enc'
+            run(['openssl', 'enc', '-aes-256-cbc', '-salt', '-pbkdf2', '-iter', '250000',
+                 '-pass', 'file:' + b['key'], '-in', str(work / 'backup.tar'), '-out', str(encrypted)])
+            checksum = mac_file(encrypted, key_bytes(b))
+            if b['mode'] == 'ssh':
+                partial = b['target'] + '/.' + stamp + '.partial'
+                remote = b['target'] + '/' + stamp + '.enc'
+                run(['scp', '-q', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
+                     '-i', b['identity'], '-P', b['port'], str(encrypted),
+                     b['user'] + '@' + b['host'] + ':' + partial])
+                ssh(b, 'mv -- ' + shlex.quote(partial) + ' ' + shlex.quote(remote))
+                # Передаём подпись отдельным файлом после успешной выгрузки архива.
+                (work / 'backup.hmac').write_text(checksum + '\n')
+                run(['scp', '-q', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
+                     '-i', b['identity'], '-P', b['port'], str(work / 'backup.hmac'),
+                     b['user'] + '@' + b['host'] + ':' + b['target'] + '/' + stamp + '.hmac'])
+            else:
+                destination = Path(b['target'])
+                shutil.copyfile(encrypted, destination / (stamp + '.enc'))
+                (destination / (stamp + '.hmac')).write_text(checksum + '\n')
+                os.chmod(destination / (stamp + '.enc'), 0o600)
+                os.chmod(destination / (stamp + '.hmac'), 0o600)
+            shutil.copyfile(encrypted, final)
+            os.chmod(final, 0o600)
+            digest.write_text(checksum + '\n')
+            os.chmod(digest, 0o600)
+            atomic_json(STATE / 'backup-status.json', {'id': stamp, 'result': 'ok'})
+            rotate_backups(b, backup_dir, stamp)
+        except BaseException:
+            atomic_json(STATE / 'backup-status.json', {'id': stamp, 'result': 'error'})
+            raise
+        finally:
+            if was_running:
+                compose(c, release, 'start', 'api')
+    print('Резервная копия создана:', stamp)
+
+def rotate_backups(b, local_dir, latest):
+    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=b['retention_days'])
+    folders = [local_dir]
+    if b['mode'] == 'local' and Path(b['target']) != local_dir:
+        folders.append(Path(b['target']))
+    for folder in folders:
+        for path in folder.glob('*.enc'):
+            if path.stem == latest or not re.fullmatch(r'\d{8}T\d{12}Z', path.stem):
+                continue
+            try:
+                date = dt.datetime.strptime(path.stem, '%Y%m%dT%H%M%S%fZ').replace(tzinfo=dt.timezone.utc)
+            except ValueError:
+                continue
+            if date < cutoff:
+                path.unlink()
+                path.with_suffix('.hmac').unlink(missing_ok=True)
+    if b['mode'] == 'ssh':
+        # Текущая пара уже успешно выгружена, поэтому удаляем только старые
+        # имена установленного формата; чужие файлы не затрагиваются.
+        pattern = '[0-9]' * 8 + 'T' + '[0-9]' * 12 + 'Z'
+        for suffix in ('.enc', '.hmac'):
+            command = ('find ' + shlex.quote(b['target']) + ' -maxdepth 1 -type f -name '
+                       + shlex.quote(pattern + suffix) + ' -mtime +' + str(b['retention_days']) + ' -delete')
+            ssh(b, command)
+
+def backup_list(c):
+    folder = STATE / 'backups'
+    found = set()
+    b = c.get('backup')
+    folders = [folder]
+    if b and b['mode'] == 'local':
+        folders.append(Path(b['target']))
+    for directory in folders:
+        for entry in directory.glob('*.enc'):
+            if re.fullmatch(r'\d{8}T\d{12}Z', entry.stem) and entry.with_suffix('.hmac').is_file():
+                found.add(entry.stem)
+    if b and b['mode'] == 'ssh':
+        # Список дополняется с отдельного сервера, в том числе после переноса VPS.
+        result = ssh(b, 'find ' + shlex.quote(b['target']) + ' -maxdepth 1 -type f -name '
+                     + shlex.quote('*.hmac') + ' -printf ' + shlex.quote('%f\n'),
+                     stdout=subprocess.PIPE, text=True)
+        for name in result.stdout.splitlines():
+            if re.fullmatch(r'\d{8}T\d{12}Z\.hmac', name):
+                found.add(name[:-5])
+    for backup_id in sorted(found):
+        print(backup_id)
+
+LEADER_SCRIPT = r'''
+const { PrismaClient } = require('@prisma/client');
+const fs = require('fs');
+const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+const db = new PrismaClient();
+(async () => {
+  const user = await db.user.findUnique({ where: { discordId: input.discordId }, include: { member: true } });
+  if (!user) throw new Error('Указанный Discord-пользователь ещё не входил на сайт');
+  if (input.action === 'lookup') {
+    console.log(JSON.stringify({ username: user.username, nickname: user.member?.nickname ?? null }));
+    return;
+  }
+  if (!user.member) throw new Error('Сначала одобрите анкету пользователя в аккаунте администратора');
+  await db.$transaction(async (tx) => {
+    const leader = await tx.member.findFirst({ where: { rank: 'GUILD_LEADER' } });
+    if (leader) {
+      if (leader.userId === user.id) return;
+      throw new Error('Глава уже назначен; повторная инициализация запрещена');
+    }
+    const member = await tx.member.update({ where: { id: user.member.id }, data: { rank: 'GUILD_LEADER' } });
+    await tx.auditLog.create({ data: { action: 'ROLE_CHANGE', entityType: 'Member', entityId: member.id,
+      comment: 'Первоначальное назначение Главы администратором через установщик' } });
+  }, { isolationLevel: 'Serializable' });
+  console.log(JSON.stringify({ ok: true }));
+})().catch(e => { console.error(e.message); process.exitCode = 1; }).finally(() => db.$disconnect());
+'''
+
+def leader_setup(c, release):
+    if not c.get('leader_pending'):
+        fail('Первоначальное назначение Главы уже завершено.')
+    discord_id = prompt('Discord ID пользователя, который уже вошёл на сайт')
+    if not re.fullmatch(r'\d{15,22}', discord_id):
+        fail('Discord ID должен состоять из 15–22 цифр.')
+    def call(payload):
+        result = compose(c, release, 'exec', '-T', 'api', 'node', '-e', LEADER_SCRIPT,
+                         input=json.dumps(payload, ensure_ascii=False), text=True,
+                         stdout=subprocess.PIPE)
+        return json.loads(result.stdout)
+    user = call({'action': 'lookup', 'discordId': discord_id})
+    print('Пользователь Discord:', user['username'], '; ID:', discord_id)
+    nickname = user['nickname']
+    if not nickname:
+        fail('Сначала одобрите анкету этого пользователя в аккаунте администратора.')
+    print('Игровой ник:', nickname)
+    if prompt('Подтвердите назначение этого пользователя Главой: введите да', 'нет').lower() != 'да':
+        fail('Назначение отменено.')
+    call({'action': 'assign', 'discordId': discord_id, 'nickname': nickname})
+    c['leader_pending'] = False
+    atomic_json(CONFIG, c)
+    print('Глава назначен; действие записано в аудит.')
+
+def backup_restore(c, release, backup_id):
+    global ROOT, MANIFEST
+    if not re.fullmatch(r'\d{8}T\d{12}Z', backup_id):
+        fail('Некорректный идентификатор копии.')
+    b = c.get('backup')
+    if not b:
+        fail('Сначала настройте ключ восстановления через dkp backup setup.')
+    source = STATE / 'backups' / (backup_id + '.enc')
+    signature = source.with_suffix('.hmac')
+    if (not source.is_file() or not signature.is_file()) and b['mode'] == 'local':
+        external = Path(b['target']) / (backup_id + '.enc')
+        external_sig = external.with_suffix('.hmac')
+        if external.is_file() and external_sig.is_file():
+            source, signature = external, external_sig
+    if (not source.is_file() or not signature.is_file()) and b['mode'] == 'ssh':
+        source.parent.mkdir(mode=0o700, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='.download-', dir=STATE) as tmp:
+            work = Path(tmp)
+            for suffix in ('.enc', '.hmac'):
+                run(['scp', '-q', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
+                     '-i', b['identity'], '-P', b['port'],
+                     b['user'] + '@' + b['host'] + ':' + b['target'] + '/' + backup_id + suffix,
+                     str(work / (backup_id + suffix))])
+            remote = work / (backup_id + '.enc')
+            remote_sig = work / (backup_id + '.hmac')
+            if not hmac.compare_digest(mac_file(remote, key_bytes(b)), remote_sig.read_text().strip()):
+                fail('Целостность удалённой копии не подтверждена.')
+            os.chmod(remote, 0o600)
+            os.chmod(remote_sig, 0o600)
+            os.replace(remote, source)
+            os.replace(remote_sig, signature)
+    if not source.is_file() or not signature.is_file():
+        fail('Копия не найдена в локальном каталоге резервных копий.')
+    if not hmac.compare_digest(mac_file(source, key_bytes(b)), signature.read_text().strip()):
+        fail('Проверка целостности копии не пройдена или указан неверный ключ.')
+    with tempfile.TemporaryDirectory(prefix='.restore-', dir=STATE) as tmp:
+        work = Path(tmp)
+        run(['openssl', 'enc', '-d', '-aes-256-cbc', '-pbkdf2', '-iter', '250000',
+             '-pass', 'file:' + b['key'], '-in', str(source), '-out', str(work / 'backup.tar')])
+        expected = {'database.dump', 'screenshots.tar.gz', 'config.json', 'release-manifest.json'}
+        try:
+            with tarfile.open(work / 'backup.tar', 'r:') as archive:
+                members = archive.getmembers()
+                if {m.name for m in members} != expected or len(members) != len(expected):
+                    fail('Некорректный состав резервной копии.')
+                for member in members:
+                    if not member.isfile():
+                        fail('В копии обнаружен недопустимый тип файла.')
+                    source_file = archive.extractfile(member)
+                    if source_file is None:
+                        fail('Не удалось прочитать файл копии.')
+                    with (work / member.name).open('wb') as dest:
+                        shutil.copyfileobj(source_file, dest)
+            with tarfile.open(work / 'screenshots.tar.gz', 'r:gz') as archive:
+                for member in archive:
+                    name = Path(member.name)
+                    if name.is_absolute() or '..' in name.parts or not (member.isfile() or member.isdir()):
+                        fail('Архив скриншотов содержит небезопасные пути или ссылки.')
+        except (tarfile.TarError, EOFError):
+            fail('Резервная копия повреждена.')
+        saved_release = json.loads((work / 'release-manifest.json').read_text(encoding='utf-8'))
+        saved_config = json.loads((work / 'config.json').read_text(encoding='utf-8'))
+        restore_release = release
+        restore_root = ROOT
+        if saved_release['version'] != release['version']:
+            version = saved_release['version']
+            if not re.fullmatch(r'v\d+\.\d+\.\d+(?:[-.][A-Za-z0-9.-]+)?', version):
+                fail('Некорректная версия копии.')
+            restore_root = STATE / 'releases' / version
+            old_root, old_manifest = ROOT, MANIFEST
+            try:
+                ROOT, MANIFEST = restore_root, restore_root / 'release-manifest.json'
+                restore_release = verify_release()
+            finally:
+                ROOT, MANIFEST = old_root, old_manifest
+            if restore_release != saved_release:
+                fail('Локальный релиз не соответствует манифесту резервной копии.')
+        if not re.fullmatch(r'[0-9a-fA-F]{64}', saved_config['checkin_key']):
+            fail('В копии отсутствует корректный ключ чек-ин кодов.')
+        with (work / 'database.dump').open('rb') as f:
+            compose(c, release, 'exec', '-T', 'db', 'pg_restore', '--list', stdin=f, stdout=subprocess.DEVNULL)
+        print('Восстановление заменит БД и файлы установки:', c['domain'])
+        if prompt('Для подтверждения введите домен сайта') != c['domain']:
+            fail('Восстановление отменено.')
+        backup_now(c, release)
+        compose(c, release, 'stop', 'api')
+        (STATE / 'migration-failed').write_text('restore\n')
+        old_root, old_manifest = ROOT, MANIFEST
+        ROOT, MANIFEST = restore_root, restore_root / 'release-manifest.json'
+        try:
+            for sql in (
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'dkp' AND pid <> pg_backend_pid()",
+                'DROP DATABASE dkp', 'CREATE DATABASE dkp',
+            ):
+                compose(c, restore_release, 'exec', '-T', 'db', 'psql', '-U', 'dkp', '-d', 'postgres',
+                        '-v', 'ON_ERROR_STOP=1', '-c', sql)
+            with (work / 'database.dump').open('rb') as f:
+                compose(c, restore_release, 'exec', '-T', 'db', 'pg_restore', '-U', 'dkp', '-d', 'dkp',
+                        '--exit-on-error', '--no-owner', '--no-privileges', stdin=f)
+            with (work / 'screenshots.tar.gz').open('rb') as f:
+                compose(c, restore_release, 'run', '-T', '--rm', '--no-deps', '--entrypoint', 'sh', 'api', '-c',
+                        'find /app/uploads/screenshots -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && '
+                        'tar -xzf - -C /app/uploads/screenshots', stdin=f)
+            c['checkin_key'] = saved_config['checkin_key']
+            c['leader_pending'] = saved_config.get('leader_pending', True)
+            atomic_json(CONFIG, c)
+            compose(c, restore_release, 'up', '-d', '--wait', 'api', 'web', 'caddy')
+            check_https(c)
+            (STATE / 'installed-version').write_text(restore_release['version'] + '\n')
+            if restore_root != old_root:
+                link = STATE / '.current-new'
+                link.unlink(missing_ok=True)
+                link.symlink_to(restore_root, target_is_directory=True)
+                os.replace(link, STATE / 'current')
+            (STATE / 'migration-failed').unlink(missing_ok=True)
+        except BaseException:
+            try:
+                compose(c, restore_release, 'stop', 'api')
+            except Failure:
+                pass
+            print('Восстановление прервано. API остановлен; используйте созданную перед ним копию.', file=sys.stderr)
+            raise
+        finally:
+            ROOT, MANIFEST = old_root, old_manifest
+    print('Восстановление завершено.')
+
+def update(c, current, requested):
+    global ROOT, MANIFEST
+    if (STATE / 'migration-failed').exists():
+        fail('Сначала восстановите копию после прерванной миграции или восстановления.')
+    repo = current.get('repository', '')
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo):
+        fail('В манифесте не указан корректный репозиторий релизов.')
+    if requested and not re.fullmatch(r'v\d+\.\d+\.\d+(?:[-.][A-Za-z0-9.-]+)?', requested):
+        fail('Версия должна иметь вид v1.2.3.')
+    api = 'https://api.github.com/repos/' + repo + '/releases/' + (
+        'tags/' + urllib.parse.quote(requested) if requested else 'latest')
+    request = urllib.request.Request(api, headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'dkp-installer'})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        info = json.load(response)
+    version = info['tag_name']
+    if not re.fullmatch(r'v\d+\.\d+\.\d+(?:[-.][A-Za-z0-9.-]+)?', version):
+        fail('Недопустимая версия релиза.')
+    if version == current['version']:
+        print('Эта версия уже установлена.')
+        return
+    filename = 'dkp-guild-site-' + version + '.tar.gz'
+    assets = {asset['name']: asset['browser_download_url'] for asset in info['assets']}
+    if filename not in assets or filename + '.sha256' not in assets:
+        fail('В релизе отсутствуют архив или контрольная сумма.')
+    releases = STATE / 'releases'
+    releases.mkdir(mode=0o700, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.update-', dir=releases) as tmp:
+        work = Path(tmp)
+        def download(url, destination, limit):
+            if not url.startswith('https://github.com/'):
+                fail('Недоверенный адрес файла релиза.')
+            req = urllib.request.Request(url, headers={'User-Agent': 'dkp-installer'})
+            with urllib.request.urlopen(req, timeout=60) as src, destination.open('wb') as dst:
+                total = 0
+                while True:
+                    chunk = src.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > limit:
+                        fail('Файл релиза слишком велик.')
+                    dst.write(chunk)
+        download(assets[filename], work / filename, 100 * 1024 * 1024)
+        download(assets[filename + '.sha256'], work / 'checksum', 4096)
+        recorded = (work / 'checksum').read_text().split()
+        actual = hashlib.sha256((work / filename).read_bytes()).hexdigest()
+        if len(recorded) != 2 or recorded[0] != actual or recorded[1].lstrip('*') != filename:
+            fail('Контрольная сумма скачанного релиза не совпадает.')
+        files = {'dkp', 'compose.yml', 'Caddyfile', 'README.md', 'release-manifest.json', 'SHA256SUMS'}
+        candidate = work / 'candidate'
+        candidate.mkdir()
+        with tarfile.open(work / filename, 'r:gz') as archive:
+            found = set()
+            for member in archive:
+                parts = Path(member.name).parts
+                if len(parts) == 1 and member.isdir():
+                    continue
+                if len(parts) != 2 or parts[0] != 'dkp-guild-site-' + version or parts[1] not in files or not member.isfile() or parts[1] in found:
+                    fail('Архив релиза содержит неожиданные файлы или ссылки.')
+                if member.size > 8 * 1024 * 1024:
+                    fail('Файл в архиве релиза слишком велик.')
+                found.add(parts[1])
+                with (candidate / parts[1]).open('wb') as dst:
+                    shutil.copyfileobj(archive.extractfile(member), dst)
+            if found != files:
+                fail('Архив релиза неполон.')
+        (candidate / 'dkp').chmod(0o755)
+        old_root = ROOT
+        old_manifest = MANIFEST
+        try:
+            ROOT, MANIFEST = candidate, candidate / 'release-manifest.json'
+            new_release = verify_release()
+        finally:
+            ROOT, MANIFEST = old_root, old_manifest
+        if new_release['version'] != version or new_release.get('repository') != repo:
+            fail('Манифест не соответствует выбранному релизу.')
+        destination = releases / version
+        if destination.exists():
+            ROOT, MANIFEST = destination, destination / 'release-manifest.json'
+            try:
+                existing = verify_release()
+            finally:
+                ROOT, MANIFEST = old_root, old_manifest
+            if existing != new_release:
+                fail('Каталог этой версии не совпадает со скачанным релизом.')
+        else:
+            os.replace(candidate, destination)
+        previous = releases / current['version']
+        if not previous.exists():
+            previous.mkdir(mode=0o700)
+            for name in ('dkp', 'compose.yml', 'Caddyfile', 'README.md', 'release-manifest.json', 'SHA256SUMS'):
+                shutil.copy2(old_root / name, previous / name)
+        backup_now(c, current)
+        ROOT, MANIFEST = destination, destination / 'release-manifest.json'
+        try:
+            compose(c, new_release, 'pull')
+            compose(c, current, 'stop', 'api')
+            (STATE / 'migration-failed').write_text(version + '\n')
+            compose(c, new_release, 'run', '--rm', '--no-deps', 'api', './node_modules/.bin/prisma', 'migrate', 'deploy')
+            compose(c, new_release, 'run', '--rm', '--no-deps', 'api', 'node', 'dist-seed/prisma/seed.js')
+            compose(c, new_release, 'up', '-d', '--wait', 'api', 'web', 'caddy')
+            check_https(c)
+            (STATE / 'installed-version').write_text(version + '\n')
+            link = STATE / '.current-new'
+            link.unlink(missing_ok=True)
+            link.symlink_to(destination, target_is_directory=True)
+            os.replace(link, STATE / 'current')
+            (STATE / 'migration-failed').unlink()
+            print('Установлена версия', version)
+        except BaseException:
+            if (STATE / 'migration-failed').exists():
+                try:
+                    compose(c, new_release, 'stop', 'api')
+                except Failure:
+                    pass
+            print('Обновление не завершено. Проверьте состояние и восстановите копию, созданную перед обновлением.', file=sys.stderr)
+            raise
+        finally:
+            ROOT, MANIFEST = old_root, old_manifest
+
+@contextlib.contextmanager
+def lock():
+    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(STATE, 0o700)
+    with (STATE / 'operation.lock').open('w') as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fail('Другая операция DKP уже выполняется.')
+        yield
+
+def main():
+    args = sys.argv[1:]
+    if not args or args[0] in ('help', '--help', '-h'):
+        print('dkp start | stop | restart | status | logs [сервис] | configure | leader | update [версия] | backup setup|now|list|restore <id>')
+        return
+    cmd = args[0]
+    if cmd not in ('start', 'stop', 'restart', 'status', 'logs', 'configure', 'leader', 'update', 'backup'):
+        fail('Неизвестная команда. Используйте dkp help.')
+    release = verify_release()
+    prerequisites()
+    with lock():
+        if cmd == 'start':
+            persist_release(release)
+        if cmd == 'start' and not CONFIG.exists():
+            check_ports()
+            c = configure()
+            backup_setup(c)
+            start(c, release)
+            return
+        c = load()
+        if cmd == 'start':
+            if not c.get('backup'):
+                print('Завершите настройку резервных копий.')
+                backup_setup(c)
+            start(c, release)
+        elif cmd == 'stop':
+            compose(c, release, 'stop')
+        elif cmd == 'restart':
+            if (STATE / 'migration-failed').exists():
+                fail('Обновление прервалось. Сначала восстановите копию до миграции.')
+            compose(c, release, 'restart')
+        elif cmd == 'status':
+            print('Версия:', release['version'], '\nАдрес: https://' + c['domain'])
+            if (STATE / 'migration-failed').exists():
+                print('Внимание: прервана миграция или восстановление; требуется восстановить резервную копию.')
+            if c.get('leader_pending'):
+                print('Глава не назначен.')
+            backup_status = STATE / 'backup-status.json'
+            if backup_status.exists():
+                print('Последний бэкап:', backup_status.read_text(encoding='utf-8').strip())
+            else:
+                print('Резервные копии ещё не создавались.')
+            compose(c, release, 'ps', '-a')
+            try:
+                addresses = sorted({entry[4][0] for entry in socket.getaddrinfo(c['domain'], 443, type=socket.SOCK_STREAM)})
+                print('DNS:', ', '.join(addresses))
+                with urllib.request.urlopen('https://' + c['domain'] + '/api/health', timeout=5) as response:
+                    health = json.load(response)
+                print('HTTPS/API: доступен; БД:', health.get('db', 'неизвестно'))
+            except (OSError, ValueError):
+                print('DNS, HTTPS или API недоступны; проверьте dkp logs caddy и dkp logs api.')
+        elif cmd == 'logs':
+            if len(args) > 2 or (len(args) == 2 and args[1] not in ('api', 'web', 'db', 'redis', 'caddy')):
+                fail('Допустимые сервисы: api, web, db, redis, caddy.')
+            compose(c, release, 'logs', '--tail=100', *(args[1:]))
+        elif cmd == 'configure':
+            configure(c)
+            print('Настройки сохранены. Для применения выполните dkp start.')
+        elif cmd == 'leader':
+            leader_setup(c, release)
+        elif cmd == 'backup' and args[1:] == ['setup']:
+            backup_setup(c)
+        elif cmd == 'backup' and args[1:] == ['now']:
+            backup_now(c, release)
+        elif cmd == 'backup' and args[1:] == ['list']:
+            backup_list(c)
+        elif cmd == 'backup' and len(args) == 3 and args[1] == 'restore':
+            backup_restore(c, release, args[2])
+        elif cmd == 'update' and len(args) <= 2:
+            update(c, release, args[1] if len(args) == 2 else None)
+        else:
+            fail('Эта команда ещё не реализована; данные не изменены.')
+
+if __name__ == '__main__':
+    try:
+        active = STATE / 'current' / 'dkp'
+        if active.exists() and active.resolve() != Path(__file__).resolve():
+            os.execv(sys.executable, [sys.executable, str(active), *sys.argv[1:]])
+        main()
+    except (Failure, OSError, ValueError, KeyError) as exc:
+        print('Ошибка:', exc, file=sys.stderr)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print('\nОперация прервана.', file=sys.stderr)
+        sys.exit(130)
