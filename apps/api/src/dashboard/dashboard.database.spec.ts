@@ -37,7 +37,10 @@ suite('Дашборд: PostgreSQL, границы дня и приватност
         nickname: 'dashboard-' + randomUUID().slice(0, 8),
         userId,
         packId,
-        rank: 'GUILD_LEADER',
+        // Ранг проверяется через аргумент actor в service.get, а не через БД:
+        // в базе уже есть сидированный Глава, а индекс Member_single_guild_leader
+        // не даст создать второго.
+        rank: 'OFFICER',
         weapons: ['STAFF', 'WAND'],
         combatRole: 'HEALER',
       },
