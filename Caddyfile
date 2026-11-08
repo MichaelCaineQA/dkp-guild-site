@@ -1,6 +1,11 @@
 {$WEB_HOST} {
     {$CADDY_TLS}
-    reverse_proxy web:3000
+    handle_path /api/* {
+        reverse_proxy api:3001
+    }
+    handle {
+        reverse_proxy web:3000
+    }
 }
 {$API_HOST} {
     {$CADDY_TLS}

@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthController } from './auth.controller';
 import { AuthService, type AuthDb } from './auth.service';
 import { AUTH_SERVICE, DiscordStrategy } from './discord.strategy';
+import { isDiscordConfigured } from './discord-config';
 import { LinkRequestService, type LinkRequestDb } from './link-request.service';
 
 @Module({
@@ -39,7 +40,13 @@ import { LinkRequestService, type LinkRequestDb } from './link-request.service';
       inject: [PrismaService],
     },
     { provide: AUTH_SERVICE, useExisting: AuthService },
-    DiscordStrategy,
+    {
+      provide: DiscordStrategy,
+      // Passport не принимает пустой clientID. Проверяем после загрузки ConfigModule,
+      // чтобы резервный вход работал и без настроенного Discord.
+      useFactory: (auth: AuthService) => (isDiscordConfigured() ? new DiscordStrategy(auth) : null),
+      inject: [AuthService],
+    },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

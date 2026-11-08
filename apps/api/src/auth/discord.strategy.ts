@@ -9,7 +9,7 @@ export const AUTH_SERVICE = 'AUTH_SERVICE';
 
 /**
  * Discord OAuth2. Аутентификацию делает passport; логику входа (bootstrap
- * первого Главы и т.д.) делегируем AuthService и возвращаем SessionUser —
+ * аккаунта и привязки) делегируем AuthService и возвращаем SessionUser —
  * он попадёт в req.user, контроллер положит его в сессию.
  *
  * Сервис приходит через @Inject(AUTH_SERVICE): Nest не может вывести тип

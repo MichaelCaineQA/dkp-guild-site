@@ -9,6 +9,16 @@
 - `apps/api` — NestJS; Prisma-схема: `apps/api/prisma/schema.prisma`.
 - `packages/shared` — общие типы, zod-схемы и чистая логика ядра.
 - `.github/workflows/ci.yml` — проверки CI.
+- `installer/` — установщик релизного Compose для одного домена, изолированного
+  проекта `dkp-guild` и состояния `/var/lib/dkp-guild`; упаковка по тегу —
+  `.github/workflows/release.yml` и `scripts/release/package.sh`. Для файлов
+  релиза используются digest образов и контрольные суммы. Реальную приёмку на
+  чистой VM нужно провести отдельно (issue #75).
+- Production web использует same-origin `/api`: Caddy убирает префикс,
+  dev — прокси Next.js на :3001. Локальный Docker Compose сохраняет явный
+  `NEXT_PUBLIC_API_URL`. Discord необязателен: `/auth/providers` возвращает
+  доступность без секретов; при пустой/частичной конфигурации OAuth закрыт,
+  резервный вход администратора работает. После изменения env API перезапускают.
 
 ## Обязательные ограничения
 

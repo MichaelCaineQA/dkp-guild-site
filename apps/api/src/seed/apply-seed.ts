@@ -46,10 +46,12 @@ export interface SeedResult {
  * настройки — только отсутствующие (P2002 = уже есть, пропускаем; чужие
  * ошибки БД пробрасываем).
  */
-export async function applySeed(db: SeedDb): Promise<SeedResult> {
+export async function applySeed(db: SeedDb, guildName?: string): Promise<SeedResult> {
   let guild = await db.guild.findFirst();
   if (!guild) {
-    guild = await db.guild.create({ data: SEED_GUILD });
+    const name = guildName?.trim();
+    if (guildName !== undefined && !name) throw new Error('Название гильдии не может быть пустым');
+    guild = await db.guild.create({ data: { ...SEED_GUILD, name: name ?? SEED_GUILD.name } });
   }
 
   for (const name of EVENT_TYPE_NAMES) {

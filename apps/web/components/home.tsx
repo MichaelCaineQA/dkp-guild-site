@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { OnboardingScreen } from './onboarding';
 import { DashboardScreen } from './dashboard';
 import { useSession } from './session-context';
-import { api } from '../lib/api';
+import { api, API_URL_VALUE } from '../lib/api';
 import { Page, Modal } from './ui';
 
 /**
@@ -35,6 +35,22 @@ function WelcomeScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [discord, setDiscord] = useState<boolean | null>(null);
+  const [providersError, setProvidersError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void api<{ discord: boolean }>('/auth/providers')
+      .then((providers) => {
+        if (active) setDiscord(providers.discord);
+      })
+      .catch(() => {
+        if (active) setProvidersError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const adminLogin = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -70,12 +86,25 @@ function WelcomeScreen() {
           привяжите свою учётную запись Discord.
         </p>
         <div className="flex flex-col items-center gap-3">
-          <a
-            href={`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/auth/discord`}
-            className="rounded-lg bg-accent px-6 py-3 text-base font-semibold text-accent-contrast hover:bg-accent-hover"
-          >
-            Связать с Discord
-          </a>
+          {discord === true && (
+            <a
+              href={`${API_URL_VALUE}/auth/discord`}
+              className="rounded-lg bg-accent px-6 py-3 text-base font-semibold text-accent-contrast hover:bg-accent-hover"
+            >
+              Связать с Discord
+            </a>
+          )}
+          {discord === false && (
+            <p className="text-sm text-secondary">Вход через Discord пока не настроен.</p>
+          )}
+          {discord === null && !providersError && (
+            <p className="text-sm text-secondary">Проверка способов входа…</p>
+          )}
+          {providersError && (
+            <p role="alert" className="text-sm text-danger">
+              Не удалось проверить доступность Discord. Обновите страницу.
+            </p>
+          )}
           <button
             type="button"
             className="text-sm text-secondary underline hover:text-primary"

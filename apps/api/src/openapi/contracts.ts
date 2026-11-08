@@ -65,11 +65,22 @@ export const contracts: Record<string, Contract> = {
   }),
   App_getGuild: c('Получить название гильдии', object({ name: str })),
   App_getCombatRoles: c('Получить названия боевых ролей', 'CombatRoles', { public: true }),
+  Auth_providers: c(
+    'Проверить доступность входа через Discord',
+    object({ discord: { type: 'boolean' } }),
+    {
+      public: true,
+      description:
+        'Возвращает только доступность OAuth без Client ID, секретов и callback. Пустая или частичная конфигурация отключает Discord, резервный вход администратора остаётся доступен.',
+    },
+  ),
   Auth_discordLogin: {
     summary: 'Войти через Discord',
     public: true,
     status: 302,
-    description: 'Открывайте адрес в браузере. Перенаправляет на Discord OAuth2.',
+    description:
+      'Открывайте адрес в браузере. Перенаправляет на Discord OAuth2. Если Discord не настроен, возвращает 503.',
+    errors: [503],
   },
   Auth_discordCallback: {
     summary: 'Обработать возврат Discord OAuth2',
@@ -77,7 +88,7 @@ export const contracts: Record<string, Contract> = {
     status: 302,
     description:
       'Служебный callback Passport: устанавливает сессию и перенаправляет на WEB_URL. Не вызывается вручную.',
-    errors: [401],
+    errors: [401, 503],
   },
   Auth_me: c('Получить текущую сессию', 'Me', {
     access: 'Любой вошедший аккаунт, включая непривязанный Discord.',
