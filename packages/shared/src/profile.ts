@@ -55,13 +55,16 @@ export type AvatarColor = (typeof AVATAR_COLORS)[number];
 /** Самостоятельно меняются роль и оружия; ник и ранг здесь запрещены. */
 export const updateOwnProfileSchema = z
   .object({
-    combatRole: z.enum(COMBAT_ROLES),
-    weapons: weaponPairSchema,
+    combatRole: z.enum(COMBAT_ROLES).optional(),
+    weapons: weaponPairSchema.optional(),
     avatar: z.enum(AVATARS).nullable().optional(),
     avatarColor: z.enum(AVATAR_COLORS).nullable().optional(),
-    comment: z.string().trim().min(3).max(500),
+    comment: z.string().trim().min(3).max(500).optional(),
   })
-  .strict();
+  .strict()
+  .refine((data) => (data.combatRole === undefined) === (data.weapons === undefined), {
+    message: 'Укажите роль и два оружия вместе',
+  });
 
 export function canViewProfileGearScore(
   actor: import('./permissions').PermissionActor,

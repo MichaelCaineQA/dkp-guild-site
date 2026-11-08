@@ -34,8 +34,10 @@ interface EventRow {
   eventTypeName: string;
   status: string;
   startsAt: string;
+  endsAt: string;
   dkpReward: number;
   raidLeadId: string;
+  creatorId?: string | null;
   raidLeadName: string;
 }
 const STATUS_LABELS: Record<string, string> = {
@@ -141,7 +143,12 @@ export default function ConductPage() {
       <Stack>
         {error && <ErrorText>{error}</ErrorText>}
         {message && <Notice tone="success">{message}</Notice>}
-        <AbsentMembersPanel key={version} eventId={event.id} eventStartsAt={event.startsAt} />
+        <AbsentMembersPanel
+          key={version}
+          eventId={event.id}
+          eventStartsAt={event.startsAt}
+          eventEndsAt={event.endsAt}
+        />
         {canEdit && event.status !== 'FINISHED' && (
           <ConductActionsPanel
             key={`codes-${version}`}

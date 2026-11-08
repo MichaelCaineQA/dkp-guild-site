@@ -35,20 +35,20 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-it('рядовой не делает запросов к закрытому журналу', () => {
+it('рядовой открывает личный журнал', async () => {
   vi.mocked(useSession).mockReturnValue({
     user: { userId: 'u2', username: 'Игрок', memberId: 'm2', rank: 'MEMBER', isAdmin: false },
     loading: false,
     reload: vi.fn(),
   });
   render(<AuditPage />);
-  expect(screen.getByText(/Журнал доступен офицерам/)).toBeDefined();
-  expect(api).not.toHaveBeenCalled();
+  expect(await screen.findByText('Комментарий: Назначен офицером')).toBeDefined();
+  expect(api).toHaveBeenCalledWith('/audit?limit=50&offset=0');
 });
 
 it('показывает журнал, фильтрует и сбрасывает страницу при смене фильтра', async () => {
   render(<AuditPage />);
-  expect(await screen.findByText('Назначен офицером')).toBeDefined();
+  expect(await screen.findByText('Комментарий: Назначен офицером')).toBeDefined();
   fireEvent.click(screen.getByRole('button', { name: 'Далее' }));
   await waitFor(() => expect(api).toHaveBeenCalledWith('/audit?limit=50&offset=50'));
   fireEvent.change(screen.getByLabelText('Кто'), { target: { value: 'm1' } });

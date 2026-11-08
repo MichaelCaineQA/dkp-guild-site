@@ -47,7 +47,7 @@ function makeDb(stored: Record<string, number> = {}) {
     },
     auditLog: {
       create: async ({ data }) => {
-        audit.push(data);
+        audit.push({ actorMemberId: data.actorMemberId, action: data.action, entityType: data.entityType, entityId: data.entityId, comment: data.comment ?? null });
       },
     },
   };

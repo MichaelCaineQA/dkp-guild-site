@@ -49,6 +49,7 @@ export interface RulesTransaction {
     create(args: {
       data: {
         actorMemberId: string | null;
+        actorIsAdmin?: boolean;
         action: string;
         entityType: string;
         entityId: string;
@@ -63,6 +64,7 @@ export interface RulesDb extends RulesTransaction {
 export interface RulesActor {
   memberId: string | null;
   userId: string;
+  isAdmin?: boolean;
 }
 
 @Injectable()
@@ -149,6 +151,7 @@ export class RulesService {
     await tx.auditLog.create({
       data: {
         actorMemberId: actor.memberId,
+        actorIsAdmin: actor.isAdmin,
         action: restoredFrom === undefined ? 'RULES_UPDATE' : 'RULES_RESTORE',
         entityType: 'RulesPage',
         entityId: slug,

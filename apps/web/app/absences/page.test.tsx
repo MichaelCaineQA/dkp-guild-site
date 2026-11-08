@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AbsencesPage from './page';
 
@@ -124,5 +124,45 @@ describe('AbsencesPage', () => {
     expect(api).toHaveBeenCalledWith('/absences');
     expect(api).not.toHaveBeenCalledWith('/absences/mine');
     expect(screen.queryByRole('button', { name: 'Подать' })).toBeNull();
+  });
+  it('отправляет точный интервал через полночь в UTC', async () => {
+    mockSession({
+      userId: 'u',
+      username: 'Игрок',
+      memberId: 'm-3',
+      rank: 'MEMBER',
+      isAdmin: false,
+    });
+    vi.mocked(api).mockImplementation(async (path, init) => {
+      if (path === '/absences' && init?.method === 'POST') return { id: 'new' };
+      if (path === '/absences/mine') return [];
+      throw new Error(`unexpected path ${path}`);
+    });
+    render(<AbsencesPage />);
+    fireEvent.change(screen.getByLabelText('Режим'), { target: { value: 'interval' } });
+    fireEvent.change(screen.getByLabelText('С'), { target: { value: '2026-12-10' } });
+    fireEvent.change(screen.getByLabelText('По (необязательно)'), {
+      target: { value: '2026-12-11' },
+    });
+    fireEvent.change(screen.getByLabelText('Время начала'), { target: { value: '23:30' } });
+    fireEvent.change(screen.getByLabelText('Время окончания'), { target: { value: '01:00' } });
+    fireEvent.change(screen.getByLabelText('Причина (видна вам и руководству)'), {
+      target: { value: 'Работа' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Подать' }));
+    await waitFor(() =>
+      expect(api).toHaveBeenCalledWith(
+        '/absences',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            dateFrom: new Date('2026-12-10T23:30').toISOString(),
+            dateTo: new Date('2026-12-11T01:00').toISOString(),
+            allDay: false,
+            reason: 'Работа',
+          }),
+        }),
+      ),
+    );
   });
 });

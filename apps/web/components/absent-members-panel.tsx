@@ -7,9 +7,11 @@ import { Button, ErrorText, EventAbsences, type EventAbsenceRow } from './ui';
 /** Одна и та же отметка заявки в карточке, проведении и списке отсутствий. */
 export function AbsentMembersPanel({
   eventStartsAt,
+  eventEndsAt,
   eventId,
 }: {
   eventStartsAt: string;
+  eventEndsAt?: string;
   eventId: string;
 }) {
   const { user } = useSession();
@@ -18,15 +20,15 @@ export function AbsentMembersPanel({
   const [busyId, setBusyId] = useState<string | null>(null);
   const load = useCallback(async () => {
     const rows = await api<EventAbsenceRow[]>(
-      `/absences/for-event?startsAt=${encodeURIComponent(eventStartsAt)}&eventId=${encodeURIComponent(eventId)}`,
+      `/absences/for-event?startsAt=${encodeURIComponent(eventStartsAt)}&eventId=${encodeURIComponent(eventId)}${eventEndsAt ? `&endsAt=${encodeURIComponent(eventEndsAt)}` : ''}`,
     );
     setAbsent(rows);
     setError('');
-  }, [eventStartsAt, eventId]);
+  }, [eventStartsAt, eventEndsAt, eventId]);
   useEffect(() => {
     let active = true;
     api<EventAbsenceRow[]>(
-      `/absences/for-event?startsAt=${encodeURIComponent(eventStartsAt)}&eventId=${encodeURIComponent(eventId)}`,
+      `/absences/for-event?startsAt=${encodeURIComponent(eventStartsAt)}&eventId=${encodeURIComponent(eventId)}${eventEndsAt ? `&endsAt=${encodeURIComponent(eventEndsAt)}` : ''}`,
     )
       .then((rows) => {
         if (active) {
@@ -40,7 +42,7 @@ export function AbsentMembersPanel({
     return () => {
       active = false;
     };
-  }, [eventStartsAt, eventId]);
+  }, [eventStartsAt, eventEndsAt, eventId]);
   if (absent?.length === 0 && !error) return null;
   if (!absent)
     return error ? (

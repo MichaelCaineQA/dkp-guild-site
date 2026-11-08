@@ -98,7 +98,7 @@ suite('Дашборд: PostgreSQL, границы дня и приватност
       'Сбор 20',
     ]);
     expect(result.events).toHaveLength(5);
-    expect(result.audit).toBeNull();
+    expect(result.audit).toEqual([]);
     expect(result.team?.members[0]).not.toHaveProperty('gearScore');
   });
   it('Главе возвращает последний подтверждённый GS, остальным не раскрывает даже своё значение', async () => {

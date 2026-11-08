@@ -91,6 +91,7 @@ export class SettingsService {
         await tx.auditLog.create({
           data: {
             actorMemberId: actor.memberId,
+            actorIsAdmin: actor.isAdmin,
             action: 'SETTINGS_UPDATE',
             entityType: 'Setting',
             entityId: 'batch',
@@ -127,6 +128,7 @@ export class SettingsService {
       await tx.auditLog.create({
         data: {
           actorMemberId: actor.memberId,
+          actorIsAdmin: actor.isAdmin,
           action: 'SETTINGS_UPDATE',
           entityType: 'Guild',
           entityId: id,

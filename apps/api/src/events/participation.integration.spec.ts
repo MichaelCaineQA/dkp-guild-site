@@ -9,6 +9,7 @@ import { ParticipationService } from './participation.service';
 let actor: SessionUser | undefined;
 let now: Date;
 const start = new Date('2026-11-09T17:00:00Z');
+const end = new Date('2026-11-09T18:00:00Z');
 let status = 'PLANNED';
 let deadline = 180;
 let priorEvent = false;
@@ -26,6 +27,7 @@ const db = {
   event: {
     findUnique: async () => ({
       startsAt: start,
+      endsAt: end,
       status,
       scope: outsider ? 'PACK' : 'GUILD',
       packId: outsider ? 'other' : null,
@@ -110,7 +112,7 @@ describe('Своё участие через HTTP', () => {
     expect((await post({ attending: false })).status).toBe(201);
     expect((await post({ attending: false })).status).toBe(201);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ dateFrom: start, dateTo: start, reason: '', memberId: 'self' });
+    expect(rows[0]).toMatchObject({ dateFrom: start, dateTo: end, reason: '', memberId: 'self' });
     expect(audit).toHaveBeenCalledTimes(1);
     expect((await post({ attending: false, memberId: 'other' })).status).toBe(400);
   });

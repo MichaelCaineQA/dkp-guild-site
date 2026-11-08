@@ -38,7 +38,7 @@ it('по умолчанию свёрнуто, активный пункт отм
     'page',
   );
   expect(screen.queryByRole('link', { name: 'Настройки' })).toBeNull();
-  expect(screen.queryByRole('link', { name: 'Лог действий' })).toBeNull();
+  expect(screen.getByRole('link', { name: 'Лог действий' })).toBeDefined();
 });
 it('раскрытие сохраняется при смене страницы и новом монтировании', async () => {
   const view = render(<NavMenu />);

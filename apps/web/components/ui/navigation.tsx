@@ -168,10 +168,14 @@ export function ApplicationFrame({
     </>
   );
 }
-export function GuildBrand({ name }: { name: string }) {
+export function GuildBrand({ name, crestUrl }: { name: string; crestUrl?: string | null }) {
   return (
     <Link href="/" title={name} className="flex min-w-0 items-center gap-3 font-semibold">
-      <MenuIcon name="shield" />
+      {crestUrl ? (
+        <img src={crestUrl} alt="" className="h-9 w-9 shrink-0 object-contain" />
+      ) : (
+        <MenuIcon name="shield" />
+      )}
       <span className="max-w-48 truncate">{name}</span>
     </Link>
   );

@@ -34,6 +34,10 @@ const findMany = jest.fn(async () => [
 ]);
 const count = jest.fn(async () => 1);
 const db: AuditDb = {
+  screenshot: { findMany: async () => [] },
+  absence: { findMany: async () => [] },
+  dkpEntry: { findMany: async () => [] },
+  member: { findMany: async () => [{ id: 'm2', nickname: 'Игрок' }] },
   auditLog: { create: record, findMany, count, groupBy: async () => [{ action: 'ROLE_CHANGE' }] },
 };
 const login = jest.fn(() => true);
@@ -70,13 +74,15 @@ describe('аудит через HTTP: права, фильтры, ровно о�
     login.mockReturnValue(true);
   });
 
-  it('аноним получает 401, рядовой — 403 без чтения журнала', async () => {
+  it('аноним получает 401, рядовой — только личный журнал', async () => {
     actor = undefined;
     expect((await fetch(`${url}/audit`)).status).toBe(401);
     actor = { userId: 'u2', username: 'Игрок', memberId: 'm2', rank: 'MEMBER', isAdmin: false };
-    expect((await fetch(`${url}/audit`)).status).toBe(403);
-    expect((await fetch(`${url}/audit/actions`)).status).toBe(403);
-    expect(findMany).not.toHaveBeenCalled();
+    expect((await fetch(`${url}/audit`)).status).toBe(200);
+    expect((await fetch(`${url}/audit/actions`)).status).toBe(200);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ AND: expect.any(Array) }) }),
+    );
   });
 
   it('офицер фильтрует по актору, действию, UTC-периоду и странице', async () => {
@@ -84,7 +90,9 @@ describe('аудит через HTTP: права, фильтры, ровно о�
       `${url}/audit?actorMemberId=m1&action=ROLE_CHANGE&from=2026-11-01T00:00:00Z&to=2026-11-07T00:00:00Z&offset=50`,
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ entries: [{ actorName: 'Глава' }] });
+    expect(await response.json()).toMatchObject({
+      entries: [{ actorName: 'Глава', entityName: 'Игрок' }],
+    });
     const where = {
       actorMemberId: 'm1',
       action: 'ROLE_CHANGE',
@@ -104,6 +112,7 @@ describe('аудит через HTTP: права, фильтры, ровно о�
       expect.objectContaining({
         where: {
           actorMemberId: null,
+          actorIsAdmin: false,
           entityType: 'Event',
           createdAt: { gte: new Date('2026-11-01'), lte: undefined },
         },

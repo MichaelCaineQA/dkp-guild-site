@@ -24,8 +24,8 @@ import { AbsencesService, type AbsencesDb, type AbsencesSettings } from './absen
           () => new Date(),
         );
         // Хук (план 2.3): при FINISHED отсутствующим — EXCUSED_ABSENCE.
-        events.onEventFinished = (eventId, startsAt) =>
-          service.markExcusedForFinishedEvent(eventId, startsAt);
+        events.onEventFinished = (eventId, startsAt, endsAt) =>
+          service.markExcusedForFinishedEvent(eventId, startsAt, endsAt);
         return service;
       },
       inject: [PrismaService, EventsService],

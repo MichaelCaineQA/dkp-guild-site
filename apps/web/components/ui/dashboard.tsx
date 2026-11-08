@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import {
   AUDIT_ACTION_LABELS,
+  AUDIT_ENTITY_LABELS,
   COMBAT_ROLE_LABELS,
   RANK_LABELS,
   formatWeapons,
@@ -12,17 +13,21 @@ import { TextLink } from './controls';
 import { Muted } from './layout';
 import { Avatar } from '../avatar';
 export function DashboardGrid({ children }: { children: ReactNode }) {
-  return (
-    <div className="grid gap-4 md:h-[calc(100dvh-11rem)] md:min-h-[560px] md:grid-cols-2 md:grid-rows-2">
-      {children}
-    </div>
-  );
+  return <div className="grid gap-4 md:grid-cols-2">{children}</div>;
 }
-export function DashboardWidget({ title, children }: { title: string; children: ReactNode }) {
+export function DashboardWidget({
+  title,
+  children,
+  className = '',
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <section
       aria-label={title}
-      className="flex min-h-0 min-w-0 flex-col rounded-xl border border-line bg-surface shadow-sm"
+      className={`flex min-h-0 min-w-0 flex-col rounded-xl border border-line bg-surface shadow-sm ${className}`}
     >
       <h2 className="border-b border-line px-5 py-4 text-lg font-semibold">{title}</h2>
       <div className="min-h-0 space-y-4 p-5 md:overflow-y-auto">{children}</div>
@@ -94,8 +99,16 @@ export function AuditPreview({ entries }: { entries: AuditRow[] }) {
             <p>
               <strong>{row.actorName ?? 'Система'}</strong> ·{' '}
               {AUDIT_ACTION_LABELS[row.action] ?? 'Действие'}
+              <span className="text-secondary">
+                {' '}
+                · {AUDIT_ENTITY_LABELS[row.entityType] ?? 'Объект'}:{' '}
+                {row.entityName ??
+                  (row.entityType === 'Member' ? 'Участник недоступен' : row.entityId || '—')}
+              </span>
             </p>
-            {row.comment && <p className="break-words text-secondary">{row.comment}</p>}
+            {row.comment && (
+              <p className="break-words text-secondary">Комментарий: {row.comment}</p>
+            )}
             <time className="text-xs text-secondary" dateTime={row.createdAt}>
               {new Date(row.createdAt).toLocaleString('ru-RU')}
             </time>

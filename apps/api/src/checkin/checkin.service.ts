@@ -76,6 +76,7 @@ export interface CheckInDb {
       endsAt: Date;
       dkpReward: number;
       raidLeadId: string;
+      creatorId?: string | null;
     } | null>;
   };
   checkInCode: {
@@ -119,6 +120,7 @@ export interface CheckInDb {
     create(args: {
       data: {
         actorMemberId: string | null;
+        actorIsAdmin?: boolean;
         action: string;
         entityType: string;
         entityId: string;
@@ -471,6 +473,7 @@ export class CheckInService {
     await this.db.auditLog.create({
       data: {
         actorMemberId: actor.memberId,
+        actorIsAdmin: actor.isAdmin,
         action: 'CHECKIN_END_EARLY',
         entityType: 'Event',
         entityId: eventId,

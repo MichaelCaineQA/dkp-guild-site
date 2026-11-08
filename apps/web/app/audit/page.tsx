@@ -21,7 +21,7 @@ export default function AuditPage() {
   const { user, loading: sessionLoading } = useSession();
   const allowed =
     !!user &&
-    can({ rank: user.rank, isAdmin: user.isAdmin, memberId: user.memberId }, 'audit.view');
+    can({ rank: user.rank, isAdmin: user.isAdmin, memberId: user.memberId }, 'members.view_roster');
   const [entries, setEntries] = useState<AuditRow[]>([]);
   const [total, setTotal] = useState(0);
   const [members, setMembers] = useState<Array<{ id: string; nickname: string }>>([]);

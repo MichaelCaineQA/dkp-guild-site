@@ -4,16 +4,17 @@ import { EventTypesController } from './event-types.controller';
 import { EventTypesService, type EventTypesDb } from './event-types.service';
 import { SettingsController } from './settings.controller';
 import { SettingsService, type SettingsDb } from './settings.service';
+import { GuildSettingsController } from './guild-settings.controller';
 
 /** Справочники и настройки (issue #7): EventType CRUD + Setting read/write. */
 @Module({
-  controllers: [SettingsController, EventTypesController],
+  controllers: [SettingsController, EventTypesController, GuildSettingsController],
   providers: [
+    PrismaService,
     // Сервисы работают с минимальными интерфейсами БД — тесты без Prisma.
     {
       provide: SettingsService,
-      useFactory: (prisma: PrismaService) =>
-        new SettingsService(prisma as unknown as SettingsDb),
+      useFactory: (prisma: PrismaService) => new SettingsService(prisma as unknown as SettingsDb),
       inject: [PrismaService],
     },
     {

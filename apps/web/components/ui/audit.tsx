@@ -15,11 +15,14 @@ export function AuditFeed({ entries }: { entries: AuditRow[] }) {
             {AUDIT_ACTION_LABELS[entry.action] ?? 'Другое действие'}{' '}
             <span className="text-secondary">
               · {AUDIT_ENTITY_LABELS[entry.entityType] ?? 'Объект'}:{' '}
-              <span className="break-all">{entry.entityId}</span>
+              <span className="break-words">
+                {entry.entityName ??
+                  (entry.entityType === 'Member' ? 'Участник недоступен' : entry.entityId || '—')}
+              </span>
             </span>
           </p>
           {entry.comment && (
-            <p className="mt-1 break-words text-sm text-secondary">{entry.comment}</p>
+            <p className="mt-1 break-words text-sm text-secondary">Комментарий: {entry.comment}</p>
           )}
         </li>
       ))}

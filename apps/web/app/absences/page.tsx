@@ -24,6 +24,7 @@ interface AbsenceRow {
   memberName: string;
   dateFrom: string;
   dateTo: string;
+  allDay?: boolean;
   reason: string;
   status: string;
   seenBy: string[];
@@ -32,7 +33,7 @@ interface AbsenceRow {
 /**
  * «Мои отсутствия» (issue #11, план 2.3): подать заявку (период + причина),
  * отменить до начала; офицерам — список всех заявок с отметкой «Увидел».
- * Причину видят все члены гильдии; апрува нет — заявка сразу уважительная.
+ * Видимость причины ограничена; апрува нет — заявка сразу уважительная.
  */
 export default function AbsencesPage() {
   const { user, loading: sessionLoading } = useSession();
@@ -119,7 +120,7 @@ export default function AbsencesPage() {
               setMessage(null);
               setError(
                 status === 409
-                  ? 'Нельзя: период прошёл или до старта ивента меньше 3 минут'
+                  ? 'Нельзя подать заявку на полностью прошедший период'
                   : status === 400
                     ? 'Проверьте даты и причину (от 3 символов)'
                     : 'Не удалось подать заявку',
@@ -189,22 +190,50 @@ function AbsenceForm({
   onSubmit,
 }: {
   busy: boolean;
-  onSubmit: (body: { dateFrom: string; dateTo: string; reason: string }) => Promise<void>;
+  onSubmit: (body: {
+    dateFrom: string;
+    dateTo: string;
+    reason: string;
+    allDay: boolean;
+  }) => Promise<void>;
 }) {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [mode, setMode] = useState<'day' | 'interval'>('day');
+  const [timeFrom, setTimeFrom] = useState('');
+  const [timeTo, setTimeTo] = useState('');
   const [reason, setReason] = useState('');
+  const [periodError, setPeriodError] = useState('');
 
   return (
     <Card>
       <SectionTitle>Подать заявку</SectionTitle>
+      <Muted>
+        События, до начала которых осталось меньше установленного срока, не попадут в заявку.
+      </Muted>
+      <label>
+        Режим{' '}
+        <select value={mode} onChange={(e) => setMode(e.target.value as 'day' | 'interval')}>
+          <option value="day">Весь день</option>
+          <option value="interval">Промежуток времени</option>
+        </select>
+      </label>
       <form
         className="flex flex-col gap-2 sm:flex-row sm:items-end"
         onSubmit={(e) => {
           e.preventDefault();
+          const start = new Date(`${dateFrom}T${mode === 'day' ? '00:00' : timeFrom}`);
+          const end = new Date(`${dateTo || dateFrom}T${mode === 'day' ? '00:00' : timeTo}`);
+          if (mode === 'day') end.setDate(end.getDate() + 1);
+          if (!Number.isFinite(+start) || !Number.isFinite(+end) || end <= start) {
+            setPeriodError('Окончание должно быть позже начала');
+            return;
+          }
+          setPeriodError('');
           void onSubmit({
-            dateFrom: new Date(dateFrom).toISOString(),
-            dateTo: new Date(dateTo || dateFrom).toISOString(),
+            dateFrom: start.toISOString(),
+            dateTo: end.toISOString(),
+            allDay: mode === 'day',
             reason,
           });
         }}
@@ -218,12 +247,34 @@ function AbsenceForm({
             onChange={(e) => setDateFrom(e.target.value)}
           />
         </label>
+        {mode === 'interval' && (
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-secondary">Время начала</span>
+            <Input
+              type="time"
+              required
+              value={timeFrom}
+              onChange={(e) => setTimeFrom(e.target.value)}
+            />
+          </label>
+        )}
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-secondary">По (необязательно)</span>
           <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </label>
+        {mode === 'interval' && (
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-secondary">Время окончания</span>
+            <Input
+              type="time"
+              required
+              value={timeTo}
+              onChange={(e) => setTimeTo(e.target.value)}
+            />
+          </label>
+        )}
         <label className="flex flex-1 flex-col gap-1 text-sm">
-          <span className="text-secondary">Причина (видна всем)</span>
+          <span className="text-secondary">Причина (видна вам и руководству)</span>
           <Input
             value={reason}
             required
@@ -237,6 +288,7 @@ function AbsenceForm({
           Подать
         </Button>
       </form>
+      {periodError && <ErrorText>{periodError}</ErrorText>}
     </Card>
   );
 }
@@ -291,9 +343,9 @@ function AbsenceTable({
             </td>
             <td className="border-b border-line px-3 py-2">
               {row.eventName && <span className="block font-medium">{row.eventName}</span>}
-              {new Date(row.dateFrom).toLocaleDateString('ru-RU')}
-              {row.dateTo !== row.dateFrom &&
-                ` — ${new Date(row.dateTo).toLocaleDateString('ru-RU')}`}
+              {row.allDay
+                ? `${new Date(row.dateFrom).toLocaleDateString('ru-RU')} — ${new Date(new Date(row.dateTo).getTime() - 1).toLocaleDateString('ru-RU')} (весь день)`
+                : `${new Date(row.dateFrom).toLocaleString('ru-RU')} — ${new Date(row.dateTo).toLocaleString('ru-RU')}`}
             </td>
             <td className="border-b border-line px-3 py-2">{row.reason || 'Без причины'}</td>
             <td className="border-b border-line px-3 py-2">

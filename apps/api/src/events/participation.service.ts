@@ -8,6 +8,7 @@ import {
 import { Prisma, type PrismaClient } from '@prisma/client';
 import {
   canCancelAbsence,
+  absenceCoversEvent,
   isEventInvitee,
   participationActions,
   participationInputSchema,
@@ -27,7 +28,14 @@ export class ParticipationService {
     const [event, member, setting] = await Promise.all([
       db.event.findUnique({
         where: { id },
-        select: { startsAt: true, status: true, scope: true, kpId: true, packId: true },
+        select: {
+          startsAt: true,
+          endsAt: true,
+          status: true,
+          scope: true,
+          kpId: true,
+          packId: true,
+        },
       }),
       db.member.findUnique({
         where: { id: memberId },
@@ -41,17 +49,27 @@ export class ParticipationService {
     if (!event) throw new NotFoundException('Ивент не найден');
     if (!member) throw new ForbiddenException('Профиль игрока не найден');
     const invited = isEventInvitee(event, { ...member, kpId: member.pack?.kpId ?? null });
-    const absences = await db.absence.findMany({
+    const candidates = await db.absence.findMany({
       where: {
         memberId,
         status: 'ACTIVE',
         OR: [
           { eventId: id },
-          { eventId: null, dateFrom: { lte: event.startsAt }, dateTo: { gte: event.startsAt } },
+          { eventId: null, dateFrom: { lte: event.endsAt }, dateTo: { gte: event.startsAt } },
         ],
       },
-      select: { id: true, dateFrom: true, dateTo: true, reason: true, eventId: true },
+      select: {
+        id: true,
+        dateFrom: true,
+        dateTo: true,
+        reason: true,
+        eventId: true,
+        eligibleFrom: true,
+      },
     });
+    const absences = candidates.filter((a) =>
+      a.eventId ? a.eventId === id : absenceCoversEvent(a, event.startsAt, event.endsAt),
+    );
     const now = this.clock();
     const deadline = parseSettingValue(
       'absence.deadlineBeforeStartSec',
@@ -64,10 +82,12 @@ export class ParticipationService {
         where: {
           status: { not: 'CANCELLED' },
           OR: absences.map((a) =>
-            a.eventId ? { id: a.eventId } : { startsAt: { gte: a.dateFrom, lte: a.dateTo } },
+            a.eventId
+              ? { id: a.eventId }
+              : { startsAt: { lt: a.dateTo }, endsAt: { gt: a.dateFrom } },
           ),
         },
-        select: { startsAt: true },
+        select: { startsAt: true, endsAt: true },
       });
       canAttend = absences.every((a) =>
         a.eventId ? actions.canAttend : canCancelAbsence(a, events, now),
@@ -83,7 +103,7 @@ export class ParticipationService {
         id: a.id,
         reason: a.reason,
         dateFrom: (a.eventId ? event.startsAt : a.dateFrom).toISOString(),
-        dateTo: (a.eventId ? event.startsAt : a.dateTo).toISOString(),
+        dateTo: (a.eventId ? event.endsAt : a.dateTo).toISOString(),
       })),
     };
     return { event, state, memberId };
@@ -94,7 +114,7 @@ export class ParticipationService {
   async roster(id: string, canViewGs: boolean) {
     const event = await this.db.event.findUnique({
       where: { id },
-      select: { startsAt: true, scope: true, kpId: true, packId: true },
+      select: { startsAt: true, endsAt: true, scope: true, kpId: true, packId: true },
     });
     if (!event) throw new NotFoundException('Ивент не найден');
     const [members, absences] = await Promise.all([
@@ -120,13 +140,19 @@ export class ParticipationService {
           status: 'ACTIVE',
           OR: [
             { eventId: id },
-            { eventId: null, dateFrom: { lte: event.startsAt }, dateTo: { gte: event.startsAt } },
+            { eventId: null, dateFrom: { lte: event.endsAt }, dateTo: { gte: event.startsAt } },
           ],
         },
-        select: { memberId: true },
+        select: { memberId: true, eventId: true, dateFrom: true, dateTo: true, eligibleFrom: true },
       }),
     ]);
-    const absent = new Set(absences.map((a) => a.memberId));
+    const absent = new Set(
+      absences
+        .filter((a) =>
+          a.eventId ? a.eventId === id : absenceCoversEvent(a, event.startsAt, event.endsAt),
+        )
+        .map((a) => a.memberId),
+    );
     return members
       .filter((m) =>
         isEventInvitee(event, { id: m.id, packId: m.packId, kpId: m.pack?.kpId ?? null }),
@@ -175,7 +201,7 @@ export class ParticipationService {
                   memberId: self,
                   eventId: id,
                   dateFrom: event.startsAt,
-                  dateTo: event.startsAt,
+                  dateTo: event.endsAt,
                   reason: parsed.data.reason,
                 },
               });

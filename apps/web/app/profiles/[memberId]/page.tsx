@@ -52,6 +52,10 @@ export default function ProfilePage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [saveError, setSaveError] = useState('');
+  const otherFieldsChanged =
+    !!profile &&
+    (role !== (profile.combatRole ?? '') ||
+      JSON.stringify(weapons) !== JSON.stringify(profile.weapons ?? []));
 
   useEffect(() => {
     if (!allowed) return;
@@ -90,16 +94,19 @@ export default function ProfilePage() {
     event.preventDefault();
     if (busy) return;
     const input = updateOwnProfileSchema.safeParse({
-      combatRole: role,
-      weapons,
+      ...(otherFieldsChanged ? { combatRole: role, weapons } : {}),
       avatar,
       avatarColor,
-      comment,
+      ...(comment.trim() ? { comment } : {}),
     });
     setSaveError('');
     setMessage('');
     if (!input.success) {
       setSaveError('Выберите роль, два разных оружия и укажите комментарий от 3 до 500 символов');
+      return;
+    }
+    if (otherFieldsChanged && !input.data.comment) {
+      setSaveError('Укажите комментарий от 3 до 500 символов');
       return;
     }
     setBusy(true);
@@ -112,8 +119,8 @@ export default function ProfilePage() {
         current?.id === memberId
           ? {
               ...current,
-              combatRole: input.data.combatRole,
-              weapons: input.data.weapons,
+              combatRole: input.data.combatRole ?? current.combatRole,
+              weapons: input.data.weapons ?? current.weapons,
               avatar: input.data.avatar,
               avatarColor: input.data.avatarColor,
             }
@@ -276,7 +283,7 @@ export default function ProfilePage() {
                   </fieldset>
                   <Field label="Роль">
                     <Select
-                      required
+                      required={otherFieldsChanged}
                       value={role}
                       onChange={(e) => setRole(e.target.value as CombatRole)}
                     >
@@ -290,10 +297,14 @@ export default function ProfilePage() {
                       ))}
                     </Select>
                   </Field>
-                  <WeaponPicker value={weapons} onChange={setWeapons} />
+                  <WeaponPicker
+                    value={weapons}
+                    onChange={setWeapons}
+                    required={otherFieldsChanged}
+                  />
                   <Field label="Комментарий">
                     <Input
-                      required
+                      required={otherFieldsChanged}
                       minLength={3}
                       maxLength={500}
                       value={comment}
@@ -304,7 +315,7 @@ export default function ProfilePage() {
                     type="submit"
                     variant="primary"
                     disabled={
-                      role === profile.combatRole &&
+                      role === (profile.combatRole ?? '') &&
                       avatar === (profile.avatar ?? null) &&
                       avatarColor === (profile.avatarColor ?? null) &&
                       JSON.stringify(weapons) === JSON.stringify(profile.weapons ?? [])

@@ -16,6 +16,7 @@ import {
 } from '@dkp/shared';
 import { useSession } from '../../components/session-context';
 import { api } from '../../lib/api';
+import { createRequestId } from '../../lib/request-id';
 import {
   Badge,
   RosterTabs,
@@ -323,6 +324,7 @@ export default function RosterPage() {
       {selected && (
         <MemberCard
           row={selected}
+          canAssignLeader={!!user?.isAdmin}
           canManage={!!canManage}
           canChangeRank={
             !!user &&
@@ -345,12 +347,14 @@ export default function RosterPage() {
 /** Карточка члена: редактирование (офицер+) и смена ранга (Глава/Админ). */
 function MemberCard({
   row,
+  canAssignLeader,
   canManage,
   canChangeRank,
   onClose,
   onChanged,
 }: {
   row: RosterRow;
+  canAssignLeader: boolean;
   canManage: boolean;
   canChangeRank: boolean;
   onClose: () => void;
@@ -363,6 +367,91 @@ function MemberCard({
   const [comment, setComment] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [grantAmount, setGrantAmount] = useState('');
+  const [grantComment, setGrantComment] = useState('');
+  const [grantAttempt, setGrantAttempt] = useState<{
+    requestId: string;
+    memberId: string;
+    amount: number;
+    comment: string;
+  } | null>(null);
+  const grantStorageKey = `dkp-grant:${row.id}`;
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(grantStorageKey);
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as {
+        requestId: string;
+        memberId: string;
+        amount: number;
+        comment: string;
+      };
+      if (
+        parsed.memberId === row.id &&
+        parsed.requestId &&
+        Number.isInteger(parsed.amount) &&
+        typeof parsed.comment === 'string'
+      ) {
+        setGrantAttempt(parsed);
+        setGrantAmount(String(parsed.amount));
+        setGrantComment(parsed.comment);
+      }
+    } catch {
+      /* недоступное хранилище не мешает ручному повтору */
+    }
+  }, [grantStorageKey, row.id]);
+
+  const grant = async () => {
+    if (busy) return;
+    const input = grantAttempt ?? {
+      requestId: createRequestId(),
+      memberId: row.id,
+      amount: Number(grantAmount),
+      comment: grantComment.trim(),
+    };
+    setGrantAttempt(input);
+    try {
+      sessionStorage.setItem(grantStorageKey, JSON.stringify(input));
+    } catch {
+      /* повторы защищены, пока открыта форма */
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api('/dkp/admin-grants', { method: 'POST', body: JSON.stringify(input) });
+      setGrantAttempt(null);
+      try {
+        sessionStorage.removeItem(grantStorageKey);
+      } catch {
+        /* хранилище недоступно */
+      }
+      onChanged();
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      if (
+        !grantAttempt &&
+        status &&
+        status >= 400 &&
+        status < 500 &&
+        status !== 408 &&
+        status !== 429
+      ) {
+        setGrantAttempt(null);
+        try {
+          sessionStorage.removeItem(grantStorageKey);
+        } catch {
+          /* хранилище недоступно */
+        }
+      }
+      setMessage(
+        status && status >= 400 && status < 500
+          ? 'Начисление отклонено. Проверьте данные.'
+          : 'Результат неизвестен. Повторите запрос с теми же данными.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const save = async () => {
     setBusy(true);
@@ -448,8 +537,9 @@ function MemberCard({
           <h3 className="mb-2 font-semibold text-primary">Смена ранга</h3>
           <div className="flex flex-wrap items-center gap-2">
             <Select value={newRank} onChange={(e) => setNewRank(e.target.value as Rank)}>
-              {/* Глава и Админ не назначаются (решение владельца) */}
-              {RANKS.filter((rank) => rank !== 'GUILD_LEADER' && rank !== 'ADMIN').map((rank) => (
+              {RANKS.filter(
+                (rank) => rank !== 'ADMIN' && (rank !== 'GUILD_LEADER' || canAssignLeader),
+              ).map((rank) => (
                 <option key={rank} value={rank}>
                   {RANK_LABELS[rank]}
                 </option>
@@ -471,11 +561,53 @@ function MemberCard({
               Изменить ранг
             </Button>
           </div>
+          {newRank === 'GUILD_LEADER' && <p>При передаче действующий Глава станет Рядовым.</p>}
+        </div>
+      )}
+
+      {canAssignLeader && (
+        <div className="mt-4">
+          <h3 className="mb-2 font-semibold text-primary">Начислить ДКП: {row.nickname}</h3>
+          <fieldset disabled={busy || !!grantAttempt} className="flex flex-wrap gap-2">
+            <Field label="Сумма ДКП">
+              <Input
+                type="number"
+                min={1}
+                max={2147483647}
+                step={1}
+                value={grantAmount}
+                onChange={(e) => setGrantAmount(e.target.value)}
+              />
+            </Field>
+            <Field label="Комментарий">
+              <Input
+                maxLength={500}
+                value={grantComment}
+                onChange={(e) => setGrantComment(e.target.value)}
+              />
+            </Field>
+          </fieldset>
+          <p>
+            Получатель: {row.nickname}; сумма: {grantAmount || '—'} ДКП.
+          </p>
+          <Button
+            onClick={grant}
+            disabled={
+              busy ||
+              (!grantAttempt &&
+                (!Number.isInteger(Number(grantAmount)) ||
+                  Number(grantAmount) <= 0 ||
+                  Number(grantAmount) > 2147483647 ||
+                  grantComment.trim().length < 3))
+            }
+          >
+            {grantAttempt ? 'Повторить начисление' : 'Начислить ДКП'}
+          </Button>
         </div>
       )}
 
       {message && <p className="mt-3 text-sm text-primary">{message}</p>}
-      <Button className="mt-4" onClick={onClose}>
+      <Button className="mt-4" onClick={onClose} disabled={busy || !!grantAttempt}>
         Закрыть
       </Button>
     </Card>

@@ -54,24 +54,24 @@ describe('absenceDeadlineError', () => {
     expect(error).toBeNull();
   });
 
-  it('за 2 мин до старта — нельзя', () => {
+  it('за 2 мин заявка создаётся, но событие исключается отдельно', () => {
     const error = absenceDeadlineError(
       { dateFrom: new Date('2026-03-10T00:00:00Z'), dateTo: new Date('2026-03-11T00:00:00Z') },
       [{ startsAt: new Date('2026-03-10T12:02:00Z') }],
       CONFIG,
       NOW,
     );
-    expect(error).toContain('меньше 3 минут');
+    expect(error).toBeNull();
   });
 
-  it('ивент уже начался — нельзя', () => {
+  it('идущий ивент не блокирует заявку на остаток дня', () => {
     const error = absenceDeadlineError(
       { dateFrom: new Date('2026-03-10T00:00:00Z'), dateTo: new Date('2026-03-11T00:00:00Z') },
       [{ startsAt: new Date('2026-03-10T11:00:00Z') }],
       CONFIG,
       NOW,
     );
-    expect(error).toContain('меньше 3 минут');
+    expect(error).toBeNull();
   });
 
   it('прошедший период целиком — нельзя (задним числом)', () => {
@@ -102,6 +102,59 @@ describe('absenceDeadlineError', () => {
       NOW,
     );
     expect(error).toBeNull();
+  });
+});
+
+describe('покрытие события интервалом и дедлайном', () => {
+  it('не изменяет утреннее событие и покрывает вечернее; граница дедлайна включена', () => {
+    const absence = {
+      dateFrom: new Date('2026-03-10T00:00:00Z'),
+      dateTo: new Date('2026-03-11T00:00:00Z'),
+      eligibleFrom: new Date('2026-03-10T15:03:00Z'),
+    };
+    expect(
+      absenceCoversEvent(
+        absence,
+        new Date('2026-03-10T12:00:00Z'),
+        new Date('2026-03-10T13:00:00Z'),
+      ),
+    ).toBe(false);
+    expect(
+      absenceCoversEvent(
+        absence,
+        new Date('2026-03-10T15:02:00Z'),
+        new Date('2026-03-10T16:00:00Z'),
+      ),
+    ).toBe(false);
+    expect(
+      absenceCoversEvent(
+        absence,
+        new Date('2026-03-10T15:03:00Z'),
+        new Date('2026-03-10T16:00:00Z'),
+      ),
+    ).toBe(true);
+    expect(
+      absenceCoversEvent(
+        absence,
+        new Date('2026-03-10T15:04:00Z'),
+        new Date('2026-03-10T16:00:00Z'),
+      ),
+    ).toBe(true);
+  });
+  it('учитывает пересечение, но не касание границ и переход через полночь', () => {
+    const a = {
+      dateFrom: new Date('2026-03-10T23:30:00Z'),
+      dateTo: new Date('2026-03-11T00:30:00Z'),
+    };
+    expect(
+      absenceCoversEvent(a, new Date('2026-03-10T23:00:00Z'), new Date('2026-03-10T23:30:00Z')),
+    ).toBe(false);
+    expect(
+      absenceCoversEvent(a, new Date('2026-03-11T00:15:00Z'), new Date('2026-03-11T01:00:00Z')),
+    ).toBe(true);
+    expect(
+      absenceCoversEvent(a, new Date('2026-03-11T00:30:00Z'), new Date('2026-03-11T01:00:00Z')),
+    ).toBe(false);
   });
 });
 

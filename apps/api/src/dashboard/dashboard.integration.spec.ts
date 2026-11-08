@@ -26,21 +26,25 @@ const pack = jest.fn(async () => ({
 }));
 const scores = jest.fn(async () => [{ memberId: 'self', value: 4242 }]);
 const events = jest.fn(async () => []);
-const list = jest.fn(async () => ({
-  entries: [
-    {
-      id: 'log',
-      actorMemberId: 'head',
-      action: 'EVENT_CREATE',
-      entityType: 'Event',
-      entityId: 'event',
-      comment: 'Создан ивент',
-      createdAt: new Date(),
-      actorName: 'Глава',
-    },
-  ],
-  total: 1,
-}));
+const list = jest.fn(async (_query: unknown, user: { rank: string | null }) =>
+  user.rank === 'MEMBER'
+    ? { entries: [], total: 0 }
+    : {
+        entries: [
+          {
+            id: 'log',
+            actorMemberId: 'head',
+            action: 'EVENT_CREATE',
+            entityType: 'Event',
+            entityId: 'event',
+            comment: 'Создан ивент',
+            createdAt: new Date(),
+            actorName: 'Глава',
+          },
+        ],
+        total: 1,
+      },
+);
 const db = {
   member: { findUnique: member },
   pack: { findUnique: pack },
@@ -88,7 +92,7 @@ describe('Дашборд через HTTP', () => {
     expect(events).not.toHaveBeenCalled();
     expect(member).not.toHaveBeenCalled();
   });
-  it('рядовой не получает аудит и GS, даже будучи лидером пака; нельзя запросить чужой пак', async () => {
+  it('рядовой получает личный аудит без GS; нельзя запросить чужой пак', async () => {
     const response = await fetch(url + '/dashboard?memberId=other&rank=ADMIN');
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('private, no-store');
@@ -96,8 +100,11 @@ describe('Дашборд через HTTP', () => {
     expect(body.team!.id).toBe('own-pack');
     expect(body.team!.members[0].leader).toBe(true);
     expect(body.team!.members[0]).not.toHaveProperty('gearScore');
-    expect(body.audit).toBeNull();
-    expect(list).not.toHaveBeenCalled();
+    expect(body.audit).toEqual([]);
+    expect(list).toHaveBeenCalledWith(
+      { limit: 10 },
+      expect.objectContaining({ memberId: 'self', rank: 'MEMBER' }),
+    );
     expect(scores).not.toHaveBeenCalled();
     expect(member).toHaveBeenCalledWith({ where: { id: 'self' }, select: { packId: true } });
   });
@@ -105,7 +112,7 @@ describe('Дашборд через HTTP', () => {
     actor!.rank = 'OFFICER';
     const body = (await (await fetch(url + '/dashboard')).json()) as DashboardData;
     expect(body.audit![0].actorName).toBe('Глава');
-    expect(list).toHaveBeenCalledWith({ limit: 10 });
+    expect(list).toHaveBeenCalledWith({ limit: 10 }, expect.objectContaining({ rank: 'OFFICER' }));
     expect(scores).not.toHaveBeenCalled();
     expect(body.team!.members[0]).not.toHaveProperty('gearScore');
   });

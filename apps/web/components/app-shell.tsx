@@ -9,20 +9,30 @@ import { UserMenu } from './user-menu';
 import { SiteHeader } from './ui/layout';
 import { ApplicationFrame, GuildBrand } from './ui';
 import { useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import { api, API_URL_VALUE } from '../lib/api';
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, loading } = useSession();
   const [guildName, setGuildName] = useState('Гильдия');
+  const [crestUrl, setCrestUrl] = useState<string | null>(null);
   useEffect(() => {
     if (user && (user.memberId || user.isAdmin)) {
       let active = true;
-      api<{ name: string }>('/meta/guild')
-        .then((value) => {
-          if (active) setGuildName(value.name);
-        })
-        .catch(() => {});
+      const loadGuild = () =>
+        api<{ name: string; hasCrest?: boolean }>('/meta/guild')
+          .then((value) => {
+            if (active) {
+              setGuildName(value.name);
+              setCrestUrl(
+                value.hasCrest ? `${API_URL_VALUE}/settings/guild/crest?v=${Date.now()}` : null,
+              );
+            }
+          })
+          .catch(() => {});
+      void loadGuild();
+      window.addEventListener('guild:changed', loadGuild);
       return () => {
         active = false;
+        window.removeEventListener('guild:changed', loadGuild);
       };
     }
   }, [user]);
@@ -32,7 +42,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <ApplicationFrame
       navigation={<NavMenu />}
       header={
-        <SiteHeader navigation={<GuildBrand name={guildName} />}>
+        <SiteHeader navigation={<GuildBrand name={guildName} crestUrl={crestUrl} />}>
           <GameTimeWidget />
           <ThemeToggle />
           <UserMenu />

@@ -12,6 +12,7 @@ import {
   canCancelAbsence,
   can,
   createAbsenceSchema,
+  parseSettingValue,
   type CreateAbsenceInput,
 } from '@dkp/shared';
 import type { AuditWriter } from '../members/members.service';
@@ -25,6 +26,7 @@ export interface AbsenceRow {
   memberName: string;
   dateFrom: Date;
   dateTo: Date;
+  allDay: boolean;
   reason: string;
   status: string;
   seenBy: string[];
@@ -32,6 +34,12 @@ export interface AbsenceRow {
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
 export interface AbsencesDb {
+  setting?: {
+    findUnique(args: {
+      where: { key: string };
+      select: { value: true };
+    }): Promise<{ value: unknown } | null>;
+  };
   $transaction<T>(
     work: (tx: Omit<AbsencesDb, '$transaction'>) => Promise<T>,
     options: { isolationLevel: 'Serializable' },
@@ -41,21 +49,23 @@ export interface AbsencesDb {
       where?: { memberId?: string; status?: string };
       orderBy: { dateFrom: 'desc' };
       include: {
-        member: { select: { nickname: true } };
+        member: { select: { nickname: true; pack?: { select: { leaderId: true } } } };
         seenBy: { select: { actorKey: true } };
-        event?: { select: { startsAt: true; name: true } };
+        event?: { select: { startsAt: true; endsAt: true; name: true } };
       };
     }): Promise<
       Array<{
         id: string;
         eventId?: string | null;
-        event?: { startsAt: Date; name: string } | null;
+        event?: { startsAt: Date; endsAt: Date; name: string } | null;
         memberId: string;
         dateFrom: Date;
         dateTo: Date;
+        eligibleFrom?: Date | null;
+        allDay?: boolean;
         reason: string;
         status: string;
-        member: { nickname: string };
+        member: { nickname: string; pack?: { leaderId: string | null } | null };
         seenBy: Array<{ actorKey: string }>;
       }>
     >;
@@ -65,10 +75,18 @@ export interface AbsencesDb {
       memberId: string;
       dateFrom: Date;
       dateTo: Date;
+      eligibleFrom?: Date | null;
       status: string;
     } | null>;
     create(args: {
-      data: { memberId: string; dateFrom: Date; dateTo: Date; reason: string };
+      data: {
+        memberId: string;
+        dateFrom: Date;
+        dateTo: Date;
+        reason: string;
+        eligibleFrom: Date;
+        allDay: boolean;
+      };
     }): Promise<{ id: string }>;
     update(args: { where: { id: string }; data: { status: string } }): Promise<unknown>;
   };
@@ -79,14 +97,19 @@ export interface AbsencesDb {
     }): Promise<{ count: number }>;
   };
   event: {
+    findUnique(args: {
+      where: { id: string };
+      select: { startsAt: true; endsAt: true };
+    }): Promise<{ startsAt: Date; endsAt: Date } | null>;
     findMany(args: {
       where: {
         id?: string;
         startsAt?: { gte: Date; lte: Date };
+        endsAt?: { gt: Date };
         status: string | { notIn: string[] };
       };
-      select: { startsAt: true };
-    }): Promise<Array<{ startsAt: Date }>>;
+      select: { startsAt: true; endsAt?: true };
+    }): Promise<Array<{ startsAt: Date; endsAt?: Date }>>;
   };
   attendance: {
     findUnique(args: {
@@ -133,7 +156,7 @@ export class AbsencesService {
       include: {
         member: { select: { nickname: true } },
         seenBy: { select: { actorKey: true } },
-        event: { select: { startsAt: true, name: true } },
+        event: { select: { startsAt: true, endsAt: true, name: true } },
       },
     });
     return rows.map((row) => ({
@@ -143,7 +166,8 @@ export class AbsencesService {
       memberId: row.memberId,
       memberName: row.member.nickname,
       dateFrom: row.event?.startsAt ?? row.dateFrom,
-      dateTo: row.event?.startsAt ?? row.dateTo,
+      dateTo: row.event?.endsAt ?? row.dateTo,
+      allDay: row.allDay ?? false,
       reason: row.reason,
       status: row.status,
       seenBy: row.seenBy.map((s) => s.actorKey),
@@ -162,21 +186,27 @@ export class AbsencesService {
     // план 2.3 запрещает заявку и на него. Завершённые (FINISHED/
     // CANCELLED) не блокируют: их период уже прошёл.
     const now = this.clock();
-    const events = await this.db.event.findMany({
-      where: {
-        startsAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000), lte: input.dateTo },
-        status: { notIn: ['FINISHED', 'CANCELLED'] },
-      },
-      select: { startsAt: true },
+    const configured = await this.db.setting?.findUnique({
+      where: { key: 'absence.deadlineBeforeStartSec' },
+      select: { value: true },
     });
-
-    const error = absenceDeadlineError(input, events, this.settings, now);
+    const deadlineBeforeStartSec = configured
+      ? parseSettingValue('absence.deadlineBeforeStartSec', configured.value)
+      : this.settings.deadlineBeforeStartSec;
+    const error = absenceDeadlineError(input, [], this.settings, now);
     if (error) {
       throw new ConflictException(error);
     }
 
     const created = await this.db.absence.create({
-      data: { memberId, dateFrom: input.dateFrom, dateTo: input.dateTo, reason: input.reason },
+      data: {
+        memberId,
+        dateFrom: input.dateFrom,
+        dateTo: input.dateTo,
+        reason: input.reason,
+        allDay: input.allDay,
+        eligibleFrom: new Date(now.getTime() + deadlineBeforeStartSec * 1000),
+      },
     });
     await this.audit(actor, 'ABSENCE_CREATE', created.id, 'Подана заявка на отсутствие');
     return created;
@@ -193,10 +223,13 @@ export class AbsencesService {
       where: {
         ...(absence.eventId
           ? { id: absence.eventId }
-          : { startsAt: { gte: absence.dateFrom, lte: absence.dateTo } }),
+          : {
+              startsAt: { gte: new Date(0), lte: absence.dateTo },
+              endsAt: { gt: absence.dateFrom },
+            }),
         status: { notIn: ['CANCELLED'] },
       },
-      select: { startsAt: true },
+      select: { startsAt: true, endsAt: true },
     });
     const period =
       absence.eventId && events[0]
@@ -230,6 +263,7 @@ export class AbsencesService {
         await tx.auditLog.create({
           data: {
             actorMemberId: actor.memberId,
+            actorIsAdmin: actor.isAdmin,
             action: 'ABSENCE_SEEN',
             entityType: 'Absence',
             entityId: id,
@@ -247,8 +281,16 @@ export class AbsencesService {
   async forEvent(
     eventStartsAt: Date,
     eventId?: string,
+    actor?: AbsencesActor,
+    eventEndsAt?: Date,
   ): Promise<
-    Array<{ id: string; memberId: string; memberName: string; reason: string; seenBy: string[] }>
+    Array<{
+      id: string;
+      memberId: string;
+      memberName: string;
+      reason: string | null;
+      seenBy: string[];
+    }>
   > {
     // Ищем заявки, пересекающие дату ивента: dateFrom <= старт <= dateTo.
     // Prisma не умеет «поле <= значение <= поле» одним where — берём
@@ -256,19 +298,42 @@ export class AbsencesService {
     const candidates = await this.db.absence.findMany({
       where: { status: 'ACTIVE' },
       orderBy: { dateFrom: 'desc' },
-      include: { member: { select: { nickname: true } }, seenBy: { select: { actorKey: true } } },
+      include: {
+        member: { select: { nickname: true, pack: { select: { leaderId: true } } } },
+        seenBy: { select: { actorKey: true } },
+      },
     });
     return candidates
       .filter((absence) =>
-        absence.eventId ? absence.eventId === eventId : absenceCoversEvent(absence, eventStartsAt),
+        absence.eventId
+          ? absence.eventId === eventId
+          : absenceCoversEvent(absence, eventStartsAt, eventEndsAt),
       )
       .map((absence) => ({
         id: absence.id,
         memberId: absence.memberId,
         memberName: absence.member.nickname,
-        reason: absence.reason,
+        reason:
+          actor &&
+          (actor.isAdmin ||
+            actor.rank === 'ADMIN' ||
+            actor.rank === 'GUILD_LEADER' ||
+            actor.rank === 'OFFICER' ||
+            actor.memberId === absence.memberId ||
+            (!!actor.memberId && actor.memberId === absence.member.pack?.leaderId))
+            ? absence.reason
+            : null,
         seenBy: absence.seenBy.map((s) => s.actorKey),
       }));
+  }
+
+  async forEventId(eventId: string, actor: AbsencesActor) {
+    const event = await this.db.event.findUnique({
+      where: { id: eventId },
+      select: { startsAt: true, endsAt: true },
+    });
+    if (!event) throw new NotFoundException('Ивент не найден');
+    return this.forEvent(event.startsAt, eventId, actor, event.endsAt);
   }
 
   /**
@@ -280,8 +345,12 @@ export class AbsencesService {
    * отметиться кодом (PASSED) или получить ручную отметку РЛ — отсутствие
    * на дату не должно их затирать. Ставим только тем, кого ещё не отмечали.
    */
-  async markExcusedForFinishedEvent(eventId: string, eventStartsAt: Date): Promise<number> {
-    const absent = await this.forEvent(eventStartsAt, eventId);
+  async markExcusedForFinishedEvent(
+    eventId: string,
+    eventStartsAt: Date,
+    eventEndsAt?: Date,
+  ): Promise<number> {
+    const absent = await this.forEvent(eventStartsAt, eventId, undefined, eventEndsAt);
     let marked = 0;
     for (const row of absent) {
       const existing = await this.db.attendance.findUnique({
@@ -310,6 +379,7 @@ export class AbsencesService {
     await this.db.auditLog.create({
       data: {
         actorMemberId: actor.memberId,
+        actorIsAdmin: actor.isAdmin,
         action,
         entityType: 'Absence',
         entityId,

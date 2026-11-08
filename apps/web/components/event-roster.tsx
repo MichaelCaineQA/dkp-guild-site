@@ -51,6 +51,20 @@ export function EventRoster({ eventId }: { eventId: string }) {
     groups.set(key, [...(groups.get(key) ?? []), member]);
   }
   const count = (rows: Member[]) => `${rows.filter((m) => m.attending).length}/${rows.length}`;
+  const progress = (rows: Member[]) => {
+    const attending = rows.filter((member) => member.attending).length;
+    return (
+      <>
+        {' '}
+        — Будут {attending} из {rows.length}{' '}
+        <progress
+          aria-label={`Будут ${attending} из ${rows.length}`}
+          value={attending}
+          max={rows.length || 1}
+        />
+      </>
+    );
+  };
   return (
     <section className="mt-4">
       <h3 className="font-semibold">Участники {members && count(members)}</h3>
@@ -66,46 +80,55 @@ export function EventRoster({ eventId }: { eventId: string }) {
         return (
           <details key={kpId} open>
             <summary>
-              {rows[0]?.kpName ?? 'Без КП'} — {count(rows)}
+              {rows[0]?.kpName ?? 'Без КП'}
+              {progress(rows)}
             </summary>
             {[...packs.entries()].map(([packId, pack]) => (
               <details key={packId} open className="ml-3">
                 <summary>
-                  {pack[0]?.packName ?? 'Без пака'} — {count(pack)}
+                  {pack[0]?.packName ?? 'Без пака'}
+                  {progress(pack)}
                 </summary>
                 <ul>
-                  {pack.map((member) => (
-                    <li
-                      key={member.id}
-                      className="ml-3 flex min-w-0 items-center gap-2 py-1 text-sm"
-                    >
-                      <a
-                        href={`/profiles/${encodeURIComponent(member.id)}`}
-                        className="shrink-0"
-                        aria-label={`Профиль: ${member.nickname}`}
+                  {[...pack]
+                    .sort(
+                      (a, b) =>
+                        Number(b.attending) - Number(a.attending) ||
+                        a.nickname.localeCompare(b.nickname, 'ru') ||
+                        a.id.localeCompare(b.id),
+                    )
+                    .map((member) => (
+                      <li
+                        key={member.id}
+                        className="ml-3 flex min-w-0 items-center gap-2 py-1 text-sm"
                       >
-                        <Avatar
-                          avatar={member.avatar}
-                          avatarColor={member.avatarColor}
-                          nickname={member.nickname}
-                        />
-                      </a>
-                      <span className="min-w-0 break-words">
                         <a
                           href={`/profiles/${encodeURIComponent(member.id)}`}
-                          className="font-medium"
+                          className="shrink-0"
+                          aria-label={`Профиль: ${member.nickname}`}
                         >
-                          {member.nickname}
-                        </a>{' '}
-                        · {RANK_LABELS[member.rank]} · {formatWeapons(member.weapons)} ·{' '}
-                        {member.combatRole
-                          ? COMBAT_ROLE_LABELS[member.combatRole]
-                          : 'Роль не указана'}
-                        {member.gearScore !== null && ` · GS ${member.gearScore}`} ·{' '}
-                        {member.attending ? 'Будет' : 'Не будет'}
-                      </span>
-                    </li>
-                  ))}
+                          <Avatar
+                            avatar={member.avatar}
+                            avatarColor={member.avatarColor}
+                            nickname={member.nickname}
+                          />
+                        </a>
+                        <span className="min-w-0 break-words">
+                          <a
+                            href={`/profiles/${encodeURIComponent(member.id)}`}
+                            className="font-medium"
+                          >
+                            {member.nickname}
+                          </a>{' '}
+                          · {RANK_LABELS[member.rank]} · {formatWeapons(member.weapons)} ·{' '}
+                          {member.combatRole
+                            ? COMBAT_ROLE_LABELS[member.combatRole]
+                            : 'Роль не указана'}
+                          {member.gearScore !== null && ` · GS ${member.gearScore}`} ·{' '}
+                          {member.attending ? 'Будет' : 'Не будет'}
+                        </span>
+                      </li>
+                    ))}
                 </ul>
               </details>
             ))}

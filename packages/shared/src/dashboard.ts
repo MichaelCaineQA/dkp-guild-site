@@ -46,6 +46,7 @@ export interface DashboardEvent {
   endsAt: string;
   dkpReward: number;
   raidLeadId: string;
+  creatorId?: string | null;
   raidLeadName: string;
   place: string | null;
   notes: string | null;

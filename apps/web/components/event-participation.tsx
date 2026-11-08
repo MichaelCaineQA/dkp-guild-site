@@ -76,7 +76,7 @@ export function DeclineEventDialog({
           {state?.canDecline && (
             <>
               <Muted>
-                Причину увидят участники гильдии. Оформляется отсутствие только на это событие.
+                Причину увидите вы и руководство. Оформляется отсутствие только на это событие.
               </Muted>
               <Field label="Причина (необязательно)">
                 <Input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />

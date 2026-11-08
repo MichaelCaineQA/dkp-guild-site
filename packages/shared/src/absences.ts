@@ -11,10 +11,11 @@ export const createAbsenceSchema = z
   .object({
     dateFrom: z.coerce.date(),
     dateTo: z.coerce.date(),
+    allDay: z.boolean().default(false),
     reason: z.string().min(3).max(500),
   })
-  .refine((data) => data.dateTo >= data.dateFrom, {
-    message: 'Конец периода не может быть раньше начала',
+  .refine((data) => data.dateTo > data.dateFrom, {
+    message: 'Конец периода должен быть позже начала',
     path: ['dateTo'],
   });
 export type CreateAbsenceInput = z.infer<typeof createAbsenceSchema>;
@@ -38,27 +39,20 @@ export function absenceDeadlineError(
   now: Date,
 ): string | null {
   // Задним числом нельзя: период должен захватывать будущее
-  if (absence.dateTo.getTime() < now.getTime()) {
+  if (absence.dateTo.getTime() <= now.getTime()) {
     return 'Нельзя подать заявку задним числом';
   }
 
   const deadlineMs = config.deadlineBeforeStartSec * 1000;
-  for (const event of events) {
-    const msToStart = event.startsAt.getTime() - now.getTime();
-    const eventInPeriod =
-      event.startsAt.getTime() >= absence.dateFrom.getTime() &&
-      event.startsAt.getTime() <= absence.dateTo.getTime();
-    if (eventInPeriod && msToStart < deadlineMs) {
-      return 'До старта ивента меньше 3 минут — заявку подать нельзя';
-    }
-  }
+  void events;
+  void deadlineMs;
   return null;
 }
 
 /** Можно ли отменить свою заявку: только до начала пересекающих ивентов. */
 export function canCancelAbsence(
-  absence: { dateFrom: Date; dateTo: Date },
-  events: Array<{ startsAt: Date }>,
+  absence: { dateFrom: Date; dateTo: Date; eligibleFrom?: Date | null },
+  events: Array<{ startsAt: Date; endsAt?: Date }>,
   now: Date,
 ): boolean {
   // Период уже прошёл — отменять нечего/нельзя
@@ -67,9 +61,7 @@ export function canCancelAbsence(
   }
   // Если какой-то ивент периода уже начался — поздно
   for (const event of events) {
-    const eventInPeriod =
-      event.startsAt.getTime() >= absence.dateFrom.getTime() &&
-      event.startsAt.getTime() <= absence.dateTo.getTime();
+    const eventInPeriod = absenceCoversEvent(absence, event.startsAt, event.endsAt);
     if (eventInPeriod && event.startsAt.getTime() <= now.getTime()) {
       return false;
     }
@@ -79,9 +71,13 @@ export function canCancelAbsence(
 
 /** Попадает ли отсутствие на дату ивента (для карточки и чек-листа РЛ). */
 export function absenceCoversEvent(
-  absence: { dateFrom: Date; dateTo: Date },
+  absence: { dateFrom: Date; dateTo: Date; eligibleFrom?: Date | null },
   eventStartsAt: Date,
+  eventEndsAt?: Date,
 ): boolean {
+  if (absence.eligibleFrom && eventStartsAt < absence.eligibleFrom) return false;
+  if (eventEndsAt && +absence.dateTo > +absence.dateFrom)
+    return eventStartsAt < absence.dateTo && eventEndsAt > absence.dateFrom;
   return (
     eventStartsAt.getTime() >= absence.dateFrom.getTime() &&
     eventStartsAt.getTime() <= absence.dateTo.getTime()

@@ -38,8 +38,8 @@ export interface ProfileTransaction {
     update(args: {
       where: { id: string };
       data: {
-        combatRole: CombatRole;
-        weapons: Weapon[];
+        combatRole?: CombatRole;
+        weapons?: Weapon[];
         avatar?: Avatar | null;
         avatarColor?: AvatarColor | null;
       };
@@ -143,9 +143,14 @@ export class ProfilesService {
     const input = parsed.data;
     await this.db.$transaction(async (tx) => {
       const member = await this.mustExist(tx, id);
+      const otherFieldsChanged =
+        (input.combatRole !== undefined && member.combatRole !== input.combatRole) ||
+        (input.weapons !== undefined &&
+          JSON.stringify(member.weapons ?? []) !== JSON.stringify(input.weapons));
+      if (otherFieldsChanged && !input.comment)
+        throw new BadRequestException('Укажите комментарий от 3 до 500 символов');
       if (
-        member.combatRole === input.combatRole &&
-        JSON.stringify(member.weapons ?? []) === JSON.stringify(input.weapons) &&
+        !otherFieldsChanged &&
         (input.avatar === undefined || (member.avatar ?? null) === input.avatar) &&
         (input.avatarColor === undefined || (member.avatarColor ?? null) === input.avatarColor)
       )
@@ -153,8 +158,8 @@ export class ProfilesService {
       await tx.member.update({
         where: { id },
         data: {
-          combatRole: input.combatRole,
-          weapons: input.weapons,
+          ...(input.combatRole !== undefined ? { combatRole: input.combatRole } : {}),
+          ...(input.weapons !== undefined ? { weapons: input.weapons } : {}),
           ...(input.avatar !== undefined ? { avatar: input.avatar } : {}),
           ...(input.avatarColor !== undefined ? { avatarColor: input.avatarColor } : {}),
         },
@@ -165,7 +170,7 @@ export class ProfilesService {
           action: 'MEMBER_UPDATE',
           entityType: 'Member',
           entityId: id,
-          comment: `Роль: ${member.combatRole ?? 'не указана'} → ${input.combatRole}; оружия: ${formatWeapons(member.weapons ?? [])} → ${formatWeapons(input.weapons)}; аватар: ${member.avatar ?? 'не выбран'} → ${input.avatar === undefined ? (member.avatar ?? 'не выбран') : (input.avatar ?? 'не выбран')}; фон: ${member.avatarColor ?? 'автоматически'} → ${input.avatarColor === undefined ? (member.avatarColor ?? 'автоматически') : (input.avatarColor ?? 'автоматически')}. ${input.comment}`,
+          comment: `Роль: ${member.combatRole ?? 'не указана'} → ${input.combatRole ?? member.combatRole ?? 'не указана'}; оружия: ${formatWeapons(member.weapons ?? [])} → ${formatWeapons(input.weapons ?? member.weapons ?? [])}; аватар: ${member.avatar ?? 'не выбран'} → ${input.avatar === undefined ? (member.avatar ?? 'не выбран') : (input.avatar ?? 'не выбран')}; фон: ${member.avatarColor ?? 'автоматически'} → ${input.avatarColor === undefined ? (member.avatarColor ?? 'автоматически') : (input.avatarColor ?? 'автоматически')}.${input.comment ? ` ${input.comment}` : ''}`,
         },
       });
     });

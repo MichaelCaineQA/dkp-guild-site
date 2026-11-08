@@ -113,7 +113,7 @@ function makeDb() {
     },
     auditLog: {
       create: async ({ data }) => {
-        audit.push(data);
+        audit.push({ actorMemberId: data.actorMemberId, action: data.action, entityType: data.entityType, entityId: data.entityId, comment: data.comment });
       },
     },
   };
@@ -299,6 +299,24 @@ describe('ConductService.checklist', () => {
       dkpEarned: 10,
     });
     expect(rows.find((r) => r.memberName === 'Второй')!.dkpEarned).toBe(0);
+  });
+});
+
+describe('Доступ к чек-листу', () => {
+  it('разрешает автору-Офицеру и РЛ, запрещает чужому Офицеру и пониженному автору', async () => {
+    const { db } = makeDb();
+    db.event.findUnique = async () => ({ ...EVENT, creatorId: 'm-author' });
+    const service = new ConductService(db, SETTINGS);
+    await expect(
+      service.checklistForActor('e-1', { memberId: 'm-author', isAdmin: false }, 'OFFICER'),
+    ).resolves.toHaveLength(3);
+    await expect(service.checklistForActor('e-1', RL, 'MEMBER')).resolves.toHaveLength(3);
+    await expect(
+      service.checklistForActor('e-1', { memberId: 'other', isAdmin: false }, 'OFFICER'),
+    ).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.checklistForActor('e-1', { memberId: 'm-author', isAdmin: false }, 'MEMBER'),
+    ).rejects.toThrow(ForbiddenException);
   });
 });
 

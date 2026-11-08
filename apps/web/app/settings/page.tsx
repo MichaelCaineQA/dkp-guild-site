@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { can, type SettingKey } from '@dkp/shared';
 import { useSession } from '../../components/session-context';
 import { SettingsEditor } from '../../components/settings-editor';
+import { GuildSettings } from '../../components/guild-settings';
 import { api } from '../../lib/api';
 import {
   Button,
@@ -106,6 +107,7 @@ export default function SettingsPage() {
     <Page width="wide">
       <PageHeader title="Справочники и настройки" />
       {error && <ErrorText>{error}</ErrorText>}
+      <GuildSettings />
 
       {settings && gameTime && (
         <SettingsEditor

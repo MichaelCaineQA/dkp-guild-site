@@ -28,7 +28,7 @@ const NAV_ITEMS: Array<{ href: string; label: string; icon: string; permission: 
     icon: 'book',
     permission: 'members.view_roster',
   },
-  { href: '/audit', label: 'Лог действий', icon: 'audit', permission: 'audit.view' },
+  { href: '/audit', label: 'Лог действий', icon: 'audit', permission: 'members.view_roster' },
   { href: '/settings', label: 'Настройки', icon: 'settings', permission: 'settings.manage' },
   { href: '/design', label: 'Витрина дизайна', icon: 'design', permission: 'settings.manage' },
 ];

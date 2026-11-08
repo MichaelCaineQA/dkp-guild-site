@@ -4,9 +4,11 @@ import { Field, Select } from './controls';
 export function WeaponPicker({
   value,
   onChange,
+  required = true,
 }: {
   value: readonly (Weapon | '')[];
   onChange: (weapons: Array<Weapon | ''>) => void;
+  required?: boolean;
 }) {
   return (
     <fieldset className="flex min-w-0 flex-wrap gap-3 [&_label]:flex-wrap [&_select]:max-w-full">
@@ -14,7 +16,7 @@ export function WeaponPicker({
       {[0, 1].map((index) => (
         <Field key={index} label={index === 0 ? 'Первое оружие' : 'Второе оружие'}>
           <Select
-            required
+            required={required}
             value={value[index] ?? ''}
             onChange={(event) => {
               const next: Array<Weapon | ''> = [value[0] ?? '', value[1] ?? ''];

@@ -4,7 +4,7 @@ export interface EventAbsenceRow {
   id: string;
   memberId: string;
   memberName: string;
-  reason: string;
+  reason: string | null;
   seenBy: string[];
 }
 export function EventAbsences({
@@ -38,7 +38,10 @@ export function EventAbsences({
           <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <div>
               <span className="font-medium">{row.memberName}</span>
-              <span className="text-secondary"> — {row.reason || 'Без причины'}</span>
+              <span className="text-secondary">
+                {' '}
+                — {row.reason === null ? 'Причина скрыта' : row.reason || 'Без причины'}
+              </span>
               {row.seenBy.length > 0 && <Muted> · Просмотрели: {row.seenBy.length}</Muted>}
             </div>
             {canSee && actorKey && (
