@@ -37,7 +37,10 @@ suite('Дашборд: PostgreSQL, границы дня и приватност
         nickname: 'dashboard-' + randomUUID().slice(0, 8),
         userId,
         packId,
-        rank: 'GUILD_LEADER',
+        // Ранг проверяется через аргумент actor в service.get, а не через БД:
+        // в базе уже есть сидированный Глава, а индекс Member_single_guild_leader
+        // не даст создать второго.
+        rank: 'OFFICER',
         weapons: ['STAFF', 'WAND'],
         combatRole: 'HEALER',
       },
@@ -98,7 +101,7 @@ suite('Дашборд: PostgreSQL, границы дня и приватност
       'Сбор 20',
     ]);
     expect(result.events).toHaveLength(5);
-    expect(result.audit).toBeNull();
+    expect(result.audit).toEqual([]);
     expect(result.team?.members[0]).not.toHaveProperty('gearScore');
   });
   it('Главе возвращает последний подтверждённый GS, остальным не раскрывает даже своё значение', async () => {

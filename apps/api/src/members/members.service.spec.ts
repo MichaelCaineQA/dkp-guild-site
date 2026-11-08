@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { MembersDb, Actor } from './members.service';
 import { MembersService } from './members.service';
 
@@ -13,6 +13,17 @@ function makeDb(
   }));
   const audit: Array<Record<string, string | null>> = [];
   const db: MembersDb = {
+    $transaction: async (work) => {
+      const oldMembers = structuredClone(members);
+      const oldAudit = structuredClone(audit);
+      try {
+        return await work(db);
+      } catch (error) {
+        members.splice(0, members.length, ...oldMembers);
+        audit.splice(0, audit.length, ...oldAudit);
+        throw error;
+      }
+    },
     member: {
       findMany: async ({ where, orderBy, include }) => {
         expect(orderBy).toEqual({ nickname: 'asc' });
@@ -30,7 +41,9 @@ function makeDb(
         return found ? { ...found } : null;
       },
       findFirst: async ({ where }) => {
-        const found = members.find((m) => m.nickname === where.nickname);
+        const found = members.find((m) =>
+          where.nickname !== undefined ? m.nickname === where.nickname : m.rank === where.rank,
+        );
         return found ? { ...found } : null;
       },
       count: async ({ where }) => members.filter((m) => m.rank === where.rank).length,
@@ -47,7 +60,7 @@ function makeDb(
     },
     auditLog: {
       create: async ({ data }) => {
-        audit.push(data);
+        audit.push({ actorMemberId: data.actorMemberId, action: data.action, entityType: data.entityType, entityId: data.entityId, comment: data.comment ?? null });
       },
     },
   };
@@ -263,13 +276,44 @@ describe('Ранги ADMIN/GUILD_LEADER не назначаются (решен�
     ).rejects.toThrow(ConflictException);
   });
 
-  it('changeRank на GUILD_LEADER — 409', async () => {
+  it('changeRank на GUILD_LEADER запрещён не Админу', async () => {
     const { db } = makeDb([{ id: 'm-1', nickname: 'Игрок', rank: 'MEMBER', combatRole: null }]);
     const service = new MembersService(db);
 
     await expect(
       service.changeRank('m-1', { rank: 'GUILD_LEADER', comment: 'попытка' }, ACTOR),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('Админ передаёт Главу атомарно, прежний становится рядовым', async () => {
+    const { db, members, audit } = makeDb([
+      { id: 'old', nickname: 'Старый', rank: 'GUILD_LEADER', combatRole: null },
+      { id: 'new', nickname: 'Новый', rank: 'OFFICER', combatRole: null },
+    ]);
+    const service = new MembersService(db);
+    await service.changeRank(
+      'new',
+      { rank: 'GUILD_LEADER', comment: 'Передача' },
+      { memberId: null, isAdmin: true, userId: 'admin' },
+    );
+    expect(members.map((m) => m.rank)).toEqual(['MEMBER', 'GUILD_LEADER']);
+    expect(audit[0]?.comment).toContain(
+      'ранг OFFICER → GUILD_LEADER; прежний Глава: Старый, GUILD_LEADER → MEMBER',
+    );
+  });
+
+  it('первое назначение и повторное назначение', async () => {
+    const { db, members, audit } = makeDb([
+      { id: 'new', nickname: 'Новый', rank: 'MEMBER', combatRole: null },
+    ]);
+    const service = new MembersService(db);
+    const admin = { memberId: null, isAdmin: true, userId: 'admin' };
+    await service.changeRank('new', { rank: 'GUILD_LEADER', comment: 'Назначение' }, admin);
+    await expect(
+      service.changeRank('new', { rank: 'GUILD_LEADER', comment: 'Повтор' }, admin),
     ).rejects.toThrow(ConflictException);
+    expect(members[0]?.rank).toBe('GUILD_LEADER');
+    expect(audit).toHaveLength(1);
   });
 
   it('create с рангом GUILD_LEADER — 409', async () => {

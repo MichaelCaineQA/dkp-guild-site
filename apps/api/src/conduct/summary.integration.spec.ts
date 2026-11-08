@@ -18,6 +18,7 @@ const db = {
       startsAt: new Date('2026-01-01'),
       endsAt: new Date('2026-01-02'),
       raidLeadId: 'rl',
+      creatorId: 'author',
       dkpReward: 10,
     }),
   },
@@ -87,6 +88,17 @@ describe('Пакет итогов через HTTP', () => {
     eventStatus = 'CANCELLED';
     expect((await post()).status).toBe(409);
     expect(ledger).toHaveBeenCalledTimes(1);
+  });
+  it('чек-лист и итоги доступны только автору-Офицеру или назначенному РЛ', async () => {
+    actor = { userId: 'u', username: 'Автор', memberId: 'author', rank: 'OFFICER', isAdmin: false };
+    expect((await fetch(url + '/events/e/conduct/checklist')).status).toBe(200);
+    expect((await post()).status).toBe(201);
+    actor.rank = 'MEMBER';
+    expect((await fetch(url + '/events/e/conduct/checklist')).status).toBe(403);
+    expect((await post()).status).toBe(403);
+    actor.memberId = 'other';
+    actor.rank = 'OFFICER';
+    expect((await fetch(url + '/events/e/conduct/checklist')).status).toBe(403);
   });
   it('невалидный пакет не записывается, чужого участника подставить нельзя', async () => {
     expect(

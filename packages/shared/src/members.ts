@@ -28,7 +28,7 @@ export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
 /** Смена ранга: обязательный комментарий — он уходит в AuditLog (правило 4). */
 export const changeRankSchema = z.object({
   rank: z.enum(RANKS),
-  comment: z.string().min(3).max(500),
+  comment: z.string().trim().min(3).max(500),
 });
 export type ChangeRankInput = z.infer<typeof changeRankSchema>;
 

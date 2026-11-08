@@ -47,8 +47,16 @@ export interface ConductDb {
   absence: {
     findMany(args: {
       where: { status: 'ACTIVE' };
-      select: { memberId: true; eventId: true; dateFrom: true; dateTo: true };
-    }): Promise<{ memberId: string; eventId: string | null; dateFrom: Date; dateTo: Date }[]>;
+      select: { memberId: true; eventId: true; dateFrom: true; dateTo: true; eligibleFrom: true };
+    }): Promise<
+      {
+        memberId: string;
+        eventId: string | null;
+        dateFrom: Date;
+        dateTo: Date;
+        eligibleFrom?: Date | null;
+      }[]
+    >;
     create(args: {
       data: { eventId: string; memberId: string; dateFrom: Date; dateTo: Date; reason: string };
     }): Promise<{ id: string }>;
@@ -72,6 +80,7 @@ export interface ConductDb {
       endsAt: Date;
       dkpReward: number;
       raidLeadId: string;
+      creatorId?: string | null;
       scope?: 'GUILD' | 'KP' | 'PACK';
       packId?: string | null;
       kpId?: string | null;
@@ -129,6 +138,7 @@ export interface ConductDb {
     create(args: {
       data: {
         actorMemberId: string | null;
+        actorIsAdmin?: boolean;
         action: string;
         entityType: string;
         entityId: string;
@@ -245,13 +255,14 @@ export class ConductService {
               eventId,
               memberId: action.memberId,
               dateFrom: event.startsAt,
-              dateTo: event.startsAt,
+              dateTo: event.endsAt,
               reason: action.reason,
             },
           });
           await service.db.auditLog.create({
             data: {
               actorMemberId: actor.memberId,
+              actorIsAdmin: actor.isAdmin,
               action: 'ABSENCE_CREATE',
               entityType: 'Absence',
               entityId: absence.id,
@@ -298,6 +309,15 @@ export class ConductService {
   }
 
   /** Чек-лист ивента: все члены + их отметки + отсутствующие. */
+  async checklistForActor(
+    eventId: string,
+    actor: EventsActor,
+    actorRank: string | null,
+  ): Promise<EventSummaryRow[]> {
+    await this.assertCanConduct(eventId, actor, actorRank, true);
+    return this.checklist(eventId);
+  }
+
   async checklist(eventId: string): Promise<EventSummaryRow[]> {
     const event = await this.mustGetEvent(eventId);
     const [members, attendance, entries, absences] = await Promise.all([
@@ -308,7 +328,7 @@ export class ConductService {
       this.db.dkpEntry.findMany({ where: { eventId } }),
       this.db.absence.findMany({
         where: { status: 'ACTIVE' },
-        select: { memberId: true, eventId: true, dateFrom: true, dateTo: true },
+        select: { memberId: true, eventId: true, dateFrom: true, dateTo: true, eligibleFrom: true },
       }),
     ]);
     const invited = members.filter((m) =>
@@ -318,7 +338,9 @@ export class ConductService {
       ),
     );
     const excused = absences
-      .filter((a) => (a.eventId ? a.eventId === eventId : absenceCoversEvent(a, event.startsAt)))
+      .filter((a) =>
+        a.eventId ? a.eventId === eventId : absenceCoversEvent(a, event.startsAt, event.endsAt),
+      )
       .map((a) => a.memberId);
     return buildEventSummary(invited, attendance, entries, event.id, excused);
   }
@@ -498,6 +520,7 @@ export class ConductService {
     await this.db.auditLog.create({
       data: {
         actorMemberId: actor.memberId,
+        actorIsAdmin: actor.isAdmin,
         action,
         entityType: 'Event',
         entityId,

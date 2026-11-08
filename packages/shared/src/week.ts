@@ -39,17 +39,26 @@ export interface ScopedEvent {
   packId: string | null;
   kpId: string | null;
   startsAt: Date;
+  endsAt?: Date;
 }
 /** Текущий приглашённый состав; пересекающиеся отсутствия не вычитаются дважды. */
 export function countEventParticipants(
   event: ScopedEvent,
   members: InvitedMember[],
-  absences: { memberId: string; dateFrom: Date; dateTo: Date; eventId?: string | null }[],
+  absences: {
+    memberId: string;
+    dateFrom: Date;
+    dateTo: Date;
+    eligibleFrom?: Date | null;
+    eventId?: string | null;
+  }[],
 ) {
   const invited = members.filter((m) => isEventInvitee(event, m));
   const absent = new Set(
     absences
-      .filter((a) => (a.eventId ? a.eventId === event.id : absenceCoversEvent(a, event.startsAt)))
+      .filter((a) =>
+        a.eventId ? a.eventId === event.id : absenceCoversEvent(a, event.startsAt, event.endsAt),
+      )
       .map((a) => a.memberId),
   );
   return {

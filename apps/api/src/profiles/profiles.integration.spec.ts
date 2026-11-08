@@ -75,8 +75,8 @@ const db: ProfilesDb = {
             : null;
         },
         update: async ({ data }) => {
-          draftRole = data.combatRole;
-          draftWeapons = data.weapons;
+          if (data.combatRole !== undefined) draftRole = data.combatRole;
+          if (data.weapons !== undefined) draftWeapons = data.weapons;
           if (data.avatar !== undefined) draftAvatar = data.avatar;
           if (data.avatarColor !== undefined) draftAvatarColor = data.avatarColor;
           return {};
@@ -240,7 +240,6 @@ describe('профили через HTTP', () => {
       combatRole: 'DPS',
       weapons: ['STAFF', 'WAND'],
       avatar: 'OCEAN',
-      comment: 'Новый аватар',
     };
     expect((await patch('m1', body)).status).toBe(200);
     expect((await patch('m1', body)).status).toBe(200);
@@ -248,6 +247,16 @@ describe('профили через HTTP', () => {
     expect(audit).toHaveLength(1);
     expect(audit[0]).toMatchObject({ comment: expect.stringContaining('OCEAN') });
     expect((await patch('m1', { ...body, avatar: 'INVALID' })).status).toBe(400);
+    expect((await patch('m1', { ...body, combatRole: 'TANK' })).status).toBe(400);
+  });
+  it('аватар можно сменить в старом профиле без роли и оружия', async () => {
+    role = null;
+    weapons = [];
+    expect((await patch('m1', { avatar: 'OCEAN' })).status).toBe(200);
+    expect(avatar).toBe('OCEAN');
+    expect(role).toBeNull();
+    expect(weapons).toEqual([]);
+    expect(audit).toHaveLength(1);
   });
   it('цвет меняется независимо от картинки, проверяется и журналируется', async () => {
     const body = {

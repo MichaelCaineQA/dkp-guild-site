@@ -59,7 +59,7 @@ suite('Участие: PostgreSQL, атомарность и конкурент�
     ]);
     const rows = await db.absence.findMany({ where: { memberId } });
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ dateFrom: start, dateTo: start, reason: '' });
+    expect(rows[0]).toMatchObject({ dateFrom: start, dateTo: new Date(+start + 3600000), reason: '' });
     expect(await db.auditLog.count({ where: { actorMemberId: memberId } })).toBe(1);
     await service.update(eventId, memberId, { attending: true, absenceIds: rows.map((a) => a.id) });
     expect((await service.get(eventId, memberId)).attending).toBe(true);

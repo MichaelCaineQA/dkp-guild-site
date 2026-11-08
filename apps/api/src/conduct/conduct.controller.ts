@@ -15,8 +15,13 @@ export class ConductController {
   /** Чек-лист: все члены, отметки, ДКП по ивенту. */
   @Get('checklist')
   @RequirePermission('members.view_roster')
-  checklist(@Param('eventId') eventId: string) {
-    return this.conduct.checklist(eventId);
+  checklist(@Param('eventId') eventId: string, @Req() req: AuthedRequest) {
+    const user = req.session!.user!;
+    return this.conduct.checklistForActor(
+      eventId,
+      { memberId: user.memberId, isAdmin: user.isAdmin },
+      user.rank,
+    );
   }
 
   @Post('summary')

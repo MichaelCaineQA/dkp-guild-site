@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -17,6 +18,7 @@ import {
   type RosterQuery,
   type UpdateMemberInput,
 } from '@dkp/shared';
+import { serializable } from '../prisma/serializable';
 
 /** Строка состава для UI. */
 export interface RosterRow {
@@ -45,6 +47,7 @@ export interface AuditWriter {
   create(args: {
     data: {
       actorMemberId: string | null;
+      actorIsAdmin?: boolean;
       action: string;
       entityType: string;
       entityId: string;
@@ -55,6 +58,10 @@ export interface AuditWriter {
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
 export interface MembersDb {
+  $transaction<T>(
+    work: (tx: Omit<MembersDb, '$transaction'>) => Promise<T>,
+    options: { isolationLevel: 'Serializable'; timeout?: number },
+  ): Promise<T>;
   member: {
     findMany(args: {
       where: { rank?: string; combatRole?: string; weapons?: { has: Weapon } };
@@ -73,7 +80,7 @@ export interface MembersDb {
       }>
     >;
     findUnique(args: { where: { id: string } }): Promise<MemberRow | null>;
-    findFirst(args: { where: { nickname: string } }): Promise<{ id: string } | null>;
+    findFirst(args: { where: { nickname?: string; rank?: string } }): Promise<MemberRow | null>;
     count(args: { where: { rank: string } }): Promise<number>;
     create(args: {
       data: { nickname: string; rank: string; combatRole: string | null; weapons: Weapon[] };
@@ -219,9 +226,44 @@ export class MembersService {
   async changeRank(id: string, body: unknown, actor: Actor): Promise<MemberRow> {
     const input: ChangeRankInput = changeRankSchema.parse(body);
 
-    if (input.rank === 'ADMIN' || input.rank === 'GUILD_LEADER') {
-      throw new ConflictException(
-        'Роли «Админ» и «Глава» не назначаются: админ входит только по кредам, глава — единственный',
+    if (input.rank === 'ADMIN') throw new ConflictException('Ранг Админ не назначается участнику');
+
+    if (input.rank === 'GUILD_LEADER') {
+      if (!actor.isAdmin) throw new ForbiddenException('Назначить Главу может только Админ');
+      return serializable(
+        this.db,
+        async (tx) => {
+          const member = await tx.member.findUnique({ where: { id } });
+          if (!member) throw new NotFoundException('Член гильдии не найден');
+          if (member.rank === 'GUILD_LEADER') throw new ConflictException('У члена уже этот ранг');
+          const previous = await tx.member.findFirst({ where: { rank: 'GUILD_LEADER' } });
+          if (previous)
+            await tx.member.update({ where: { id: previous.id }, data: { rank: 'MEMBER' } });
+          const updated = await tx.member.update({ where: { id }, data: { rank: 'GUILD_LEADER' } });
+          await tx.auditLog.create({
+            data: {
+              actorMemberId: actor.memberId,
+              actorIsAdmin: actor.isAdmin,
+              action: 'ROLE_CHANGE',
+              entityType: 'Member',
+              entityId: id,
+              comment: `Админ назначил Главой ${member.nickname} (ранг ${member.rank} → GUILD_LEADER; прежний Глава: ${previous?.nickname ?? 'не назначен'}${previous ? ', GUILD_LEADER → MEMBER' : ''}). ${input.comment}`,
+            },
+          });
+          if (previous)
+            await tx.auditLog.create({
+              data: {
+                actorMemberId: actor.memberId,
+                actorIsAdmin: actor.isAdmin,
+                action: 'ROLE_CHANGE',
+                entityType: 'Member',
+                entityId: previous.id,
+                comment: `Админ передал роль Главы участнику ${member.nickname}; ваш ранг: GUILD_LEADER → MEMBER. ${input.comment}`,
+              },
+            });
+          return updated;
+        },
+        true,
       );
     }
 
@@ -272,6 +314,7 @@ export class MembersService {
     await this.db.auditLog.create({
       data: {
         actorMemberId: actor.memberId,
+        actorIsAdmin: actor.isAdmin,
         action,
         entityType: 'Member',
         entityId,

@@ -36,6 +36,7 @@ export class AuditInterceptor implements NestInterceptor {
         const actor = request.session?.user;
         await this.audit.record({
           actorMemberId: actor?.memberId ?? null,
+          actorIsAdmin: actor?.isAdmin ?? false,
           action: metadata.action,
           entityType: metadata.entityType,
           entityId: String(request.params.id ?? actor?.userId ?? 'unknown'),

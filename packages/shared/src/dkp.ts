@@ -1,4 +1,13 @@
 import { z } from 'zod';
+
+export const adminDkpGrantSchema = z
+  .object({
+    requestId: z.string().uuid(),
+    memberId: z.string().min(1),
+    amount: z.number().int().positive().max(2147483647),
+    comment: z.string().trim().min(3).max(500),
+  })
+  .strict();
 import { DKP_ENTRY_TYPES } from './domain';
 
 /**

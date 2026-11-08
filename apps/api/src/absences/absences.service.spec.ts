@@ -89,6 +89,7 @@ function makeDb(seed: Array<Partial<AbsenceRecord> & { id: string }> = []) {
       },
     },
     event: {
+      findUnique: async () => null,
       findMany: async ({ where }) =>
         events.filter(
           (e) =>
@@ -114,7 +115,13 @@ function makeDb(seed: Array<Partial<AbsenceRecord> & { id: string }> = []) {
     },
     auditLog: {
       create: async ({ data }) => {
-        audit.push(data);
+        audit.push({
+          actorMemberId: data.actorMemberId,
+          action: data.action,
+          entityType: data.entityType,
+          entityId: data.entityId,
+          comment: data.comment ?? null,
+        });
       },
     },
   };
@@ -160,7 +167,7 @@ describe('AbsencesService.create', () => {
     ).rejects.toThrow(ConflictException);
   });
 
-  it('меньше 3 минут до старта пересекающего ивента — 409', async () => {
+  it('меньше 3 минут до старта — заявка сохраняет границу допустимости', async () => {
     const { db, events } = makeDb();
     // Ивент через 2 минуты — в периоде заявки
     events.push({ startsAt: new Date('2026-03-10T12:02:00Z'), status: 'PLANNED' });
@@ -172,10 +179,10 @@ describe('AbsencesService.create', () => {
         createBody({ dateFrom: '2026-03-10T00:00:00Z', dateTo: '2026-03-11T00:00:00Z' }),
         ACTOR,
       ),
-    ).rejects.toThrow(ConflictException);
+    ).resolves.toBeDefined();
   });
 
-  it('ревизия: уже начавшийся (RUNNING) ивент в периоде — заявку подать нельзя', async () => {
+  it('начавшийся ивент не блокирует заявку на остаток дня', async () => {
     const { db, events } = makeDb();
     events.push({ startsAt: new Date('2026-03-10T11:00:00Z'), status: 'RUNNING' }); // начался час назад
     const service = new AbsencesService(db, SETTINGS, clock);
@@ -186,7 +193,7 @@ describe('AbsencesService.create', () => {
         createBody({ dateFrom: '2026-03-10T00:00:00Z', dateTo: '2026-03-11T00:00:00Z' }),
         ACTOR,
       ),
-    ).rejects.toThrow(ConflictException);
+    ).resolves.toBeDefined();
   });
 });
 
@@ -280,6 +287,57 @@ describe('AbsencesService.markSeen', () => {
 });
 
 describe('AbsencesService.forEvent / markExcusedForFinishedEvent', () => {
+  it('использует сохранённый интервал события при запросе по его ID', async () => {
+    const { db } = makeDb([
+      {
+        id: 'a',
+        dateFrom: new Date('2026-03-20T17:30:00Z'),
+        dateTo: new Date('2026-03-20T18:30:00Z'),
+      },
+    ]);
+    db.event.findUnique = async () => ({
+      startsAt: new Date('2026-03-20T17:00:00Z'),
+      endsAt: new Date('2026-03-20T18:00:00Z'),
+    });
+    const service = new AbsencesService(db, SETTINGS, clock);
+    expect(
+      await service.forEventId('event', { memberId: 'm-1', isAdmin: false, rank: 'MEMBER' }),
+    ).toHaveLength(1);
+  });
+  it('не раскрывает причину чужой заявки рядовому, но показывает автору и руководству', async () => {
+    const { db } = makeDb([{ id: 'a-1', memberId: 'm-1', reason: 'Личная причина' }]);
+    const service = new AbsencesService(db, SETTINGS, clock);
+    const date = new Date('2026-03-20T17:00:00Z');
+    for (const actor of [
+      { memberId: 'm-1', isAdmin: false, rank: 'MEMBER' },
+      { memberId: 'm-2', isAdmin: false, rank: 'OFFICER' },
+      { memberId: 'm-2', isAdmin: false, rank: 'GUILD_LEADER' },
+      { memberId: null, isAdmin: true, rank: null },
+    ])
+      expect((await service.forEvent(date, undefined, actor))[0]?.reason).toBe('Личная причина');
+    expect(
+      (
+        await service.forEvent(date, undefined, { memberId: 'm-2', isAdmin: false, rank: 'MEMBER' })
+      )[0]?.reason,
+    ).toBeNull();
+  });
+
+  it('показывает причину лидеру пака автора, но не лидеру другого пака', async () => {
+    const { db } = makeDb([{ id: 'a-1', memberId: 'm-1', reason: 'Личная причина' }]);
+    const findMany = db.absence.findMany;
+    db.absence.findMany = async (args) =>
+      (await findMany(args)).map((row) => ({
+        ...row,
+        member: { ...row.member, pack: { leaderId: 'pack-leader' } },
+      }));
+    const service = new AbsencesService(db, SETTINGS, clock);
+    const date = new Date('2026-03-20T17:00:00Z');
+    const actor = { memberId: 'pack-leader', isAdmin: false, rank: 'MEMBER' };
+    expect((await service.forEvent(date, undefined, actor))[0]?.reason).toBe('Личная причина');
+    expect(
+      (await service.forEvent(date, undefined, { ...actor, memberId: 'other-leader' }))[0]?.reason,
+    ).toBeNull();
+  });
   it('находит заявки, покрывающие дату ивента', async () => {
     const { db } = makeDb([
       { id: 'a-1', memberId: 'm-1' }, // 20–21 марта — покрывает ивент 20-го

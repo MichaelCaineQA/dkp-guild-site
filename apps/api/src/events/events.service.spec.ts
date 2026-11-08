@@ -12,6 +12,7 @@ interface EventRecord {
   endsAt: Date;
   dkpReward: number;
   raidLeadId: string;
+  creatorId?: string | null;
   place: string | null;
   notes: string | null;
   seriesId: string | null;
@@ -87,6 +88,7 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
           endsAt: data.endsAt,
           dkpReward: data.dkpReward,
           raidLeadId: data.raidLeadId,
+          creatorId: data.creatorId,
           place: data.place ?? null,
           notes: data.notes ?? null,
           seriesId: data.seriesId ?? null,
@@ -124,7 +126,7 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
     },
     auditLog: {
       create: async ({ data }) => {
-        audit.push(data);
+        audit.push({ actorMemberId: data.actorMemberId, action: data.action, entityType: data.entityType, entityId: data.entityId, comment: data.comment ?? null });
       },
     },
   };
@@ -148,11 +150,12 @@ function createBody(overrides: Record<string, unknown> = {}) {
 
 describe('EventsService.create', () => {
   it('создаёт ивент и пишет аудит с платой и режимом', async () => {
-    const { db, audit } = makeDb();
+    const { db, events, audit } = makeDb();
     const service = new EventsService(db);
 
-    const result = await service.create(createBody(), ACTOR);
+    const result = await service.create(createBody({ creatorId: 'forged' }), ACTOR);
     expect(result.id).toBeDefined();
+    expect(events[0].creatorId).toBe(ACTOR.memberId);
     expect(audit[0]).toMatchObject({ action: 'EVENT_CREATE', entityType: 'Event' });
     expect(audit[0]!.comment).toContain('плата 10 ДКП');
   });
@@ -207,6 +210,7 @@ describe('EventsService.createSeries / deleteSeries', () => {
     expect(result.created).toBe(8);
     const series = events.filter((e) => e.seriesId === result.seriesId);
     expect(series).toHaveLength(8);
+    expect(series.every((event) => event.creatorId === ACTOR.memberId)).toBe(true);
     expect(audit[0]).toMatchObject({ action: 'EVENT_SERIES_CREATE', entityId: result.seriesId });
   });
 

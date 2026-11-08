@@ -1,0 +1,2 @@
+ALTER TABLE "Absence" ADD COLUMN "eligibleFrom" TIMESTAMP(3);
+ALTER TABLE "Absence" ADD COLUMN "allDay" BOOLEAN NOT NULL DEFAULT false;

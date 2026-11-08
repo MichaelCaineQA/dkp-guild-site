@@ -270,8 +270,7 @@ def start(c, release, first=False):
     check_https(c)
     installed.write_text(release['version'] + '\n')
     print('Сайт: https://' + c['domain'])
-    if c.get('leader_pending'):
-        print('Глава ещё не назначен. Необходимо завершить его явное назначение.')
+    print('При первой настройке назначьте Главу в разделе «Состав» под учётной записью Админа.')
 
 def check_https(c):
     url = 'https://' + c['domain'] + '/api/health'
@@ -488,56 +487,8 @@ def backup_list(c):
     for backup_id in sorted(found):
         print(backup_id)
 
-LEADER_SCRIPT = r'''
-const { PrismaClient } = require('@prisma/client');
-const fs = require('fs');
-const input = JSON.parse(fs.readFileSync(0, 'utf8'));
-const db = new PrismaClient();
-(async () => {
-  const user = await db.user.findUnique({ where: { discordId: input.discordId }, include: { member: true } });
-  if (!user) throw new Error('Указанный Discord-пользователь ещё не входил на сайт');
-  if (input.action === 'lookup') {
-    console.log(JSON.stringify({ username: user.username, nickname: user.member?.nickname ?? null }));
-    return;
-  }
-  if (!user.member) throw new Error('Сначала одобрите анкету пользователя в аккаунте администратора');
-  await db.$transaction(async (tx) => {
-    const leader = await tx.member.findFirst({ where: { rank: 'GUILD_LEADER' } });
-    if (leader) {
-      if (leader.userId === user.id) return;
-      throw new Error('Глава уже назначен; повторная инициализация запрещена');
-    }
-    const member = await tx.member.update({ where: { id: user.member.id }, data: { rank: 'GUILD_LEADER' } });
-    await tx.auditLog.create({ data: { action: 'ROLE_CHANGE', entityType: 'Member', entityId: member.id,
-      comment: 'Первоначальное назначение Главы администратором через установщик' } });
-  }, { isolationLevel: 'Serializable' });
-  console.log(JSON.stringify({ ok: true }));
-})().catch(e => { console.error(e.message); process.exitCode = 1; }).finally(() => db.$disconnect());
-'''
-
 def leader_setup(c, release):
-    if not c.get('leader_pending'):
-        fail('Первоначальное назначение Главы уже завершено.')
-    discord_id = prompt('Discord ID пользователя, который уже вошёл на сайт')
-    if not re.fullmatch(r'\d{15,22}', discord_id):
-        fail('Discord ID должен состоять из 15–22 цифр.')
-    def call(payload):
-        result = compose(c, release, 'exec', '-T', 'api', 'node', '-e', LEADER_SCRIPT,
-                         input=json.dumps(payload, ensure_ascii=False), text=True,
-                         stdout=subprocess.PIPE)
-        return json.loads(result.stdout)
-    user = call({'action': 'lookup', 'discordId': discord_id})
-    print('Пользователь Discord:', user['username'], '; ID:', discord_id)
-    nickname = user['nickname']
-    if not nickname:
-        fail('Сначала одобрите анкету этого пользователя в аккаунте администратора.')
-    print('Игровой ник:', nickname)
-    if prompt('Подтвердите назначение этого пользователя Главой: введите да', 'нет').lower() != 'да':
-        fail('Назначение отменено.')
-    call({'action': 'assign', 'discordId': discord_id, 'nickname': nickname})
-    c['leader_pending'] = False
-    atomic_json(CONFIG, c)
-    print('Глава назначен; действие записано в аудит.')
+    print('Одобрите участника и назначьте Главу в разделе «Состав» под учётной записью Админа.')
 
 def backup_restore(c, release, backup_id):
     global ROOT, MANIFEST
@@ -831,8 +782,6 @@ def main():
             print('Версия:', release['version'], '\nАдрес: https://' + c['domain'])
             if (STATE / 'migration-failed').exists():
                 print('Внимание: прервана миграция или восстановление; требуется восстановить резервную копию.')
-            if c.get('leader_pending'):
-                print('Глава не назначен.')
             backup_status = STATE / 'backup-status.json'
             if backup_status.exists():
                 print('Последний бэкап:', backup_status.read_text(encoding='utf-8').strip())

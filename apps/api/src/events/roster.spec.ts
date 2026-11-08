@@ -4,6 +4,7 @@ import { ParticipationService } from './participation.service';
 describe('Состав события', () => {
   const event = {
     startsAt: new Date('2026-11-09T17:00:00Z'),
+    endsAt: new Date('2026-11-09T18:00:00Z'),
     scope: 'PACK',
     kpId: null,
     packId: 'p',
@@ -12,7 +13,17 @@ describe('Состав события', () => {
   const db = {
     event: { findUnique: jest.fn(async () => event) },
     member: { findMany },
-    absence: { findMany: jest.fn(async () => [{ memberId: 'a' }]) },
+    absence: {
+      findMany: jest.fn(async () => [
+        {
+          memberId: 'a',
+          eventId: 'e',
+          dateFrom: event.startsAt,
+          dateTo: event.endsAt,
+          eligibleFrom: null,
+        },
+      ]),
+    },
   };
   const service = new ParticipationService(db as unknown as PrismaClient);
   beforeEach(() => {

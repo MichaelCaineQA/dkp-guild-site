@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import {
   countEventParticipants,
+  absenceCoversEvent,
   isEventInvitee,
   participationActions,
   parseSettingValue,
@@ -34,6 +35,7 @@ export class WeekService {
         endsAt: true,
         dkpReward: true,
         raidLeadId: true,
+        creatorId: true,
         raidLead: { select: { nickname: true } },
         place: true,
         notes: true,
@@ -54,7 +56,7 @@ export class WeekService {
             { eventId: null, dateFrom: { lt: to }, dateTo: { gte: from } },
           ],
         },
-        select: { memberId: true, dateFrom: true, dateTo: true, eventId: true },
+        select: { memberId: true, dateFrom: true, dateTo: true, eventId: true, eligibleFrom: true },
       }),
       this.db.setting.findUnique({
         where: { key: 'absence.deadlineBeforeStartSec' },
@@ -81,10 +83,10 @@ export class WeekService {
             a.memberId === memberId &&
             (a.eventId
               ? a.eventId === event.id
-              : +a.dateFrom <= +event.startsAt && +a.dateTo >= +event.startsAt),
+              : absenceCoversEvent(a, event.startsAt, event.endsAt)),
         ),
       ...countEventParticipants(
-        { id: event.id, scope, kpId, packId, startsAt: event.startsAt },
+        { id: event.id, scope, kpId, packId, startsAt: event.startsAt, endsAt: event.endsAt },
         roster,
         absences,
       ),

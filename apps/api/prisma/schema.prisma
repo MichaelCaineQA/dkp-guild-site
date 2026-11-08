@@ -107,6 +107,8 @@ enum ItemTargetRole {
 }
 
 model Guild {
+  crest Bytes?
+  crestMime String?
   id String @id @default(cuid())
   name String
 
@@ -203,6 +205,7 @@ model Member {
 
   // РЛ — не ранг, а назначение на конкретный ивент (раздел 2.6).
   raidEvents Event[] @relation("EventRaidLead")
+  createdEvents Event[] @relation("EventCreator")
 
   attendance Attendance[]
   manualAttendance Attendance[] @relation("ManualAttendanceBy")
@@ -241,6 +244,8 @@ model Event {
   kp KP? @relation("EventKP", fields: [kpId], references: [id])
   raidLeadId String
   raidLead Member @relation("EventRaidLead", fields: [raidLeadId], references: [id])
+  creatorId String?
+  creator Member? @relation("EventCreator", fields: [creatorId], references: [id], onDelete: SetNull)
   startsAt DateTime
   endsAt DateTime
 
@@ -312,6 +317,8 @@ model Absence {
   member Member @relation(fields: [memberId], references: [id])
   dateFrom DateTime
   dateTo DateTime
+  eligibleFrom DateTime?
+  allDay Boolean @default(false)
   reason String
   status AbsenceStatus @default(ACTIVE)
   seenBy AbsenceSeen[]
@@ -410,6 +417,7 @@ model LootAward {
 /// ЖУРНАЛ ДКП — append-only. Баланс = SUM(amount), снапшоты для дашбордов — позже.
 model DkpEntry {
   id String @id @default(cuid())
+  requestId String? @unique
   memberId String
   member Member @relation(fields: [memberId], references: [id])
   type DkpEntryType
@@ -468,6 +476,7 @@ model PrimeTimeSlot {
 model AuditLog {
   id String @id @default(cuid())
   actorMemberId String?
+  actorIsAdmin Boolean @default(false)
   actor Member? @relation(fields: [actorMemberId], references: [id])
   action String // например: ROLE_CHANGE, MANUAL_ATTENDANCE, AUCTION_ASSIGN_WINNER
   entityType String

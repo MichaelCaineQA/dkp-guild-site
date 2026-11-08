@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RosterPage from './page';
 
@@ -102,5 +102,40 @@ describe('RosterPage', () => {
     render(<RosterPage />);
     expect(await screen.findByText('Alpha')).toBeDefined();
     expect(screen.queryByText('Добавить члена')).toBeNull();
+  });
+
+  it('Админ начисляет выбранному участнику положительную сумму с комментарием', async () => {
+    mockSession({
+      userId: 'admin:root',
+      username: 'Админ',
+      memberId: null,
+      rank: null,
+      isAdmin: true,
+    });
+    vi.mocked(api).mockImplementation(async (path) =>
+      path.startsWith('/members')
+        ? [
+            {
+              id: 'm1',
+              nickname: 'Alpha',
+              rank: 'MEMBER',
+              combatRole: 'DPS',
+              weapons: [],
+              discord: null,
+            },
+          ]
+        : { id: 'entry' },
+    );
+    render(<RosterPage />);
+    fireEvent.click((await screen.findByText('Alpha')).closest('tr')!);
+    fireEvent.change(screen.getByLabelText('Сумма ДКП'), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText('Комментарий'), { target: { value: 'Помощь' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Начислить ДКП' }));
+    await waitFor(() =>
+      expect(api).toHaveBeenCalledWith(
+        '/dkp/admin-grants',
+        expect.objectContaining({ method: 'POST', body: expect.stringContaining('"amount":10') }),
+      ),
+    );
   });
 });

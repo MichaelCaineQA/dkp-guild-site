@@ -1,0 +1,2 @@
+ALTER TABLE "Event" ADD COLUMN "creatorId" TEXT;
+ALTER TABLE "Event" ADD CONSTRAINT "Event_creatorId_fkey" FOREIGN KEY ("creatorId") REFERENCES "Member"("id") ON DELETE SET NULL ON UPDATE CASCADE;

@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard';
 import { PermissionsGuard, RequirePermission } from '../permissions/permissions.guard';
 import { AbsencesService } from './absences.service';
@@ -14,6 +25,7 @@ export class AbsencesController {
 
   /** Свои заявки. */
   @Get('mine')
+  @Header('Cache-Control', 'private, no-store')
   @RequirePermission('members.view_roster')
   mine(@Req() req: AuthedRequest) {
     const user = req.session!.user!;
@@ -22,6 +34,7 @@ export class AbsencesController {
 
   /** Все активные заявки — Главе и Админу. */
   @Get()
+  @Header('Cache-Control', 'private, no-store')
   @RequirePermission('absence.see')
   list() {
     return this.absences.list();
@@ -29,10 +42,19 @@ export class AbsencesController {
 
   /** Отсутствующие по конкретному ивенту (для карточки/проведения). */
   @Get('for-event')
+  @Header('Cache-Control', 'private, no-store')
   @RequirePermission('members.view_roster')
-  forEvent(@Query('startsAt') startsAt?: string, @Query('eventId') eventId?: string) {
+  forEvent(
+    @Req() req: AuthedRequest,
+    @Query('startsAt') startsAt?: string,
+    @Query('eventId') eventId?: string,
+    @Query('endsAt') endsAt?: string,
+  ) {
     const date = startsAt ? new Date(startsAt) : new Date();
-    return this.absences.forEvent(date, eventId);
+    const user = req.session!.user!;
+    const actor = { memberId: user.memberId, isAdmin: user.isAdmin, rank: user.rank };
+    if (eventId) return this.absences.forEventId(eventId, actor);
+    return this.absences.forEvent(date, undefined, actor, endsAt ? new Date(endsAt) : undefined);
   }
 
   @Post()

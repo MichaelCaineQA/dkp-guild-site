@@ -38,6 +38,7 @@ export interface EventRow {
   endsAt: Date;
   dkpReward: number;
   raidLeadId: string;
+  creatorId?: string | null;
   raidLeadName: string;
   place: string | null;
   notes: string | null;
@@ -77,6 +78,7 @@ export interface EventsDb {
         endsAt: Date;
         dkpReward: number;
         raidLeadId: string;
+        creatorId?: string | null;
         place: string | null;
         notes: string | null;
         seriesId: string | null;
@@ -99,6 +101,7 @@ export interface EventsDb {
         endsAt: Date;
         dkpReward: number;
         raidLeadId: string;
+        creatorId?: string | null;
         place?: string | null;
         notes?: string | null;
         seriesId?: string;
@@ -191,6 +194,7 @@ export class EventsService {
           endsAt: input.endsAt,
           dkpReward: input.dkpReward,
           raidLeadId: input.raidLeadId,
+          creatorId: actor.memberId,
           place: input.place ?? null,
           notes: input.notes ?? null,
         },
@@ -232,6 +236,7 @@ export class EventsService {
           mode: input.mode,
           dkpReward: input.dkpReward,
           raidLeadId: input.raidLeadId,
+          creatorId: actor.memberId,
           place: input.place ?? null,
           notes: input.notes ?? null,
         })),
@@ -371,7 +376,7 @@ export class EventsService {
     // EXCUSED_ABSENCE (план 2.3, issue #11). Хук опционален: без него
     // (старые вызовы/тесты) завершение работает как раньше.
     if (input.status === 'FINISHED' && this.onEventFinished) {
-      const marked = await this.onEventFinished(id, event.startsAt);
+      const marked = await this.onEventFinished(id, event.startsAt, event.endsAt);
       if (marked > 0) {
         await this.audit(
           actor,
@@ -385,7 +390,7 @@ export class EventsService {
   }
 
   /** Хук завершения ивента — ставится модулем отсутствий (issue #11). */
-  onEventFinished?: (eventId: string, startsAt: Date) => Promise<number>;
+  onEventFinished?: (eventId: string, startsAt: Date, endsAt: Date) => Promise<number>;
 
   private toRow(event: {
     name: string;
@@ -397,6 +402,7 @@ export class EventsService {
     endsAt: Date;
     dkpReward: number;
     raidLeadId: string;
+    creatorId?: string | null;
     place: string | null;
     notes: string | null;
     eventType: { name: string };
@@ -413,6 +419,7 @@ export class EventsService {
       endsAt: event.endsAt,
       dkpReward: event.dkpReward,
       raidLeadId: event.raidLeadId,
+      creatorId: event.creatorId ?? null,
       raidLeadName: event.raidLead.nickname,
       place: event.place,
       notes: event.notes,
@@ -468,6 +475,7 @@ export class EventsService {
     await writer.create({
       data: {
         actorMemberId: actor.memberId,
+        actorIsAdmin: actor.isAdmin,
         action,
         entityType,
         entityId,

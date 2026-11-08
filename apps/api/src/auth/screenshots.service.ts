@@ -46,7 +46,10 @@ export class ScreenshotsService {
     const mime = imageMime(file.buffer);
     if (!mime || file.mimetype !== mime)
       throw new BadRequestException('Допустимы только изображения PNG, JPG и WebP');
-    const user = await this.db.user.findUnique({ where: { id: userId } });
+    const user = await this.db.user.findUnique({
+      where: { id: userId },
+      select: { discordId: true, member: { select: { id: true } } },
+    });
     if (!user?.discordId) throw new BadRequestException('Для загрузки войдите через Discord');
     const id = randomUUID();
     await mkdir(this.directory, { recursive: true });
@@ -57,6 +60,7 @@ export class ScreenshotsService {
         await tx.screenshot.create({ data: { id, userId, mime } });
         await tx.auditLog.create({
           data: {
+            actorMemberId: user.member?.id ?? null,
             action: 'SCREENSHOT_UPLOAD',
             entityType: 'Screenshot',
             entityId: id,

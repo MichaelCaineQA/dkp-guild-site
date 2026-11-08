@@ -27,6 +27,8 @@ export interface AuditRow {
   action: string;
   entityType: string;
   entityId: string;
+  /** Текущее отображаемое имя сущности участника; ID остаётся ключом. */
+  entityName?: string | null;
   comment: string | null;
   createdAt: string;
 }

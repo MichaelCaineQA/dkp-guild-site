@@ -128,6 +128,14 @@ describe('права существующего ивента и финальны
     expect(can(officer, 'events.conduct', { raidLeadId: 'm-self' })).toBe(true);
     expect(can(officer, 'dkp.penalty', { raidLeadId: 'other' })).toBe(false);
     expect(can(officer, 'dkp.penalty', { raidLeadId: 'm-self' })).toBe(true);
+    expect(can(officer, 'events.conduct', { raidLeadId: 'other', creatorId: 'm-self' })).toBe(true);
+    expect(can(officer, 'events.conduct', { raidLeadId: 'other', creatorId: null })).toBe(false);
+    expect(
+      can(actor({ rank: 'MEMBER' }), 'events.conduct', {
+        raidLeadId: 'other',
+        creatorId: 'm-self',
+      }),
+    ).toBe(false);
   });
   it('рядовой РЛ управляет своим ивентом, но не создаёт новый', () => {
     expect(canManageEvent(actor({}), { raidLeadId: 'm-self' })).toBe(true);

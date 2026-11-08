@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export const guildNameSchema = z.string().trim().min(1).max(80);
+
 /**
  * Реестр настроек системы (issue #7): игровые правила живут в модели Setting,
  * не константами в коде (AGENTS.md, правило 3). Ключи совпадают с seed'ом;

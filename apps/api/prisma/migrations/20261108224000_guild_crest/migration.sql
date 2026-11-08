@@ -1,0 +1,1 @@
+ALTER TABLE "Guild" ADD COLUMN "crest" BYTEA, ADD COLUMN "crestMime" TEXT;

@@ -4,13 +4,16 @@ import type { AuditWriter } from '../members/members.service';
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
 export interface EventTypesDb {
   eventType: {
-    findMany(args: { orderBy: { name: 'asc' } }): Promise<
-      Array<{ id: string; name: string; _count?: { events: number } }>
-    >;
+    findMany(args: {
+      orderBy: { name: 'asc' };
+    }): Promise<Array<{ id: string; name: string; _count?: { events: number } }>>;
     findUnique(args: { where: { id: string } }): Promise<{ id: string; name: string } | null>;
     findFirst(args: { where: { name: string } }): Promise<{ id: string } | null>;
     create(args: { data: { name: string } }): Promise<{ id: string; name: string }>;
-    update(args: { where: { id: string }; data: { name: string } }): Promise<{ id: string; name: string }>;
+    update(args: {
+      where: { id: string };
+      data: { name: string };
+    }): Promise<{ id: string; name: string }>;
     delete(args: { where: { id: string } }): Promise<unknown>;
   };
   auditLog: AuditWriter;
@@ -53,12 +56,7 @@ export class EventTypesService {
       throw new ConflictException('Такой тип ивента уже есть');
     }
     const updated = await this.db.eventType.update({ where: { id }, data: { name: clean } });
-    await this.audit(
-      actor,
-      'EVENT_TYPE_UPDATE',
-      id,
-      `Тип ивента «${existing.name}» → «${clean}»`,
-    );
+    await this.audit(actor, 'EVENT_TYPE_UPDATE', id, `Тип ивента «${existing.name}» → «${clean}»`);
     return updated;
   }
 
@@ -85,6 +83,7 @@ export class EventTypesService {
     await this.db.auditLog.create({
       data: {
         actorMemberId: actor.memberId,
+        actorIsAdmin: actor.isAdmin,
         action,
         entityType: 'EventType',
         entityId,

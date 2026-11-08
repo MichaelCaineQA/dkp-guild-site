@@ -78,6 +78,7 @@ export const RAID_LEAD_ACTIONS: ReadonlySet<Permission> = new Set([
 /** Цель действия: ивент (или другое) с назначенным РЛ, если применимо. */
 export interface PermissionTarget {
   raidLeadId?: string;
+  creatorId?: string | null;
 }
 
 export function rankAtLeast(rank: Rank, min: Rank): boolean {
@@ -96,6 +97,13 @@ export function can(
 ): boolean {
   if (actor.isAdmin) return true;
   if (actor.rank === null) return false;
+  if (
+    actor.rank === 'OFFICER' &&
+    actor.memberId &&
+    target?.creatorId === actor.memberId &&
+    RAID_LEAD_ACTIONS.has(action)
+  )
+    return true;
   // Права «РЛ ивента» действуют на ивентах, где актор назначен рейд-лидом.
   if (
     target?.raidLeadId !== undefined &&

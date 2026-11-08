@@ -26,12 +26,20 @@ export class RulesController {
   @RequirePermission('rules.edit')
   update(@Param('slug') slug: string, @Body() body: unknown, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
-    return this.rules.update(slug, body, { memberId: user.memberId, userId: user.userId });
+    return this.rules.update(slug, body, {
+      memberId: user.memberId,
+      userId: user.userId,
+      isAdmin: user.isAdmin,
+    });
   }
   @Post(':slug/restore')
   @RequirePermission('rules.edit')
   restore(@Param('slug') slug: string, @Body() body: unknown, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
-    return this.rules.restore(slug, body, { memberId: user.memberId, userId: user.userId });
+    return this.rules.restore(slug, body, {
+      memberId: user.memberId,
+      userId: user.userId,
+      isAdmin: user.isAdmin,
+    });
   }
 }

@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, UseGuards } from '@nestjs/common';
 import { COMBAT_ROLE_LABELS } from '@dkp/shared';
 import { AuthGuard } from './auth/auth.guard';
 import { PermissionsGuard, RequirePermission } from './permissions/permissions.guard';
@@ -22,14 +22,15 @@ export class AppController {
   }
 
   @Get('meta/guild')
+  @Header('Cache-Control', 'private, no-store')
   @UseGuards(AuthGuard, PermissionsGuard)
   @RequirePermission('members.view_roster')
   async getGuild() {
     const guild = await this.prisma.guild.findFirst({
       orderBy: { createdAt: 'asc' },
-      select: { name: true },
+      select: { name: true, crest: true },
     });
-    return { name: guild?.name ?? 'Гильдия' };
+    return { name: guild?.name ?? 'Гильдия', hasCrest: !!guild?.crest };
   }
 
   /** Справочник боевых ролей — заодно проверяет связку с @dkp/shared. */

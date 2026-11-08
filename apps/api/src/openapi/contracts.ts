@@ -63,7 +63,27 @@ export const contracts: Record<string, Contract> = {
     public: true,
     description: 'При недоступности БД HTTP 200 и db=down.',
   }),
-  App_getGuild: c('Получить название гильдии', object({ name: str })),
+  App_getGuild: c(
+    'Получить название гильдии',
+    object({ name: str, hasCrest: { type: 'boolean' } }),
+  ),
+  GuildSettings_crest: c(
+    'Получить герб гильдии',
+    { type: 'string', format: 'binary' },
+    { errors: [404], description: 'PNG или WebP; доступен участникам гильдии.' },
+  ),
+  GuildSettings_update: c(
+    'Сохранить название и герб гильдии',
+    object({ name: str, hasCrest: { type: 'boolean' } }),
+    {
+      body: 'GuildSettingsInput',
+      bodyType: 'multipart/form-data',
+      access: leader,
+      errors: [400, 403, 404],
+      description:
+        'Название от 1 до 80 символов; необязательный PNG/WebP с прозрачностью, до 2 МБ и 1024×1024.',
+    },
+  ),
   App_getCombatRoles: c('Получить названия боевых ролей', 'CombatRoles', { public: true }),
   Auth_providers: c(
     'Проверить доступность входа через Discord',
@@ -275,7 +295,8 @@ export const contracts: Record<string, Contract> = {
     access: 'Участник с привязанным Member.',
     body: 'CreateAbsence',
     errors: [409],
-    description: 'dateTo ≥ dateFrom. Действует дедлайн из настроек гильдии.',
+    description:
+      'dateTo > dateFrom; интервал полуоткрытый. События, чей дедлайн на момент подачи истёк, не покрываются.',
   }),
   Absences_cancel: c('Отменить своё отсутствие', 'Ok', {
     errors: [404, 409],
@@ -292,21 +313,28 @@ export const contracts: Record<string, Contract> = {
     description: 'Append-only журнал, баланс вычисляется суммой записей.',
   }),
   Dkp_balances: c('Получить балансы участников', list('Balance')),
+  Dkp_grant: c('Начислить ДКП участнику', object({ id: str, repeated: { type: 'boolean' } }), {
+    body: 'AdminDkpGrant',
+    access: 'Только резервный Админ.',
+    errors: [400, 403, 404, 409],
+    description: 'Положительное начисление и аудит создаются атомарно; requestId защищает повтор.',
+  }),
   Dkp_memberBalance: c('Получить баланс участника', 'Balance', { errors: [404] }),
   Audit_list: c('Получить журнал действий', 'AuditPage', {
-    access: officer,
+    access: 'Офицер, Глава и Админ — полный журнал; участник — личные записи.',
     query: 'AuditQuery',
     description:
-      'Фильтры объединяются через И: entityType, actorMemberId либо system=true, from/to (UTC). system=true выбирает записи без actorMemberId; не сочетается с actorMemberId. action сохранён для API-клиентов. Новые записи первыми. UI использует размеры 10/50/100 и не показывает total.',
+      'Личная область выбирается до фильтров и пагинации; групповые детали скрыты. Фильтры объединяются через И. system=true исключает отмеченные действия Админа. Новые записи первыми.',
     errors: [400],
   }),
-  Audit_actions: c('Получить доступные действия аудита', array(str), { access: officer }),
+  Audit_actions: c('Получить доступные действия аудита', array(str)),
   Profiles_get: c('Получить профиль игрока', 'Profile', { errors: [404] }),
   Profiles_updateOwn: c('Изменить свою роль и оружие', 'Ok', {
     access: 'Только владелец профиля с привязанным Member.',
     body: 'UpdateOwnProfile',
     errors: [400, 404],
-    description: 'Комментарий обязателен, изменение фиксируется в аудите.',
+    description:
+      'Комментарий обязателен при изменении роли или оружия; при смене только своего аватара он необязателен. Изменение фиксируется в аудите.',
   }),
   Rules_get: c('Получить страницу правил', 'RulesPage', { errors: [400, 404] }),
   Rules_history: c('Получить историю версий правил', list('RulesVersionSummary'), {
@@ -357,5 +385,13 @@ export const contracts: Record<string, Contract> = {
 };
 
 export const extraSchemas = {
-  AbsencesQuery: object({ startsAt: { type: 'string', format: 'date-time' }, eventId: str }, []),
+  GuildSettingsInput: object({ name: str, file: { type: 'string', format: 'binary' } }, ['name']),
+  AbsencesQuery: object(
+    {
+      startsAt: { type: 'string', format: 'date-time' },
+      endsAt: { type: 'string', format: 'date-time' },
+      eventId: str,
+    },
+    [],
+  ),
 };

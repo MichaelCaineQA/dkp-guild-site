@@ -21,10 +21,13 @@ export interface SeedSetting {
   value: number;
 }
 
-/** Якорь игрового цикла: произвольная точка в прошлом, калибруется по игре (#7). */
+/**
+ * Якорь игрового цикла по умолчанию: 01.01.2026 02:30:00 по Москве (UTC+3),
+ * т.е. 2025-12-31T23:30:00Z — момент начала известной дневной фазы.
+ */
 export const SEED_GUILD: SeedGuild = {
   name: 'Гильдия',
-  gameTimeAnchor: new Date('2026-01-01T00:00:00Z'),
+  gameTimeAnchor: new Date('2025-12-31T23:30:00Z'),
   ...GAME_TIME_DEFAULTS,
 };
 

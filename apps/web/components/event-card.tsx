@@ -155,8 +155,13 @@ export function EventCard({
       )}
 
       {/* Оформленно отсутствующие (план 2.3): всем, авто-отметка при закрытии */}
-      <AbsentMembersPanel eventId={event.id} eventStartsAt={event.startsAt} />
-      <EventRoster key={`${event.id}:${rosterVersion}`} eventId={event.id} />
+      <AbsentMembersPanel
+        key={`absences:${event.id}:${rosterVersion}`}
+        eventId={event.id}
+        eventStartsAt={event.startsAt}
+        eventEndsAt={event.endsAt}
+      />
+      <EventRoster key={`roster:${event.id}:${rosterVersion}`} eventId={event.id} />
 
       {canConduct && event.status === 'PLANNED' && (
         <div className="mt-3 flex gap-2">
