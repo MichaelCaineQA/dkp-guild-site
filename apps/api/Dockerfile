@@ -7,12 +7,15 @@ RUN apk add --no-cache libc6-compat openssl
 RUN corepack enable
 WORKDIR /repo
 
-# Сначала манифесты — слой зависимостей кешируется, пока не меняются
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+# Загружаем пакеты из lockfile отдельным кешируемым слоем до workspace-манифестов.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+  pnpm fetch
+
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-  pnpm install --frozen-lockfile
+  pnpm install --frozen-lockfile --offline
 
 COPY packages/shared packages/shared
 COPY apps/api apps/api
@@ -30,11 +33,14 @@ FROM node:22-alpine AS deps-prod
 RUN apk add --no-cache libc6-compat openssl
 RUN corepack enable
 WORKDIR /repo
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+  pnpm fetch --prod
+
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-  pnpm install --frozen-lockfile --prod --filter @dkp/api --filter @dkp/shared
+  pnpm install --frozen-lockfile --offline --prod --filter @dkp/api --filter @dkp/shared
 # Сборные артефакты поверх установки: workspace-ссылки уже на месте
 COPY --from=build /repo/packages/shared/dist packages/shared/dist
 COPY --from=build /repo/apps/api/dist apps/api/dist

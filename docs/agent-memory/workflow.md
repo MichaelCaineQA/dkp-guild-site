@@ -40,6 +40,11 @@ Production/staging и резервное копирование описаны �
 - CI: lint → typecheck → test → build → audit. Фактическая конфигурация —
   `.github/workflows/ci.yml`; сейчас `pnpm audit --prod` имеет
   `continue-on-error: true` (проверено 2026-11-08).
+- Отдельный `.github/workflows/infrastructure.yml` проверяет actionlint,
+  Compose и shell-синтаксис, тестирует отказные сценарии деплоя без сервера
+  (`python3 -m unittest discover -s scripts -p 'test_*.py' -v`), собирает
+  production-образы. Ежедневный cron для deploy из исходников —
+  `scripts/backup-prod.cron`; установка и внешнее хранилище описаны в README.
 - Логику ядра покрывай юнит-тестами в том же PR; после изменения UI нужен
   скриншот в PR.
 - Не добавляй зависимости без необходимости. Если добавил — выполни

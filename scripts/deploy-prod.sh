@@ -1,8 +1,9 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
-compose() { docker compose --env-file .env.production -f docker-compose.prod.yml "$@"; }
-test -f .env.production || { echo 'Нет .env.production' >&2; exit 1; }
+env_file=${PRODUCTION_ENV_FILE:-.env.production}
+compose() { docker compose --env-file "$env_file" -f docker-compose.prod.yml "$@"; }
+test -f "$env_file" || { echo 'Нет файла production env' >&2; exit 1; }
 compose config -q
 compose build api web
 compose up -d --wait db redis

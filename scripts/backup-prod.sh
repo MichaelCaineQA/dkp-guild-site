@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
-compose() { docker compose --env-file .env.production -f docker-compose.prod.yml "$@"; }
+env_file=${PRODUCTION_ENV_FILE:-.env.production}
+compose() { docker compose --env-file "$env_file" -f docker-compose.prod.yml "$@"; }
 backup_dir=${BACKUP_DIR:-./backups}
 mkdir -p "$backup_dir"
 chmod 700 "$backup_dir"
@@ -16,6 +17,6 @@ compose run --rm --no-deps --entrypoint tar api -C /app/uploads/screenshots -czf
 chmod 600 "$target/database.dump" "$target/screenshots.tar.gz"
 trap - EXIT HUP INT TERM
 if [ -n "${BACKUP_REMOTE:-}" ]; then
-  rsync -a -- "$target" "$BACKUP_REMOTE/"
+  rsync -e 'ssh -o BatchMode=yes' -a -- "$target" "$BACKUP_REMOTE/"
 fi
 printf '%s\n' "Резервная копия: $target"

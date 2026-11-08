@@ -1,0 +1,30 @@
+name: Infrastructure
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Deployment dry-run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint workflows (including Deploy, without server secrets)
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color
+      - name: Validate Compose and shell scripts
+        run: |
+          docker compose --env-file .env.production.example -f docker-compose.prod.yml config --quiet
+          sh -n scripts/deploy-prod.sh
+          sh -n scripts/backup-prod.sh
+          sh -n scripts/smoke-prod.sh
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Build and smoke-test production stack with local HTTPS
+        run: sh scripts/smoke-prod.sh
