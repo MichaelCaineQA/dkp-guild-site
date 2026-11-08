@@ -1,0 +1,7 @@
+# Install as /etc/cron.d/dkp-guild-backup (root:root, mode 0644).
+# Adapt checkout path and SSH destination before installation.
+# Daily at 03:00 in the host timezone; logs errors and offsite upload failures.
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+BACKUP_REMOTE=dkp-backup@backup.example.net:/srv/dkp-backups/dkp-guild-site
+0 3 * * * root flock -n /run/lock/dkp-guild-backup.lock sh /opt/dkp-guild-site/scripts/backup-prod.sh >> /var/log/dkp-guild-backup.log 2>&1

@@ -7,11 +7,14 @@ RUN apk add --no-cache libc6-compat
 RUN corepack enable
 WORKDIR /repo
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+  pnpm fetch
+
 COPY packages/shared/package.json packages/shared/
 COPY apps/web/package.json apps/web/
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-  pnpm install --frozen-lockfile
+  pnpm install --frozen-lockfile --offline
 
 # NEXT_PUBLIC_* вшивается в бандл на этапе сборки
 ARG NEXT_PUBLIC_API_URL=/api

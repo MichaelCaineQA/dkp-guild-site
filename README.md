@@ -29,7 +29,7 @@ Production-конфигурация подготовлена в `docker-compose.
 На отдельном Linux VPS установите Docker Engine с Compose и Git; направьте DNS
 имён сайта и API на сервер, откройте порты 80 и 443. Не включайте проксирование
 DNS через Cloudflare. Подойдут VPS с локацией в ЕС, например Selectel или
-Timeweb Cloud, и домен у любого регистратора.
+Timeweb Cloud, и домен у любого регистратора (например, reg.ru).
 
 1. Разместите checkout проекта в постоянном каталоге сервера и скопируйте
    `.env.production.example` в `.env.production` в этом каталоге; ограничьте
@@ -78,14 +78,71 @@ WebSocket через тот же прокси; сам gateway пока не ре
 формате custom и архив тома скриншотов помещаются в `backups/<UTC-время>` с
 ограниченными правами. Переменная `BACKUP_REMOTE` включает копирование через
 `rsync` в заранее настроенное отдельное хранилище; ошибка копирования означает
-неуспешный запуск. Например, в cron укажите абсолютные пути и установите
-`BACKUP_REMOTE` на доступное по SSH хранилище. Настройте там хранение 30 дней и
-контроль успешности заданий; локальные копии самостоятельно не удаляются.
+неуспешный запуск. Для ежедневной копии на Ubuntu:
+
+1. Установите `cron`, `rsync` и `util-linux` (для `flock`):
+   `sudo apt-get install cron rsync util-linux`. На сервере хранения тоже нужен
+   `rsync`. Подготовьте отдельный каталог, например
+   `/srv/dkp-backups/dkp-guild-site`, и SSH-доступ к нему по ключу.
+2. Настройте и проверьте `known_hosts` и SSH-ключ **root**, поскольку cron
+   ниже выполняется от root. Проверьте `sudo ssh -o BatchMode=yes
+   dkp-backup@backup.example.net true`; ключ сервера сверяйте отдельно.
+3. Скопируйте `scripts/backup-prod.cron` во временный файл, укажите реальный
+   абсолютный путь checkout (в примере `/opt/dkp-guild-site`) и `BACKUP_REMOTE`.
+   Установите его: `sudo install -o root -g root -m 644 <файл>
+   /etc/cron.d/dkp-guild-backup`, затем `sudo systemctl enable --now cron`.
+   Копия запускается ежедневно в 03:00 **по часовому поясу хоста**;
+   `timedatectl` показывает его. `flock` предотвращает наложение cron-запусков.
+4. До ожидания расписания выполните вручную:
+   `sudo env BACKUP_REMOTE=dkp-backup@backup.example.net:/srv/dkp-backups/dkp-guild-site
+   sh /opt/dkp-guild-site/scripts/backup-prod.sh`. Убедитесь, что оба файла
+   появились на другом сервере. Проверяйте код возврата и
+   `/var/log/dkp-guild-backup.log`; настройте оповещение при ошибках и ротацию
+   этого лога средствами хоста.
+5. На отдельном хранилище настройте lifecycle удаления копий старше 30 дней.
+   Для обычного Linux-хоста добавьте в crontab пользователя хранилища
+   (`crontab -e`) ежедневную очистку **выделенного каталога этой системы**:
+
+   ```cron
+   0 5 * * * find /srv/dkp-backups/dkp-guild-site -mindepth 1 -maxdepth 1 -type d -name '20??????T??????Z' -mtime +29 -exec rm -rf -- {} +
+   ```
+
+   Сначала проверьте выборку той же командой с `-print` вместо `-exec ... +`.
+   Локальные копии самостоятельно не удаляются; следите за свободным местом
+   или примените такую же политику к выделенному каталогу `backups`.
+   Для релизного установщика вместо этого используется `dkp backup setup`
+   с собственным systemd-таймером; два расписания одновременно не настраивайте.
+
 Не реже раза в месяц проверяйте восстановление **в отдельной тестовой базе**:
 создайте чистую БД, выполните `pg_restore --no-owner --no-privileges -d <test_db>
 database.dump`, распакуйте `screenshots.tar.gz` в отдельный каталог и проверьте
 запуск приложения и файлы. Не восстанавливайте поверх рабочей БД без плана
 остановки и отдельной актуальной копии.
+
+Проверка инфраструктуры без сервера выполняется workflow `Infrastructure`
+при PR, push в `main` и вручную. Он проверяет все workflow через actionlint,
+валидирует Compose, синтаксис shell-скриптов, тестирует порядок деплоя и
+обработку ошибок с подставным Docker, затем собирает оба production-образа.
+После сборки он поднимает изолированный стек с `tls internal`, проверяет
+HTTPS сайта и `/api/health`, наличие снимка БД/скриншотов и удаляет только
+тестовые контейнеры и тома. Локальный эквивалент (из корня checkout,
+нужны Docker, curl и Python 3; порты 18080/18443 должны быть свободны):
+
+```sh
+docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color
+docker compose --env-file .env.production.example -f docker-compose.prod.yml config --quiet
+sh -n scripts/deploy-prod.sh
+sh -n scripts/backup-prod.sh
+sh -n scripts/smoke-prod.sh
+python3 -m unittest discover -s scripts -p 'test_*.py' -v
+sh scripts/smoke-prod.sh
+```
+
+Проверка не выполняет SSH-деплой, не читает production secrets и не меняет
+рабочую БД. На пустой БД используйте `scripts/deploy-prod.sh`: обычный
+`compose up` намеренно не применяет миграции без предварительной копии.
+Скрипты deploy и backup принимают `PRODUCTION_ENV_FILE` (по умолчанию
+`.env.production`); smoke использует временный файл, не заменяя рабочий env.
 
 ### Вариант A — весь сайт в Docker одной командой
 
