@@ -1,0 +1,1 @@
+ALTER TABLE "AuditLog" ADD COLUMN "actorIsAdmin" BOOLEAN NOT NULL DEFAULT false;
