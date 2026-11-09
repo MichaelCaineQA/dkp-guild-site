@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assignWinnerSchema,
   bidFullCost,
+  cancelLotSchema,
   checkBidAllowed,
+  checkLotExtendAllowed,
   createDropSchema,
   createLotSchema,
   endsAtAfterBid,
+  extendLotSchema,
+  extendedEndsAt,
   hasAvailableBalance,
   isForeignBidder,
   lotDurationSec,
@@ -266,17 +271,13 @@ describe('endsAtAfterBid', () => {
   });
   it('точная граница окна продлевает, за её пределами — нет', () => {
     const endsAt = new Date(now.getTime() + 30_000); // ровно окно 30 сек
-    expect(endsAtAfterBid({ ...baseLot, endsAt }, now)?.getTime()).toBe(
-      endsAt.getTime() + 600_000,
-    );
+    expect(endsAtAfterBid({ ...baseLot, endsAt }, now)?.getTime()).toBe(endsAt.getTime() + 600_000);
     const outside = new Date(now.getTime() + 30_001);
     expect(endsAtAfterBid({ ...baseLot, endsAt: outside }, now)).toBe(outside);
   });
   it('окно 0 отключает продление', () => {
     const endsAt = new Date(now.getTime() + 5_000);
-    expect(
-      endsAtAfterBid({ ...baseLot, antiSnipeSec: 0, endsAt }, now),
-    ).toBe(endsAt);
+    expect(endsAtAfterBid({ ...baseLot, antiSnipeSec: 0, endsAt }, now)).toBe(endsAt);
   });
 });
 
@@ -340,5 +341,56 @@ describe('lotExpired и winningBid (issue #95)', () => {
       { memberId: 'c', amount: 120 },
     ];
     expect(winningBid(bids)).toMatchObject({ memberId: 'b', amount: 150 });
+  });
+});
+
+describe('Ручное управление лотом (issue #96, план 6, п. 8)', () => {
+  const now = new Date('2027-03-03T18:00:00Z');
+  const endsAt = new Date('2027-03-03T18:01:00Z');
+
+  it('продлить можно только действующий лот с идущим таймером', () => {
+    expect(checkLotExtendAllowed({ status: 'OPEN', endsAt }, now)).toBeNull();
+    expect(checkLotExtendAllowed({ status: 'CLOSED', endsAt }, now)).toBe('LOT_NOT_OPEN');
+    expect(checkLotExtendAllowed({ status: 'CANCELLED', endsAt }, now)).toBe('LOT_NOT_OPEN');
+    // живая раздача до первой ставки — торгового таймера нет
+    expect(checkLotExtendAllowed({ status: 'OPEN', endsAt: null }, now)).toBe('TIMER_NOT_STARTED');
+    // истёкший лот закрывает обработчик — продлевать поздно
+    expect(checkLotExtendAllowed({ status: 'OPEN', endsAt }, endsAt)).toBe('LOT_ENDING');
+    expect(checkLotExtendAllowed({ status: 'OPEN', endsAt }, new Date(endsAt.getTime() + 1))).toBe(
+      'LOT_ENDING',
+    );
+  });
+
+  it('продление прибавляется к текущему окончанию', () => {
+    expect(extendedEndsAt(endsAt, 60).getTime()).toBe(endsAt.getTime() + 60_000);
+  });
+
+  it('схема продления требует длительность и непустую причину', () => {
+    expect(
+      extendLotSchema.safeParse({ extendSec: 60, comment: '  нужна пара минут  ' }).success,
+    ).toBe(true);
+    expect(extendLotSchema.safeParse({ extendSec: 60, comment: '  ' }).success).toBe(false);
+    expect(extendLotSchema.safeParse({ extendSec: 0, comment: 'причина' }).success).toBe(false);
+    expect(extendLotSchema.safeParse({ extendSec: 60 }).success).toBe(false);
+  });
+
+  it('отмена и досрочное завершение требуют причину', () => {
+    expect(cancelLotSchema.safeParse({ comment: 'предмет ошибочный' }).success).toBe(true);
+    expect(cancelLotSchema.safeParse({ comment: '' }).success).toBe(false);
+    expect(cancelLotSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('ручной победитель: requestId, получатель, цена от 0 и причина', () => {
+    const ok = {
+      requestId: '00000000-0000-4000-8000-000000000000',
+      winnerId: 'member-1',
+      price: 0,
+      comment: 'отдаём бесплатно',
+    };
+    expect(assignWinnerSchema.safeParse(ok).success).toBe(true);
+    expect(assignWinnerSchema.safeParse({ ...ok, price: -1 }).success).toBe(false);
+    expect(assignWinnerSchema.safeParse({ ...ok, winnerId: '' }).success).toBe(false);
+    expect(assignWinnerSchema.safeParse({ ...ok, requestId: 'не-uuid' }).success).toBe(false);
+    expect(assignWinnerSchema.safeParse({ ...ok, comment: '  ' }).success).toBe(false);
   });
 });

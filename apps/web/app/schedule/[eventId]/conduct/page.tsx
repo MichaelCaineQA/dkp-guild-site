@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import {
   applyEventSummarySchema,
   can,
+  canDecideLotOutcome,
   type ApplyEventSummaryInput,
   type ApplyEventSummaryResult,
   type EventSummaryRow,
@@ -165,6 +166,10 @@ export default function ConductPage() {
           key={`loot-${version}`}
           eventId={eventId}
           canEdit={allowed && (event.status === 'PLANNED' || event.status === 'RUNNING')}
+          // Лоты живут своими таймерами при любом статусе ивента (план 2.4):
+          // управляющий ивента продлевает/отменяет, Глава/Админ решает исход.
+          canManage={allowed}
+          canDecide={canDecideLotOutcome(user)}
         />
         <Card>
           <SectionTitle>Чек-лист участников</SectionTitle>

@@ -74,10 +74,8 @@ export const createLotSchema = z
     durationUnit: z.enum(LOT_DURATION_UNITS),
     antiSnipeSec: intField(LOT_LIMITS.antiSnipeSec, 'Анти-снайп (окно)'),
     /** Продление окончания при снайп-ставке; по умолчанию — из настроек. */
-    antiSnipeExtendSec: intField(LOT_LIMITS.antiSnipeExtendSec, 'Анти-снайп (продление)')
-      .nullish(),
-    noBidTimeoutSec: intField(LOT_LIMITS.noBidTimeoutSec, 'Тайм-аут без ставок')
-      .nullish(),
+    antiSnipeExtendSec: intField(LOT_LIMITS.antiSnipeExtendSec, 'Анти-снайп (продление)').nullish(),
+    noBidTimeoutSec: intField(LOT_LIMITS.noBidTimeoutSec, 'Тайм-аут без ставок').nullish(),
   })
   .superRefine((input, ctx) => {
     const sec = lotDurationSec(input.durationValue, input.durationUnit);
@@ -248,7 +246,10 @@ export type PlaceBidInput = z.infer<typeof placeBidSchema>;
  * цены, каждая следующая — не ниже текущей плюс шаг. currentMax — максимум
  * принятых ставок, null если ставок ещё не было.
  */
-export function minBidAmount(lot: Pick<BidLotParams, 'startPrice' | 'step'>, currentMax: number | null): number {
+export function minBidAmount(
+  lot: Pick<BidLotParams, 'startPrice' | 'step'>,
+  currentMax: number | null,
+): number {
   return currentMax === null ? lot.startPrice : currentMax + lot.step;
 }
 
@@ -366,11 +367,7 @@ export function lotExpired(
   now: Date,
 ): boolean {
   if (lot.endsAt !== null) return now.getTime() >= lot.endsAt.getTime();
-  if (
-    lot.timerKind === 'FIRST_BID' &&
-    lot.firstBidAt === null &&
-    lot.noBidTimeoutSec !== null
-  ) {
+  if (lot.timerKind === 'FIRST_BID' && lot.firstBidAt === null && lot.noBidTimeoutSec !== null) {
     return now.getTime() >= lot.createdAt.getTime() + lot.noBidTimeoutSec * 1000;
   }
   return false;
@@ -396,4 +393,100 @@ export interface LotCloseResult {
   /** Лот уже был закрыт/отменён или таймер ещё не истёк. */
   skipped: boolean;
   winner: { memberId: string; memberName: string; finalPrice: number; markupPct: number } | null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Ручное управление лотом (issue #96, план 6, п. 8–10).               */
+/* ------------------------------------------------------------------ */
+
+/** Границы ручных действий с лотом. */
+export const LOT_MANAGE_LIMITS = {
+  extendSec: { min: 10, max: 14 * 86_400 },
+  price: { min: 0, max: 1_000_000 },
+  comment: { min: 3, max: 500 },
+} as const;
+
+/** Причина ручного действия — обязательна и попадает в аудит (план 6, п. 8). */
+const reasonField = z
+  .string({ invalid_type_error: 'Причина — текст' })
+  .trim()
+  .min(LOT_MANAGE_LIMITS.comment.min, 'Укажите причину действия')
+  .max(LOT_MANAGE_LIMITS.comment.max, 'Причина: не длиннее 500 символов');
+
+/** Продление действующего лота — управляющим ивента (план 6, п. 8). */
+export const extendLotSchema = z.object({
+  extendSec: intField(LOT_MANAGE_LIMITS.extendSec, 'Продление'),
+  comment: reasonField,
+});
+export type ExtendLotInput = z.infer<typeof extendLotSchema>;
+
+/** Отмена действующего лота — управляющим ивента (план 6, п. 8). */
+export const cancelLotSchema = z.object({ comment: reasonField });
+export type CancelLotInput = z.infer<typeof cancelLotSchema>;
+
+/**
+ * Досрочное завершение лота — Глава/Админ (план 6, п. 8): победителем
+ * становится автор ведущей ставки, списание — как при обычном закрытии.
+ */
+export const closeLotEarlySchema = z.object({ comment: reasonField });
+export type CloseLotEarlyInput = z.infer<typeof closeLotEarlySchema>;
+
+/**
+ * Ручной победитель — Глава/Админ (план 6, п. 8): получатель — любой игрок,
+ * цена произвольная, включая 0, без наценки; списание сразу и может увести
+ * баланс в минус. requestId фиксирует повтор запроса: возврат прежнему
+ * победителю и списание с нового не выполняются дважды.
+ */
+export const assignWinnerSchema = z.object({
+  requestId: z.string().uuid('Повторите действие — некорректный идентификатор запроса'),
+  winnerId: z.string().min(1, 'Выберите получателя'),
+  price: intField(LOT_MANAGE_LIMITS.price, 'Цена'),
+  comment: reasonField,
+});
+export type AssignWinnerInput = z.infer<typeof assignWinnerSchema>;
+
+/** Причина отказа в продлении лота. */
+export type LotExtendRejection =
+  | 'LOT_NOT_OPEN' // лот закрыт или отменён
+  | 'TIMER_NOT_STARTED' // живая раздача до первой ставки — торгового таймера нет
+  | 'LOT_ENDING'; // таймер истёк — лот закрывается обработчиком
+
+/**
+ * Продлить можно только действующий лот с запущенным таймером (план 6, п. 8):
+ * живая раздача до первой ставки таймером торгов не ограничена, а истёкший
+ * лот закрывает обработчик #95 — продлевать его уже поздно.
+ */
+export function checkLotExtendAllowed(
+  lot: Pick<BidLotParams, 'status' | 'endsAt'>,
+  now: Date,
+): LotExtendRejection | null {
+  if (lot.status !== 'OPEN') return 'LOT_NOT_OPEN';
+  if (lot.endsAt === null) return 'TIMER_NOT_STARTED';
+  if (now.getTime() >= lot.endsAt.getTime()) return 'LOT_ENDING';
+  return null;
+}
+
+/** Новое окончание после ручного продления: время прибавляется к текущему концу. */
+export function extendedEndsAt(endsAt: Date, extendSec: number): Date {
+  return new Date(endsAt.getTime() + extendSec * 1000);
+}
+
+/** Выдача лота в строках лута и аудита. */
+export interface LotAwardRow {
+  memberId: string;
+  memberName: string;
+  finalPrice: number;
+  /** Наценка в цене выдачи: 0 — «родной» класс или ручное назначение. */
+  markupPct: number;
+}
+
+/** Результат ручных действий с лотом для UI. */
+export interface LotManageResult {
+  lot: AuctionLotRow;
+  /** Победитель после действия (null — лот закрыт без победителя или отменён). */
+  winner: LotAwardRow | null;
+  /** Возврат прежнему победителю при смене (план 6, п. 8). */
+  refund: { memberId: string; memberName: string; amount: number } | null;
+  /** Повтор уже выполненного запроса — данные не менялись. */
+  repeated: boolean;
 }

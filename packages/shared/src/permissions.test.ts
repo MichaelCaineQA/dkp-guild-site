@@ -3,6 +3,7 @@ import {
   PERMISSIONS,
   RAID_LEAD_ACTIONS,
   can,
+  canDecideLotOutcome,
   canManageEvent,
   isEventEditable,
   permissionsOf,
@@ -148,5 +149,19 @@ describe('права существующего ивента и финальны
   });
   it.each(['PLANNED', 'RUNNING'])('%s допускает редактирование', (status) => {
     expect(isEventEditable(status)).toBe(true);
+  });
+});
+
+describe('canDecideLotOutcome: досрочное завершение и ручной победитель', () => {
+  it('решают только Глава и Админ, РЛ — нет (план 6, п. 8)', () => {
+    expect(canDecideLotOutcome(actor({ rank: 'GUILD_LEADER' }))).toBe(true);
+    expect(canDecideLotOutcome(actor({ rank: 'ADMIN' }))).toBe(true);
+    expect(canDecideLotOutcome(actor({ rank: 'OFFICER', memberId: 'rl' }))).toBe(false);
+    expect(canDecideLotOutcome(actor({ rank: 'MEMBER', memberId: 'rl' }))).toBe(false);
+  });
+
+  it('резервный админ без Member решает, не привязанный к Member — нет', () => {
+    expect(canDecideLotOutcome(actor({ rank: null, isAdmin: true }))).toBe(true);
+    expect(canDecideLotOutcome(actor({ rank: null, isAdmin: false }))).toBe(false);
   });
 });

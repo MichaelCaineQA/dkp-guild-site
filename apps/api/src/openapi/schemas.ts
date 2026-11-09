@@ -51,6 +51,10 @@ const inputs: Record<string, unknown> = {
   CreateDrop: shared.createDropSchema,
   CreateLot: shared.createLotSchema,
   PlaceBid: shared.placeBidSchema,
+  ExtendLot: shared.extendLotSchema,
+  CancelLot: shared.cancelLotSchema,
+  CloseLotEarly: shared.closeLotEarlySchema,
+  AssignWinner: shared.assignWinnerSchema,
 };
 // Не разворачиваем union всех Zod-типов shared в типах конвертера.
 function convert(schema: unknown): SchemaObject {
@@ -255,6 +259,31 @@ export const schemas: Record<string, SchemaObject> = {
       ...nullable(date),
       description:
         'Окончание торгов после ставки: запуск таймера живой раздачи или продление анти-снайпа.',
+    },
+  }),
+  LotAward: object({
+    memberId: str,
+    memberName: str,
+    finalPrice: num,
+    markupPct: {
+      ...num,
+      description: 'Наценка в цене выдачи: 0 — «родной» класс или ручное назначение.',
+    },
+  }),
+  LotManageResult: object({
+    lot: ref('AuctionLot'),
+    winner: {
+      ...ref('LotAward'),
+      nullable: true,
+      description: 'Победитель после действия; null — лот без победителя или отменён.',
+    },
+    refund: {
+      ...nullable(object({ memberId: str, memberName: str, amount: num })),
+      description: 'Возврат прежнему победителю при ручной смене (план 6, п. 8).',
+    },
+    repeated: {
+      type: 'boolean',
+      description: 'Повтор уже применённого запроса — данные не менялись.',
     },
   }),
   Id: object({ id: str }),

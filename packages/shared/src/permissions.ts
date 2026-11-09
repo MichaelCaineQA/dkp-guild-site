@@ -132,6 +132,16 @@ export function canManageEvent(actor: PermissionActor, event: PermissionTarget):
   return can(actor, 'events.manage') || can(actor, 'events.conduct', event);
 }
 
+/**
+ * Досрочное завершение лота и ручной победитель — только Глава/Админ
+ * (план 2.4 и 6, п. 8): продлить и отменить лот может РЛ, но исход торгов
+ * вручную решают Глава и Админ. Резервный админ (без Member) — тоже может.
+ */
+export function canDecideLotOutcome(actor: PermissionActor): boolean {
+  if (actor.isAdmin) return true;
+  return actor.rank !== null && rankAtLeast(actor.rank, 'GUILD_LEADER');
+}
+
 /** Параметры завершённых/отменённых ивентов доступны только для чтения. */
 export function isEventEditable(status: string): boolean {
   return status === 'PLANNED' || status === 'RUNNING';
