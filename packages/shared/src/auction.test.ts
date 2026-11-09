@@ -8,9 +8,11 @@ import {
   hasAvailableBalance,
   isForeignBidder,
   lotDurationSec,
+  lotExpired,
   minBidAmount,
   placeBidSchema,
   suggestLotDefaults,
+  winningBid,
   type AuctionSettingValues,
   type BidLotParams,
 } from './auction';
@@ -275,5 +277,68 @@ describe('endsAtAfterBid', () => {
     expect(
       endsAtAfterBid({ ...baseLot, antiSnipeSec: 0, endsAt }, now),
     ).toBe(endsAt);
+  });
+});
+
+describe('lotExpired и winningBid (issue #95)', () => {
+  const createdAt = new Date('2026-11-09T20:00:00Z');
+
+  it('длинный лот истекает ровно в endsAt', () => {
+    const endsAt = new Date(createdAt.getTime() + 86_400_000);
+    const lot = {
+      timerKind: 'OPENING' as const,
+      endsAt,
+      firstBidAt: null,
+      noBidTimeoutSec: null,
+      createdAt,
+    };
+    expect(lotExpired(lot, new Date(endsAt.getTime() - 1))).toBe(false);
+    expect(lotExpired(lot, endsAt)).toBe(true);
+  });
+
+  it('живая раздача без ставок истекает по тайм-ауту от создания', () => {
+    const lot = {
+      timerKind: 'FIRST_BID' as const,
+      endsAt: null,
+      firstBidAt: null,
+      noBidTimeoutSec: 120,
+      createdAt,
+    };
+    expect(lotExpired(lot, new Date(createdAt.getTime() + 119_999))).toBe(false);
+    expect(lotExpired(lot, new Date(createdAt.getTime() + 120_000))).toBe(true);
+  });
+
+  it('живая раздача после первой ставки истекает по endsAt, а не по тайм-ауту', () => {
+    const endsAt = new Date(createdAt.getTime() + 90_000);
+    const lot = {
+      timerKind: 'FIRST_BID' as const,
+      endsAt,
+      firstBidAt: createdAt,
+      noBidTimeoutSec: 120,
+      createdAt,
+    };
+    expect(lotExpired(lot, new Date(createdAt.getTime() + 89_999))).toBe(false);
+    expect(lotExpired(lot, endsAt)).toBe(true);
+  });
+
+  it('длинный лот без endsAt не считается истёкшим', () => {
+    const lot = {
+      timerKind: 'OPENING' as const,
+      endsAt: null,
+      firstBidAt: null,
+      noBidTimeoutSec: null,
+      createdAt,
+    };
+    expect(lotExpired(lot, new Date(createdAt.getTime() + 999_999_999))).toBe(false);
+  });
+
+  it('победитель — автор максимальной ставки; пустой лот без победителя', () => {
+    expect(winningBid([])).toBeNull();
+    const bids = [
+      { memberId: 'a', amount: 100 },
+      { memberId: 'b', amount: 150 },
+      { memberId: 'c', amount: 120 },
+    ];
+    expect(winningBid(bids)).toMatchObject({ memberId: 'b', amount: 150 });
   });
 });

@@ -346,3 +346,54 @@ export interface PlaceBidResult {
   bid: BidRow;
   endsAt: string | null;
 }
+
+/* ------------------------------------------------------------------ */
+/* Закрытие лота и автосписание (issue #95, план 6, п. 3, 7 и 9).      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Истёк ли таймер лота по серверному времени (план 6, п. 3 и 7).
+ * Длинный лот и живая раздача после первой ставки — по endsAt; живая раздача
+ * без единой ставки — по отдельному тайм-ауту noBidTimeoutSec от создания.
+ * Обработчик закрытия полагается на серверное время: после перезапуска
+ * просроченные лоты закрываются при первом проходе.
+ */
+export function lotExpired(
+  lot: Pick<BidLotParams, 'timerKind' | 'endsAt' | 'firstBidAt'> & {
+    noBidTimeoutSec: number | null;
+    createdAt: Date;
+  },
+  now: Date,
+): boolean {
+  if (lot.endsAt !== null) return now.getTime() >= lot.endsAt.getTime();
+  if (
+    lot.timerKind === 'FIRST_BID' &&
+    lot.firstBidAt === null &&
+    lot.noBidTimeoutSec !== null
+  ) {
+    return now.getTime() >= lot.createdAt.getTime() + lot.noBidTimeoutSec * 1000;
+  }
+  return false;
+}
+
+/**
+ * Победитель лота — автор последней валидной ставки, т.е. максимальной
+ * (план 6, п. 7). Суммы принятых ставок строго возрастают (каждая следующая —
+ * не ниже текущей плюс шаг), поэтому максимум единственный; на равенство
+ * остаётся более ранняя ставка. Пустой список — лот без ставок: победителя
+ * и расхода нет (план 6, п. 9).
+ */
+export function winningBid<T extends { amount: number }>(bids: readonly T[]): T | null {
+  return bids.reduce<T | null>(
+    (best, bid) => (best === null || bid.amount > best.amount ? bid : best),
+    null,
+  );
+}
+
+/** Итог закрытия лота: кто получил предмет и сколько списано с него. */
+export interface LotCloseResult {
+  closed: boolean;
+  /** Лот уже был закрыт/отменён или таймер ещё не истёк. */
+  skipped: boolean;
+  winner: { memberId: string; memberName: string; finalPrice: number; markupPct: number } | null;
+}
