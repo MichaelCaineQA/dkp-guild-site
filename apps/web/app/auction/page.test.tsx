@@ -84,7 +84,9 @@ describe('AuctionPage (issue #92)', () => {
     expect(await screen.findByRole('button', { name: 'Добавить предмет' })).toBeTruthy();
     expect(screen.getAllByRole('button', { name: 'Изменить' })).toHaveLength(2);
 
-    const deleteButtons = screen.getAllByRole('button', { name: 'Удалить' });
+    const deleteButtons = screen.getAllByRole('button', {
+      name: 'Удалить',
+    }) as HTMLButtonElement[];
     expect(deleteButtons[0]!.disabled).toBe(true); // 2 лота — история сохраняется
     expect(deleteButtons[1]!.disabled).toBe(false);
   });
