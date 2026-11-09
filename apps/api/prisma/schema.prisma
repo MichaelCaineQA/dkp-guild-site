@@ -383,6 +383,16 @@ model Auction {
   durationSec Int
   timerFromFirstBid Boolean @default(true)
   antiSnipeSec Int @default(30)
+
+  /// Живая раздача без ставок закрывается по отдельному тайм-ауту (раздел 6).
+  noBidTimeoutSec Int?
+
+  /// Наценка «чужому» классу и разметка «кому нужна» фиксируются при создании
+  /// лота (раздел 6, п. 6): изменения настроек и справочника действуют только
+  /// на новые лоты.
+  markupPct Int @default(0)
+  targetRoles ItemTargetRole[] @default([])
+
   firstBidAt DateTime?
   endsAt DateTime?
   bids Bid[]

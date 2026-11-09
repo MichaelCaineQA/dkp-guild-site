@@ -8,7 +8,8 @@
 - `apps/web` — Next.js, App Router, TypeScript strict.
 - `apps/api` — NestJS; Prisma-схема: `apps/api/prisma/schema.prisma`.
   Справочник предметов аукциона — модуль `apps/api/src/items` (issue #92);
-  лоты и ставки — следующие задачи этапа 2.
+  дроп и создание лота в проведении ивента — `apps/api/src/loot` (issue #93);
+  ставки и закрытие лотов — следующие задачи этапа 2 (#94/#95).
 - `packages/shared` — общие типы, zod-схемы и чистая логика ядра.
 - `.github/workflows/ci.yml` — проверки CI.
 - `installer/` — установщик релизного Compose для одного домена, изолированного

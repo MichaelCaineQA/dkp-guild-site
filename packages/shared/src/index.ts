@@ -12,6 +12,7 @@ export * from './conduct';
 export * from './dkp';
 export * from './rules';
 export * from './items';
+export * from './auction';
 export * from './audit';
 export * from './profile';
 export * from './weapons';

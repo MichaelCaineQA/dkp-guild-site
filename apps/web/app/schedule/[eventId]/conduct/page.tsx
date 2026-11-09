@@ -14,6 +14,7 @@ import { createRequestId } from '../../../../lib/request-id';
 import { api } from '../../../../lib/api';
 import { AbsentMembersPanel } from '../../../../components/absent-members-panel';
 import { RaidLeadCodePanel } from '../../../../components/checkin-panels';
+import { LootPanel } from '../../../../components/loot-panel';
 import { SummaryCorrectionDialog } from '../../../../components/summary-correction-dialog';
 import {
   Button,
@@ -160,6 +161,11 @@ export default function ConductPage() {
             }}
           />
         )}
+        <LootPanel
+          key={`loot-${version}`}
+          eventId={eventId}
+          canEdit={allowed && (event.status === 'PLANNED' || event.status === 'RUNNING')}
+        />
         <Card>
           <SectionTitle>Чек-лист участников</SectionTitle>
           <p className="mb-2 text-sm text-secondary">
