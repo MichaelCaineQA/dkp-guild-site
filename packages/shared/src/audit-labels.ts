@@ -39,4 +39,5 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   ABSENCE_AUTO_MARK: 'Автоматическая отметка отсутствия',
   LOOT_DROP_CREATE: 'Фиксация дропа',
   AUCTION_CREATE: 'Создание лота',
+  AUCTION_BID: 'Ставка на аукционе',
 };

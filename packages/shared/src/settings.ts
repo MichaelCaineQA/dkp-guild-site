@@ -86,15 +86,27 @@ export const AUCTION_SETTINGS = {
   },
   'auction.antiSnipeLiveSec': {
     schema: intSetting(0, 300),
-    label: 'Анти-снайп живой раздачи (окно/продление)',
+    label: 'Анти-снайп живой раздачи (окно)',
     unit: 'сек',
     plan: '6',
   },
+  'auction.antiSnipeExtendLiveSec': {
+    schema: intSetting(0, 300),
+    label: 'Анти-снайп живой раздачи (продление)',
+    unit: 'сек',
+    plan: '6 (окно и продление независимы)',
+  },
   'auction.antiSnipeLongSec': {
     schema: intSetting(0, 7200),
-    label: 'Анти-снайп длинного лота (окно/продление)',
+    label: 'Анти-снайп длинного лота (окно)',
     unit: 'сек',
     plan: '6',
+  },
+  'auction.antiSnipeExtendLongSec': {
+    schema: intSetting(0, 7200),
+    label: 'Анти-снайп длинного лота (продление)',
+    unit: 'сек',
+    plan: '6 (окно и продление независимы)',
   },
   'auction.foreignClassMarkupPct': {
     schema: intSetting(0, 500),
@@ -136,7 +148,9 @@ export const SETTING_DEFAULTS: Record<SettingKey, number> = Object.fromEntries(
           'auction.liveDurationSec': 60,
           'auction.longDurationDays': 2,
           'auction.antiSnipeLiveSec': 30,
+          'auction.antiSnipeExtendLiveSec': 30,
           'auction.antiSnipeLongSec': 600,
+          'auction.antiSnipeExtendLongSec': 600,
           'auction.foreignClassMarkupPct': 50,
           'auction.noBidTimeoutSec': 120,
         } as Record<SettingKey, number>

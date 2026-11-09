@@ -384,6 +384,10 @@ model Auction {
   timerFromFirstBid Boolean @default(true)
   antiSnipeSec Int @default(30)
 
+  /// Продление окончания при ставке в окне анти-снайпа (раздел 6, п. 4):
+  /// окно и продление настраиваются независимо, фиксируются на лоте.
+  antiSnipeExtendSec Int @default(30)
+
   /// Живая раздача без ставок закрывается по отдельному тайм-ауту (раздел 6).
   noBidTimeoutSec Int?
 
@@ -408,6 +412,12 @@ model Bid {
   memberId String
   member Member @relation(fields: [memberId], references: [id])
   amount Int
+
+  /// Полная стоимость ставки с применимой наценкой, округлённая вверх
+  /// (раздел 6, п. 5): заморожена, пока ставка лидирует; списывается
+  /// при победе. markupPct — применённая наценка «чужому» классу (0 — «родной»).
+  fullCost Int @default(0)
+  markupPct Int @default(0)
   createdAt DateTime @default(now())
 
   @@index([auctionId])

@@ -43,6 +43,7 @@ export const LOT_LIMITS = {
   liveDurationSec: { min: 30, max: 600 },
   longDurationSec: { min: 30, max: 14 * 86_400 },
   antiSnipeSec: { min: 0, max: 7_200 },
+  antiSnipeExtendSec: { min: 0, max: 7_200 },
   noBidTimeoutSec: { min: 30, max: 3_600 },
 } as const;
 
@@ -71,7 +72,10 @@ export const createLotSchema = z
       .number({ invalid_type_error: 'Длительность — число' })
       .positive('Длительность больше нуля'),
     durationUnit: z.enum(LOT_DURATION_UNITS),
-    antiSnipeSec: intField(LOT_LIMITS.antiSnipeSec, 'Анти-снайп'),
+    antiSnipeSec: intField(LOT_LIMITS.antiSnipeSec, 'Анти-снайп (окно)'),
+    /** Продление окончания при снайп-ставке; по умолчанию — из настроек. */
+    antiSnipeExtendSec: intField(LOT_LIMITS.antiSnipeExtendSec, 'Анти-снайп (продление)')
+      .nullish(),
     noBidTimeoutSec: intField(LOT_LIMITS.noBidTimeoutSec, 'Тайм-аут без ставок')
       .nullish(),
   })
@@ -109,7 +113,9 @@ export interface AuctionSettingValues {
   liveDurationSec: number;
   longDurationDays: number;
   antiSnipeLiveSec: number;
+  antiSnipeExtendLiveSec: number;
   antiSnipeLongSec: number;
+  antiSnipeExtendLongSec: number;
   noBidTimeoutSec: number;
   foreignClassMarkupPct: number;
 }
@@ -123,12 +129,14 @@ export interface LotDefaults {
     durationValue: number;
     durationUnit: 'MINUTES';
     antiSnipeSec: number;
+    antiSnipeExtendSec: number;
     noBidTimeoutSec: number;
   };
   long: {
     durationValue: number;
     durationUnit: 'DAYS';
     antiSnipeSec: number;
+    antiSnipeExtendSec: number;
   };
 }
 
@@ -149,12 +157,14 @@ export function suggestLotDefaults(
       durationValue: settings.liveDurationSec / 60,
       durationUnit: 'MINUTES',
       antiSnipeSec: settings.antiSnipeLiveSec,
+      antiSnipeExtendSec: settings.antiSnipeExtendLiveSec,
       noBidTimeoutSec: settings.noBidTimeoutSec,
     },
     long: {
       durationValue: settings.longDurationDays,
       durationUnit: 'DAYS',
       antiSnipeSec: settings.antiSnipeLongSec,
+      antiSnipeExtendSec: settings.antiSnipeExtendLongSec,
     },
   };
 }
@@ -177,6 +187,8 @@ export interface AuctionLotRow {
   timerKind: LotTimerKind;
   durationSec: number;
   antiSnipeSec: number;
+  /** Продление окончания при снайп-ставке (план 6, п. 4). */
+  antiSnipeExtendSec: number;
   /** Тайм-аут закрытия без ставок — только у живой раздачи. */
   noBidTimeoutSec: number | null;
   /** Наценка «чужому» классу, зафиксированная при создании лота (план 6, п. 6). */
@@ -197,4 +209,140 @@ export interface LootDropRow {
   targetRoles: import('./items').ItemTargetRole[];
   createdAt: string;
   lot: AuctionLotRow | null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Ставки: открытый аукцион, баланс и анти-снайп (issue #94, план 6). */
+/* ------------------------------------------------------------------ */
+
+/** Параметры лота, от которых зависит приём ставок. */
+export interface BidLotParams {
+  status: LotStatus;
+  startPrice: number;
+  step: number;
+  timerKind: LotTimerKind;
+  durationSec: number;
+  antiSnipeSec: number;
+  /** Продление окончания при ставке в окне анти-снайпа (план 6, п. 4). */
+  antiSnipeExtendSec: number;
+  /** Замороженная разметка «кому нужна» (план 6, п. 6). */
+  targetRoles: readonly import('./items').ItemTargetRole[];
+  /** Замороженный процент наценки «чужому» классу (план 6, п. 6). */
+  markupPct: number;
+  firstBidAt: Date | null;
+  endsAt: Date | null;
+}
+
+/** Новая ставка. */
+export const placeBidSchema = z.object({
+  amount: z
+    .number({ invalid_type_error: 'Ставка — число' })
+    .int('Ставка — целое число')
+    .min(0, 'Ставка неотрицательная')
+    .max(1_000_000, 'Ставка: не больше 1 000 000'),
+});
+export type PlaceBidInput = z.infer<typeof placeBidSchema>;
+
+/**
+ * Минимальная допустимая ставка (план 6, п. 2): первая — не ниже стартовой
+ * цены, каждая следующая — не ниже текущей плюс шаг. currentMax — максимум
+ * принятых ставок, null если ставок ещё не было.
+ */
+export function minBidAmount(lot: Pick<BidLotParams, 'startPrice' | 'step'>, currentMax: number | null): number {
+  return currentMax === null ? lot.startPrice : currentMax + lot.step;
+}
+
+/**
+ * «Чужой» класс для классовой наценки (план 6, п. 6): предмет без «Все»,
+ * боевая роль игрока не входит в разметку лота. Игрок без роли в профиле
+ * платит наценку — иначе наценку обходили бы снятием роли.
+ * (Открытый вопрос #91 о вступивших после создания лота это не закрывает.)
+ */
+export function isForeignBidder(
+  targetRoles: readonly import('./items').ItemTargetRole[],
+  combatRole: 'DPS' | 'HEALER' | 'TANK' | null,
+): boolean {
+  if (targetRoles.includes('ALL')) return false;
+  return combatRole === null || !targetRoles.includes(combatRole);
+}
+
+/**
+ * Полная стоимость ставки с наценкой, округлённая до целого вверх
+ * (план 6, п. 5 и 7). Именно она проверяется по балансу, замораживается
+ * у лидера и списывается при победе.
+ */
+export function bidFullCost(amount: number, markupPct: number, foreign: boolean): number {
+  return foreign ? Math.ceil((amount * (100 + markupPct)) / 100) : amount;
+}
+
+/**
+ * Доступный баланс для новой ставки (план 6, п. 5): баланс минус замороженные
+ * полные стоимости лидирующих ставок игрока на других открытых лотах.
+ * Ставка принимается, если её полная стоимость не превышает доступный баланс.
+ */
+export function hasAvailableBalance(balance: number, frozen: number, fullCost: number): boolean {
+  return balance - frozen >= fullCost;
+}
+
+/** Причина отказа ставки — для сообщений API и тестов. */
+export type BidRejection =
+  | 'LOT_NOT_OPEN' // лот закрыт или отменён
+  | 'LOT_ENDED' // таймер торгов истёк (по серверному времени)
+  | 'BID_TOO_LOW'; // ниже минимальной допустимой
+
+/**
+ * Проверка ставки по состоянию лота и времени сервера (план 6, п. 2–4):
+ * принимаются только ставки на действующий лот в пределах серверного времени.
+ * Живая раздача до первой ставки не ограничена торговым таймером (её закрывает
+ * отдельный тайм-аут без ставок, обработчик — #95).
+ */
+export function checkBidAllowed(
+  lot: BidLotParams,
+  currentMax: number | null,
+  amount: number,
+  now: Date,
+): BidRejection | null {
+  if (lot.status !== 'OPEN') return 'LOT_NOT_OPEN';
+  if (lot.endsAt !== null && now.getTime() >= lot.endsAt.getTime()) return 'LOT_ENDED';
+  if (amount < minBidAmount(lot, currentMax)) return 'BID_TOO_LOW';
+  return null;
+}
+
+/**
+ * Новое окончание лота после принятой ставки (план 6, п. 3–4).
+ * Живая раздача: первая ставка запускает торговый таймер длительностью
+ * durationSec. Анти-снайп: ставка в пределах окна до конца лота, включая
+ * точную границу, прибавляет продление к текущему окончанию. Ставка ровно
+ * на границе окна (endsAt − now == окно) тоже продлевает.
+ */
+export function endsAtAfterBid(lot: BidLotParams, now: Date): Date | null {
+  if (lot.timerKind === 'FIRST_BID' && lot.firstBidAt === null) {
+    return new Date(now.getTime() + lot.durationSec * 1000);
+  }
+  if (lot.endsAt === null) return null;
+  const remainingMs = lot.endsAt.getTime() - now.getTime();
+  if (remainingMs <= lot.antiSnipeSec * 1000) {
+    return new Date(lot.endsAt.getTime() + lot.antiSnipeExtendSec * 1000);
+  }
+  return lot.endsAt;
+}
+
+/** Ставка в открытой истории лота (план 6: ставки видны всем). */
+export interface BidRow {
+  id: string;
+  auctionId: string;
+  memberId: string;
+  memberName: string;
+  amount: number;
+  /** Полная стоимость с наценкой на момент ставки (заморожена у лидера). */
+  fullCost: number;
+  /** Применённая наценка «чужому» классу, % (0 — «родной» класс). */
+  markupPct: number;
+  createdAt: string;
+}
+
+/** Результат принятой ставки: запись и новое окончание лота. */
+export interface PlaceBidResult {
+  bid: BidRow;
+  endsAt: string | null;
 }

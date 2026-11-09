@@ -40,6 +40,7 @@ interface StoredAuction {
   timerFromFirstBid: boolean;
   durationSec: number;
   antiSnipeSec: number;
+  antiSnipeExtendSec: number;
   noBidTimeoutSec: number | null;
   markupPct: number;
   firstBidAt: Date | null;
@@ -92,6 +93,7 @@ export interface LootDb {
         durationSec: number;
         timerFromFirstBid: boolean;
         antiSnipeSec: number;
+        antiSnipeExtendSec: number;
         noBidTimeoutSec: number | null;
         markupPct: number;
         targetRoles: ItemTargetRole[];
@@ -113,7 +115,9 @@ const AUCTION_SETTING_KEYS = [
   'auction.liveDurationSec',
   'auction.longDurationDays',
   'auction.antiSnipeLiveSec',
+  'auction.antiSnipeExtendLiveSec',
   'auction.antiSnipeLongSec',
+  'auction.antiSnipeExtendLongSec',
   'auction.noBidTimeoutSec',
   'auction.foreignClassMarkupPct',
 ] as const;
@@ -215,6 +219,9 @@ export class LootService {
     const settings = await this.readAuctionSettings();
     const durationSec = lotDurationSec(input.durationValue, input.durationUnit);
     const fromFirstBid = input.timerKind === 'FIRST_BID';
+    const antiSnipeExtendSec =
+      input.antiSnipeExtendSec ??
+      (fromFirstBid ? settings.antiSnipeExtendLiveSec : settings.antiSnipeExtendLongSec);
     const auction = await this.db.auction.create({
       data: {
         lootDropId: drop.id,
@@ -223,6 +230,7 @@ export class LootService {
         durationSec,
         timerFromFirstBid: fromFirstBid,
         antiSnipeSec: input.antiSnipeSec,
+        antiSnipeExtendSec,
         noBidTimeoutSec: fromFirstBid ? (input.noBidTimeoutSec ?? null) : null,
         markupPct: settings.foreignClassMarkupPct,
         targetRoles: drop.item.targetRoles,
@@ -239,7 +247,7 @@ export class LootService {
           fromFirstBid
             ? `живая раздача ${durationSec} сек от первой ставки, тайм-аут без ставок ${input.noBidTimeoutSec} сек`
             : `длинный лот ${durationSec} сек от открытия`
-        }, анти-снайп ${input.antiSnipeSec} сек`,
+        }, анти-снайп ${input.antiSnipeSec} сек (продление ${antiSnipeExtendSec} сек)`,
     );
     return this.toLotRow(auction);
   }
@@ -293,7 +301,9 @@ export class LootService {
       liveDurationSec: read('auction.liveDurationSec'),
       longDurationDays: read('auction.longDurationDays'),
       antiSnipeLiveSec: read('auction.antiSnipeLiveSec'),
+      antiSnipeExtendLiveSec: read('auction.antiSnipeExtendLiveSec'),
       antiSnipeLongSec: read('auction.antiSnipeLongSec'),
+      antiSnipeExtendLongSec: read('auction.antiSnipeExtendLongSec'),
       noBidTimeoutSec: read('auction.noBidTimeoutSec'),
       foreignClassMarkupPct: read('auction.foreignClassMarkupPct'),
     };
@@ -308,6 +318,7 @@ export class LootService {
       timerKind: auction.timerFromFirstBid ? 'FIRST_BID' : 'OPENING',
       durationSec: auction.durationSec,
       antiSnipeSec: auction.antiSnipeSec,
+      antiSnipeExtendSec: auction.antiSnipeExtendSec,
       noBidTimeoutSec: auction.noBidTimeoutSec,
       markupPct: auction.markupPct,
       firstBidAt: auction.firstBidAt?.toISOString() ?? null,

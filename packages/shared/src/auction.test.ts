@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bidFullCost,
+  checkBidAllowed,
   createDropSchema,
   createLotSchema,
+  endsAtAfterBid,
+  hasAvailableBalance,
+  isForeignBidder,
   lotDurationSec,
+  minBidAmount,
+  placeBidSchema,
   suggestLotDefaults,
   type AuctionSettingValues,
+  type BidLotParams,
 } from './auction';
 
 const SETTINGS: AuctionSettingValues = {
@@ -128,5 +136,144 @@ describe('createDropSchema', () => {
   it('требует предмет', () => {
     expect(createDropSchema.safeParse({}).success).toBe(false);
     expect(createDropSchema.safeParse({ itemId: 'i-1' }).success).toBe(true);
+  });
+});
+
+/* ---------------- Ставки, баланс и анти-снайп (issue #94) ---------------- */
+
+const baseLot: BidLotParams = {
+  status: 'OPEN',
+  startPrice: 100,
+  step: 5,
+  timerKind: 'OPENING',
+  durationSec: 90,
+  antiSnipeSec: 30,
+  antiSnipeExtendSec: 600,
+  targetRoles: ['DPS'],
+  markupPct: 50,
+  firstBidAt: null,
+  endsAt: null,
+};
+
+describe('minBidAmount', () => {
+  it('первая ставка — не ниже стартовой цены', () => {
+    expect(minBidAmount(baseLot, null)).toBe(100);
+  });
+  it('следующая — не ниже текущей плюс шаг', () => {
+    expect(minBidAmount(baseLot, 100)).toBe(105);
+  });
+});
+
+describe('placeBidSchema', () => {
+  it('принимает целую неотрицательную ставку', () => {
+    expect(placeBidSchema.parse({ amount: 0 }).amount).toBe(0);
+  });
+  it('отклоняет дробную, отрицательную и нечисловую', () => {
+    expect(placeBidSchema.safeParse({ amount: 1.5 }).success).toBe(false);
+    expect(placeBidSchema.safeParse({ amount: -1 }).success).toBe(false);
+    expect(placeBidSchema.safeParse({ amount: 'x' }).success).toBe(false);
+  });
+});
+
+describe('isForeignBidder', () => {
+  it('«Все» — без наценки никому', () => {
+    expect(isForeignBidder(['ALL'], 'TANK')).toBe(false);
+    expect(isForeignBidder(['ALL'], null)).toBe(false);
+  });
+  it('«чужая» роль и отсутствие роли — наценка', () => {
+    expect(isForeignBidder(['DPS'], 'TANK')).toBe(true);
+    expect(isForeignBidder(['DPS'], null)).toBe(true);
+    expect(isForeignBidder(['DPS'], 'DPS')).toBe(false);
+    expect(isForeignBidder(['DPS', 'TANK'], 'TANK')).toBe(false);
+  });
+});
+
+describe('bidFullCost', () => {
+  it('«родной» класс платит ставку без наценки', () => {
+    expect(bidFullCost(100, 50, false)).toBe(100);
+  });
+  it('наценка округляется до целого вверх', () => {
+    expect(bidFullCost(101, 50, true)).toBe(152); // 151,5 → 152
+    expect(bidFullCost(100, 50, true)).toBe(150);
+    expect(bidFullCost(7, 0, true)).toBe(7);
+  });
+});
+
+describe('hasAvailableBalance', () => {
+  it('полная стоимость и заморозка по другим лотам не выше баланса', () => {
+    expect(hasAvailableBalance(200, 50, 150)).toBe(true); // ровно граница
+    expect(hasAvailableBalance(200, 50, 151)).toBe(false);
+    expect(hasAvailableBalance(100, 0, 100)).toBe(true);
+    expect(hasAvailableBalance(-10, 0, 1)).toBe(false);
+  });
+});
+
+describe('checkBidAllowed', () => {
+  const now = new Date('2026-11-09T20:00:00Z');
+  it('отклоняет ставки на закрытый и отменённый лот', () => {
+    expect(checkBidAllowed({ ...baseLot, status: 'CLOSED' }, null, 100, now)).toBe('LOT_NOT_OPEN');
+    expect(checkBidAllowed({ ...baseLot, status: 'CANCELLED' }, null, 100, now)).toBe(
+      'LOT_NOT_OPEN',
+    );
+  });
+  it('ставка ровно в момент окончания уже не принимается', () => {
+    const endsAt = new Date('2026-11-09T20:00:00Z');
+    expect(checkBidAllowed({ ...baseLot, endsAt }, null, 100, now)).toBe('LOT_ENDED');
+    expect(
+      checkBidAllowed({ ...baseLot, endsAt: new Date(now.getTime() + 1) }, null, 100, now),
+    ).toBeNull();
+  });
+  it('живая раздача до первой ставки принимает ставку без торгового таймера', () => {
+    const live: BidLotParams = { ...baseLot, timerKind: 'FIRST_BID', endsAt: null };
+    expect(checkBidAllowed(live, null, 100, now)).toBeNull();
+  });
+  it('ставка ниже минимальной отклоняется', () => {
+    expect(checkBidAllowed(baseLot, null, 99, now)).toBe('BID_TOO_LOW');
+    expect(checkBidAllowed(baseLot, 100, 104, now)).toBe('BID_TOO_LOW');
+    expect(checkBidAllowed(baseLot, 100, 105, now)).toBeNull();
+  });
+});
+
+describe('endsAtAfterBid', () => {
+  const now = new Date('2026-11-09T20:00:00Z');
+  it('первая ставка живой раздачи запускает таймер длительностью лота', () => {
+    const live: BidLotParams = { ...baseLot, timerKind: 'FIRST_BID', endsAt: null };
+    expect(endsAtAfterBid(live, now)?.getTime()).toBe(now.getTime() + 90_000);
+  });
+  it('последующие ставки живой раздачи не сдвигают окончание вне окна анти-снайпа', () => {
+    const endsAt = new Date(now.getTime() + 60_000);
+    const live: BidLotParams = {
+      ...baseLot,
+      timerKind: 'FIRST_BID',
+      firstBidAt: now,
+      endsAt,
+    };
+    expect(endsAtAfterBid(live, now)).toBe(endsAt);
+  });
+  it('ставка в окне анти-снайпа прибавляет продление к текущему окончанию', () => {
+    // Пример из плана 6, п. 4: за 2 мин до конца при продлении 10 мин
+    // окончание переносится на 12 мин от ставки.
+    const endsAt = new Date(now.getTime() + 120_000);
+    const lot: BidLotParams = {
+      ...baseLot,
+      antiSnipeSec: 600,
+      antiSnipeExtendSec: 600,
+      endsAt,
+    };
+    expect(endsAtAfterBid(lot, now)?.getTime()).toBe(now.getTime() + 720_000);
+  });
+  it('точная граница окна продлевает, за её пределами — нет', () => {
+    const endsAt = new Date(now.getTime() + 30_000); // ровно окно 30 сек
+    expect(endsAtAfterBid({ ...baseLot, endsAt }, now)?.getTime()).toBe(
+      endsAt.getTime() + 600_000,
+    );
+    const outside = new Date(now.getTime() + 30_001);
+    expect(endsAtAfterBid({ ...baseLot, endsAt: outside }, now)).toBe(outside);
+  });
+  it('окно 0 отключает продление', () => {
+    const endsAt = new Date(now.getTime() + 5_000);
+    expect(
+      endsAtAfterBid({ ...baseLot, antiSnipeSec: 0, endsAt }, now),
+    ).toBe(endsAt);
   });
 });

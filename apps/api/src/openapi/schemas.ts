@@ -50,6 +50,7 @@ const inputs: Record<string, unknown> = {
   GameTimeSettings: shared.gameTimeSettingsSchema,
   CreateDrop: shared.createDropSchema,
   CreateLot: shared.createLotSchema,
+  PlaceBid: shared.placeBidSchema,
 };
 // Не разворачиваем union всех Zod-типов shared в типах конвертера.
 function convert(schema: unknown): SchemaObject {
@@ -191,6 +192,11 @@ export const schemas: Record<string, SchemaObject> = {
     },
     durationSec: num,
     antiSnipeSec: num,
+    antiSnipeExtendSec: {
+      ...num,
+      description:
+        'Продление окончания при ставке в окне анти-снайпа; окно и продление независимы (план 6, п. 4).',
+    },
     noBidTimeoutSec: nullable(num),
     markupPct: num,
     firstBidAt: nullable(date),
@@ -216,13 +222,40 @@ export const schemas: Record<string, SchemaObject> = {
       durationValue: { type: 'number' },
       durationUnit: enumeration(['MINUTES']),
       antiSnipeSec: num,
+      antiSnipeExtendSec: num,
       noBidTimeoutSec: num,
     }),
     long: object({
       durationValue: { type: 'number' },
       durationUnit: enumeration(['DAYS']),
       antiSnipeSec: num,
+      antiSnipeExtendSec: num,
     }),
+  }),
+  Bid: object({
+    id: str,
+    auctionId: str,
+    memberId: str,
+    memberName: str,
+    amount: num,
+    fullCost: {
+      ...num,
+      description:
+        'Полная стоимость с применимой наценкой, округлённая вверх; заморожена, пока ставка лидирует (план 6, п. 5).',
+    },
+    markupPct: {
+      ...num,
+      description: 'Применённая наценка «чужому» классу, % (0 — «родной» класс).',
+    },
+    createdAt: date,
+  }),
+  PlaceBidResult: object({
+    bid: ref('Bid'),
+    endsAt: {
+      ...nullable(date),
+      description:
+        'Окончание торгов после ставки: запуск таймера живой раздачи или продление анти-снайпа.',
+    },
   }),
   Id: object({ id: str }),
   Error: object({ statusCode: num, message: { oneOf: [str, array(str)] }, error: str }, [
