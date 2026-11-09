@@ -48,6 +48,8 @@ const inputs: Record<string, unknown> = {
   UpdateRules: shared.updateRulesSchema,
   RestoreRules: shared.restoreRulesSchema,
   GameTimeSettings: shared.gameTimeSettingsSchema,
+  CreateDrop: shared.createDropSchema,
+  CreateLot: shared.createLotSchema,
 };
 // Не разворачиваем union всех Zod-типов shared в типах конвертера.
 function convert(schema: unknown): SchemaObject {
@@ -177,6 +179,51 @@ export const schemas: Record<string, SchemaObject> = {
     ),
   }),
   Ok: object({ ok: { type: 'boolean', enum: [true] } }),
+  AuctionLot: object({
+    id: str,
+    status: enumeration(['OPEN', 'CLOSED', 'CANCELLED']),
+    startPrice: num,
+    step: num,
+    timerKind: {
+      ...enumeration(['FIRST_BID', 'OPENING']),
+      description:
+        'FIRST_BID — живая раздача, таймер торгов от первой ставки; OPENING — длинный лот от открытия.',
+    },
+    durationSec: num,
+    antiSnipeSec: num,
+    noBidTimeoutSec: nullable(num),
+    markupPct: num,
+    firstBidAt: nullable(date),
+    endsAt: nullable(date),
+    createdAt: date,
+  }),
+  LootDrop: object({
+    id: str,
+    eventId: str,
+    itemId: str,
+    itemName: str,
+    rarity: nullable(str),
+    slot: nullable(str),
+    targetRoles: array(enumeration(['ALL', 'DPS', 'HEALER', 'TANK'])),
+    createdAt: date,
+    lot: { ...ref('AuctionLot'), nullable: true } as SchemaObject,
+  }),
+  LotDefaults: object({
+    startPrice: num,
+    step: num,
+    markupPct: num,
+    live: object({
+      durationValue: { type: 'number' },
+      durationUnit: enumeration(['MINUTES']),
+      antiSnipeSec: num,
+      noBidTimeoutSec: num,
+    }),
+    long: object({
+      durationValue: { type: 'number' },
+      durationUnit: enumeration(['DAYS']),
+      antiSnipeSec: num,
+    }),
+  }),
   Id: object({ id: str }),
   Error: object({ statusCode: num, message: { oneOf: [str, array(str)] }, error: str }, [
     'statusCode',
