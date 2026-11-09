@@ -132,9 +132,9 @@ suite('Закрытие лотов: настоящие транзакции Post
     expect(again).toMatchObject({ closed: false, skipped: true });
     expect(await db.lootAward.count({ where: { auctionId: lotId } })).toBe(1);
     expect(await db.dkpEntry.count({ where: { auctionId: lotId } })).toBe(1);
-    expect(
-      await db.auditLog.count({ where: { action: 'AUCTION_CLOSE', entityId: lotId } }),
-    ).toBe(1);
+    expect(await db.auditLog.count({ where: { action: 'AUCTION_CLOSE', entityId: lotId } })).toBe(
+      1,
+    );
   });
 
   it('лот без ставок: статус CLOSED без победителя, расхода и записей журнала', async () => {
@@ -162,9 +162,9 @@ suite('Закрытие лотов: настоящие транзакции Post
     expect(results.some((r) => r.status === 'fulfilled')).toBe(true);
     expect(await db.lootAward.count({ where: { auctionId: lotId } })).toBe(1);
     expect(await db.dkpEntry.count({ where: { auctionId: lotId } })).toBe(1);
-    expect(
-      await db.auditLog.count({ where: { action: 'AUCTION_CLOSE', entityId: lotId } }),
-    ).toBe(1);
+    expect(await db.auditLog.count({ where: { action: 'AUCTION_CLOSE', entityId: lotId } })).toBe(
+      1,
+    );
   });
 
   it('гонка ставки с закрытием: либо ставка принята и лот жив, либо закрыт без неё', async () => {
@@ -195,6 +195,9 @@ suite('Закрытие лотов: настоящие транзакции Post
       expect(awards).toBe(0);
       expect(entries).toBe(0);
       expect(closeResult.status === 'fulfilled' && closeResult.value.skipped).toBe(true);
+      // Продление — на секунды: убираем лот, иначе он просрочится во время
+      // следующих тестов и свипер закрытия посчитает его лишним.
+      await db.auction.update({ where: { id: lotId }, data: { status: 'CANCELLED' } });
     } else {
       // Закрытие успело: ставка отклонена без побочных эффектов.
       expect(bidCount).toBe(0);
@@ -211,9 +214,11 @@ suite('Закрытие лотов: настоящие транзакции Post
     await db.bid.create({
       data: { auctionId: expiredLong, memberId: dpsId, amount: 100, fullCost: 100, markupPct: 0 },
     });
-    // «Новый» экземпляр сервиса — как после перезапуска процесса.
+    // «Новый» экземпляр сервиса — как после перезапуска процесса. Общий
+    // dkp_test могут делить другие спеки, оставляя свои просроченные лоты,
+    // поэтому считаем не меньше своих двух; точность по статусам ниже.
     const restarted = new AuctionCloseService(db as unknown as CloseDb, undefined, 0);
-    expect(await restarted.closeDue()).toBe(2);
+    expect(await restarted.closeDue()).toBeGreaterThanOrEqual(2);
     const rows = await db.auction.findMany({
       where: { id: { in: [expiredLong, expiredLive, alive] } },
     });

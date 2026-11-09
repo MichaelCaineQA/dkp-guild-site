@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LootPanel } from './loot-panel';
 import { api } from '../lib/api';
 
@@ -174,4 +174,121 @@ it('некорректная длительность не уходит на с�
     '/events/e-1/loot/drops/d-1/lot',
     expect.objectContaining({ method: 'POST' }),
   );
+});
+
+describe('ручное управление лотом (issue #96)', () => {
+  const OPEN_LOT = { ...LOT, timerKind: 'OPENING' as const, endsAt: '2026-11-11T20:00:00Z' };
+  const MANAGE_OK = {
+    lot: { ...OPEN_LOT },
+    winner: { memberId: 'm-2', memberName: 'Целитель', finalPrice: 25, markupPct: 0 },
+    refund: null,
+    repeated: false,
+  };
+  let awardBody: Record<string, unknown> | null = null;
+  let failAward: { message: string } | null = null;
+
+  const mockManageApi = (drops: unknown[]) =>
+    vi.mocked(api).mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === '/events/e-1/loot') return drops;
+      if (path === '/items') return [ITEM];
+      if (path === '/members')
+        return [
+          { id: 'm-1', nickname: 'Воин' },
+          { id: 'm-2', nickname: 'Целитель' },
+        ];
+      if (path === '/auctions/a-1/award') {
+        if (failAward) throw { body: failAward };
+        awardBody = JSON.parse(init!.body as string);
+        return MANAGE_OK;
+      }
+      if (path === '/auctions/a-1/cancel') return { ...MANAGE_OK, winner: null };
+      throw new Error(`unexpected ${path}`);
+    });
+
+  beforeEach(() => {
+    awardBody = null;
+    failAward = null;
+    vi.stubGlobal('crypto', { randomUUID: () => '00000000-0000-4000-8000-000000000001' });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('управляющий видит продление и отмену, Глава — завершение и назначение', async () => {
+    mockManageApi([{ ...DROP, lot: OPEN_LOT }]);
+    render(<LootPanel eventId="e-1" canEdit={false} canManage canDecide />);
+    expect(await screen.findByRole('button', { name: 'Продлить…' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Отменить…' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Завершить досрочно…' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Назначить победителя…' })).toBeDefined();
+  });
+
+  it('без прав действий нет — только параметры лота', async () => {
+    mockManageApi([{ ...DROP, lot: OPEN_LOT }]);
+    render(<LootPanel eventId="e-1" canEdit={false} />);
+    await screen.findByText(/длинный лот/);
+    expect(screen.queryByRole('button', { name: 'Продлить…' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Отменить…' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Назначить победителя…' })).toBeNull();
+  });
+
+  it('завершённый лот — только назначение победителя, отменённый — только просмотр', async () => {
+    mockManageApi([
+      { ...DROP, lot: { ...OPEN_LOT, status: 'CLOSED' } },
+      { ...DROP, id: 'd-2', lot: { ...OPEN_LOT, id: 'a-2', status: 'CANCELLED' } },
+    ]);
+    render(<LootPanel eventId="e-1" canEdit={false} canManage canDecide />);
+    await screen.findByText(/Завершён/);
+    expect(screen.getByRole('button', { name: 'Назначить победителя…' })).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Продлить…' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Отменить…' })).toBeNull();
+    expect(screen.getByText('Только просмотр')).toBeDefined();
+  });
+
+  it('назначение победителя: получатель, цена и причина уходят на сервер, итог показан', async () => {
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    mockManageApi([{ ...DROP, lot: OPEN_LOT }]);
+    render(<LootPanel eventId="e-1" canEdit={false} canManage canDecide />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Назначить победителя…' }));
+    fireEvent.change(await screen.findByLabelText('Получатель'), { target: { value: 'm-2' } });
+    fireEvent.change(screen.getByLabelText('Цена, ДКП (0 — бесплатно)'), {
+      target: { value: '25' },
+    });
+    fireEvent.change(screen.getByLabelText('Причина (попадёт в аудит)'), {
+      target: { value: 'договорились' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Назначить победителя' }));
+    await waitFor(() => expect(screen.getByText(/Победитель: Целитель за 25 ДКП/)).toBeDefined());
+    expect(awardBody).toMatchObject({
+      winnerId: 'm-2',
+      price: 25,
+      comment: 'договорились',
+      requestId: '00000000-0000-4000-8000-000000000001',
+    });
+    // Журнал ДКП изменился — виджеты балансов оповещены.
+    expect(dispatchSpy).toHaveBeenCalledWith(new Event('dkp:changed'));
+  });
+
+  it('причина обязательна: пустая не уходит на сервер', async () => {
+    mockManageApi([{ ...DROP, lot: OPEN_LOT }]);
+    render(<LootPanel eventId="e-1" canEdit={false} canManage canDecide />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Отменить…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Отменить лот' }));
+    await screen.findByText('Укажите причину действия');
+    expect(api).not.toHaveBeenCalledWith('/auctions/a-1/cancel', expect.anything());
+  });
+
+  it('ошибка сервера показывается в модалке без потери введённого', async () => {
+    mockManageApi([{ ...DROP, lot: OPEN_LOT }]);
+    render(<LootPanel eventId="e-1" canEdit={false} canManage canDecide />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Назначить победителя…' }));
+    fireEvent.change(await screen.findByLabelText('Получатель'), { target: { value: 'm-2' } });
+    fireEvent.change(screen.getByLabelText('Причина (попадёт в аудит)'), {
+      target: { value: 'причина' },
+    });
+    failAward = { message: 'Отменённый лот не меняется' };
+    fireEvent.click(screen.getByRole('button', { name: 'Назначить победителя' }));
+    await screen.findByText('Отменённый лот не меняется');
+    expect((screen.getByLabelText('Причина (попадёт в аудит)') as HTMLInputElement).value).toBe(
+      'причина',
+    );
+  });
 });

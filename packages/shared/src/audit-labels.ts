@@ -41,4 +41,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   AUCTION_CREATE: 'Создание лота',
   AUCTION_BID: 'Ставка на аукционе',
   AUCTION_CLOSE: 'Закрытие лота',
+  AUCTION_EXTEND: 'Продление лота',
+  AUCTION_CANCEL: 'Отмена лота',
+  AUCTION_CLOSE_EARLY: 'Досрочное завершение лота',
+  AUCTION_ASSIGN_WINNER: 'Ручной победитель лота',
 };
