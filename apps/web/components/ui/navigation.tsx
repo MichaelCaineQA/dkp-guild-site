@@ -21,6 +21,7 @@ function MenuIcon({ name }: { name: string }) {
     settings: 'M4 7h16M4 17h16M8 4v6M16 14v6',
     shield: 'M12 2 3 6v6c0 5 9 10 9 10s9-5 9-10V6zM8 11l3 3 5-6',
     design: 'M4 4h16v16H4zM4 12h16M12 4v16',
+    auction: 'M14 4l6 6-9 9-6-6zM11 13l-8 8M3 19l2 2',
   };
   return (
     <svg

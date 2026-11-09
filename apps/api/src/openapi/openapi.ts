@@ -152,6 +152,7 @@ function tagFor(path: string): string {
     rules: 'Правила',
     settings: 'Настройки',
     'event-types': 'Типы ивентов',
+    items: 'Аукцион',
     health: 'Система',
     meta: 'Система',
   };
