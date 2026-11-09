@@ -39,6 +39,7 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   KP: 'КП',
   Pack: 'Пак',
   Auction: 'Лот',
+  LootDrop: 'Дроп',
   Event: 'Событие',
   EventSeries: 'Серия событий',
   EventType: 'Тип события',

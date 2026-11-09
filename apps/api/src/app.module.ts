@@ -14,6 +14,7 @@ import { RulesModule } from './rules/rules.module';
 import { AuditModule } from './audit/audit.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { ItemsModule } from './items/items.module';
+import { LootModule } from './loot/loot.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { ItemsModule } from './items/items.module';
     ProfilesModule,
     RulesModule,
     ItemsModule,
+    LootModule,
   ],
   controllers: [AppController],
 })
