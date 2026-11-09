@@ -13,6 +13,7 @@ import { AbsencesModule } from './absences/absences.module';
 import { RulesModule } from './rules/rules.module';
 import { AuditModule } from './audit/audit.module';
 import { ProfilesModule } from './profiles/profiles.module';
+import { ItemsModule } from './items/items.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ProfilesModule } from './profiles/profiles.module';
     AuditModule,
     ProfilesModule,
     RulesModule,
+    ItemsModule,
   ],
   controllers: [AppController],
 })

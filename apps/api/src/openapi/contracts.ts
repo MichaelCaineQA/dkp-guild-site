@@ -382,6 +382,26 @@ export const contracts: Record<string, Contract> = {
     errors: [404, 409],
   }),
   EventTypes_remove: c('Удалить тип ивента', 'Ok', { access: officer, errors: [404] }),
+  Items_list: c('Получить справочник предметов', list('Item'), {
+    description: 'Справочник предметов аукциона (план 2.4): читают все члены гильдии.',
+  }),
+  Items_create: c('Создать предмет', 'Item', {
+    access: officer,
+    body: 'ItemInput',
+    errors: [400, 409],
+    description: 'Изменение пишется в аудит (план 2.9).',
+  }),
+  Items_update: c('Изменить предмет', 'Item', {
+    access: officer,
+    body: 'ItemInput',
+    errors: [400, 404, 409],
+  }),
+  Items_remove: c('Удалить предмет', 'Ok', {
+    access: officer,
+    errors: [404, 409],
+    description:
+      'Предмет, использованный хотя бы в одном лоте, не удаляется (409) — история лотов сохраняется.',
+  }),
 };
 
 export const extraSchemas = {

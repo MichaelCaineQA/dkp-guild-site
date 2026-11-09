@@ -336,6 +336,36 @@ export const schemas: Record<string, SchemaObject> = {
       description: 'После удаления пробелов по краям.',
     },
   }),
+  Item: object({
+    id: str,
+    name: str,
+    rarity: { ...str, nullable: true },
+    slot: { ...str, nullable: true },
+    targetRoles: array({
+      type: 'string',
+      enum: ['ALL', 'DPS', 'HEALER', 'TANK'],
+      description: 'Кому нужна: ALL («Все») несовместимо с конкретными ролями.',
+    }),
+    defaultStartPrice: {
+      type: 'integer',
+      nullable: true,
+      description: 'Рекомендованная стартовая цена лота; null — лот стартует с 0.',
+    },
+    lotsCount: {
+      type: 'integer',
+      description: 'Сколько раз предмет выставлялся лотами; занятый предмет не удаляется.',
+    },
+  }),
+  ItemInput: object(
+    {
+      name: { type: 'string', minLength: 1, maxLength: 80 },
+      rarity: { ...str, nullable: true, maxLength: 40 },
+      slot: { ...str, nullable: true, maxLength: 40 },
+      targetRoles: array({ type: 'string', enum: ['ALL', 'DPS', 'HEALER', 'TANK'] }),
+      defaultStartPrice: { type: 'integer', nullable: true, minimum: 0, maximum: 1000000 },
+    },
+    ['name', 'targetRoles'],
+  ),
 };
 const manualAmount = schemas.ManualDkp.properties?.amount as SchemaObject;
 manualAmount.not = { enum: [0] };

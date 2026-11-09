@@ -42,6 +42,7 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   Event: 'Событие',
   EventSeries: 'Серия событий',
   EventType: 'Тип события',
+  Item: 'Предмет',
   Absence: 'Отсутствие',
   Attendance: 'Посещение',
   Member: 'Участник',

@@ -11,6 +11,7 @@ export * from './absences';
 export * from './conduct';
 export * from './dkp';
 export * from './rules';
+export * from './items';
 export * from './audit';
 export * from './profile';
 export * from './weapons';
