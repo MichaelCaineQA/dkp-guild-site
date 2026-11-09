@@ -10,7 +10,7 @@ import {
 } from './settings';
 
 describe('SETTINGS_REGISTRY', () => {
-  it('все настройки из плана 2.2/2.3/6 присутствуют (13 ключей)', () => {
+  it('все настройки из плана 2.2/2.3/6 присутствуют (15 ключей)', () => {
     expect(Object.keys(SETTINGS_REGISTRY).sort()).toEqual(
       [
         'checkin.generateBeforeStartSec',
@@ -23,7 +23,9 @@ describe('SETTINGS_REGISTRY', () => {
         'auction.liveDurationSec',
         'auction.longDurationDays',
         'auction.antiSnipeLiveSec',
+        'auction.antiSnipeExtendLiveSec',
         'auction.antiSnipeLongSec',
+        'auction.antiSnipeExtendLongSec',
         'auction.foreignClassMarkupPct',
         'auction.noBidTimeoutSec',
       ].sort(),
@@ -55,7 +57,9 @@ describe('SETTINGS_REGISTRY', () => {
     expect(SETTING_DEFAULTS['auction.liveDurationSec']).toBe(60);
     expect(SETTING_DEFAULTS['auction.longDurationDays']).toBe(2);
     expect(SETTING_DEFAULTS['auction.antiSnipeLiveSec']).toBe(30);
+    expect(SETTING_DEFAULTS['auction.antiSnipeExtendLiveSec']).toBe(30);
     expect(SETTING_DEFAULTS['auction.antiSnipeLongSec']).toBe(600);
+    expect(SETTING_DEFAULTS['auction.antiSnipeExtendLongSec']).toBe(600);
     expect(SETTING_DEFAULTS['auction.foreignClassMarkupPct']).toBe(50);
     expect(SETTING_DEFAULTS['auction.noBidTimeoutSec']).toBe(120);
   });

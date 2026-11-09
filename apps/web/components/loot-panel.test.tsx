@@ -19,8 +19,14 @@ const DEFAULTS = {
   startPrice: 120,
   step: 1,
   markupPct: 50,
-  live: { durationValue: 1, durationUnit: 'MINUTES', antiSnipeSec: 30, noBidTimeoutSec: 120 },
-  long: { durationValue: 2, durationUnit: 'DAYS', antiSnipeSec: 600 },
+  live: {
+    durationValue: 1,
+    durationUnit: 'MINUTES',
+    antiSnipeSec: 30,
+    antiSnipeExtendSec: 30,
+    noBidTimeoutSec: 120,
+  },
+  long: { durationValue: 2, durationUnit: 'DAYS', antiSnipeSec: 600, antiSnipeExtendSec: 600 },
 };
 
 const DROP = {
@@ -43,6 +49,7 @@ const LOT = {
   timerKind: 'FIRST_BID',
   durationSec: 60,
   antiSnipeSec: 30,
+  antiSnipeExtendSec: 30,
   noBidTimeoutSec: 120,
   markupPct: 50,
   firstBidAt: null,

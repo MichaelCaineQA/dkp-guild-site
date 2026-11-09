@@ -26,7 +26,9 @@ const SETTINGS = new Map<string, number>([
   ['auction.liveDurationSec', 60],
   ['auction.longDurationDays', 2],
   ['auction.antiSnipeLiveSec', 30],
+  ['auction.antiSnipeExtendLiveSec', 30],
   ['auction.antiSnipeLongSec', 600],
+  ['auction.antiSnipeExtendLongSec', 600],
   ['auction.noBidTimeoutSec', 120],
   ['auction.foreignClassMarkupPct', 50],
 ]);
@@ -211,6 +213,7 @@ describe('LootService (issue #93)', () => {
       timerKind: 'FIRST_BID',
       durationSec: 90,
       antiSnipeSec: 30,
+      antiSnipeExtendSec: 30,
       noBidTimeoutSec: 120,
       markupPct: 50,
       endsAt: null,
@@ -293,9 +296,25 @@ describe('LootService (issue #93)', () => {
       startPrice: 120,
       step: 1,
       markupPct: 50,
-      live: { durationValue: 1, antiSnipeSec: 30, noBidTimeoutSec: 120 },
-      long: { durationValue: 2, antiSnipeSec: 600 },
+      live: { durationValue: 1, antiSnipeSec: 30, antiSnipeExtendSec: 30, noBidTimeoutSec: 120 },
+      long: { durationValue: 2, antiSnipeSec: 600, antiSnipeExtendSec: 600 },
     });
+  });
+
+  it('продление анти-снайпа можно задать на лот, иначе — из настроек', async () => {
+    const { db, auctions } = makeDb({
+      drops: [{ id: 'd-1', eventId: 'e-1', itemId: 'i-1', createdAt: new Date() }],
+    });
+    const service = new LootService(db);
+    const lot = await service.createLot(
+      'e-1',
+      'd-1',
+      { ...LIVE_INPUT, antiSnipeExtendSec: 45 },
+      RL,
+      'MEMBER',
+    );
+    expect(lot.antiSnipeExtendSec).toBe(45);
+    expect(auctions[0]).toMatchObject({ antiSnipeSec: 30, antiSnipeExtendSec: 45 });
   });
 
   it('дефолты работают при пустых настройках (fallback на реестр)', async () => {
