@@ -16,6 +16,7 @@ import { ProfilesModule } from './profiles/profiles.module';
 import { ItemsModule } from './items/items.module';
 import { LootModule } from './loot/loot.module';
 import { BidsModule } from './bids/bids.module';
+import { AuctionCloseModule } from './auction-close/auction-close.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { BidsModule } from './bids/bids.module';
     ItemsModule,
     LootModule,
     BidsModule,
+    AuctionCloseModule,
   ],
   controllers: [AppController],
 })

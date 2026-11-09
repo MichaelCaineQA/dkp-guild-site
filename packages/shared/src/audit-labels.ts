@@ -40,4 +40,5 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   LOOT_DROP_CREATE: 'Фиксация дропа',
   AUCTION_CREATE: 'Создание лота',
   AUCTION_BID: 'Ставка на аукционе',
+  AUCTION_CLOSE: 'Закрытие лота',
 };
