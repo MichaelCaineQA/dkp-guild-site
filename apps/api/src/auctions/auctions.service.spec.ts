@@ -155,3 +155,131 @@ describe('AuctionsService (issue #98)', () => {
     expect(await new AuctionsService(db).myNearestBidLot(null)).toBeNull();
   });
 });
+
+/** Лут-лог (issue #99): строка — только фактическая выдача (LootAward). */
+interface AwardSeed {
+  id: string;
+  winnerId?: string;
+  winnerName?: string;
+  finalPrice?: number;
+  markupPct?: number;
+  createdAt?: Date;
+  lotId?: string;
+  itemId?: string;
+  eventId?: string;
+  eventName?: string;
+}
+
+function makeLootDb(
+  awards: AwardSeed[],
+): AuctionsDb & { findWhere: Array<Record<string, unknown>>; page: Array<Record<string, unknown>> } {
+  const findWhere: Array<Record<string, unknown>> = [];
+  const page: Array<Record<string, unknown>> = [];
+  const db: AuctionsDb & {
+    findWhere: Array<Record<string, unknown>>;
+    page: Array<Record<string, unknown>>;
+  } = {
+    findWhere,
+    page,
+    auction: {
+      findMany: async () => [],
+    },
+    lootAward: {
+      findMany: async ({ where, take, skip }) => {
+        findWhere.push(where);
+        page.push({ take, skip });
+        return awards
+          .filter((award) => !where.winnerId || award.winnerId === where.winnerId)
+          .slice(skip, take === undefined ? undefined : skip + take)
+          .map((award) => ({
+            id: award.id,
+            finalPrice: award.finalPrice ?? 100,
+            markupPct: award.markupPct ?? 0,
+            createdAt: award.createdAt ?? new Date('2026-11-10T19:00:00Z'),
+            winner: { id: award.winnerId ?? 'm-1', nickname: award.winnerName ?? 'Воин' },
+            auction: {
+              id: award.lotId ?? 'a-1',
+              lootDrop: {
+                event: {
+                  id: award.eventId ?? 'e-1',
+                  name: award.eventName ?? 'Поход',
+                  startsAt: new Date('2026-11-10T18:00:00Z'),
+                },
+                item: { name: 'Клинок', rarity: 'эпический' },
+              },
+            },
+          }));
+      },
+      count: async ({ where }) =>
+        awards.filter((award) => !where.winnerId || award.winnerId === where.winnerId).length,
+    },
+  };
+  return db as never;
+}
+
+describe('AuctionsService.lootLog (issue #99)', () => {
+  it('строка лут-лога: предмет, получатель, событие, фактическая стоимость с наценкой', async () => {
+    const service = new AuctionsService(
+      makeLootDb([{ id: 'w-1', finalPrice: 225, markupPct: 50 }]),
+    );
+    const result = await service.lootLog({});
+    expect(result.total).toBe(1);
+    expect(result.entries[0]).toMatchObject({
+      awardId: 'w-1',
+      lotId: 'a-1',
+      itemName: 'Клинок',
+      rarity: 'эпический',
+      winnerId: 'm-1',
+      winnerName: 'Воин',
+      finalPrice: 225,
+      markupPct: 50,
+      eventId: 'e-1',
+      eventName: 'Поход',
+      eventStartsAt: '2026-11-10T18:00:00.000Z',
+      createdAt: '2026-11-10T19:00:00.000Z',
+    });
+  });
+
+  it('фильтр по игроку уходит в запрос как winnerId', async () => {
+    const db = makeLootDb([]);
+    await new AuctionsService(db).lootLog({ memberId: 'm-2' });
+    expect(db.findWhere[0]).toEqual({ winnerId: 'm-2' });
+  });
+
+  it('фильтры по событию и предмету идут через лот и дроп, вместе с игроком', async () => {
+    const db = makeLootDb([]);
+    await new AuctionsService(db).lootLog({ eventId: 'e-9' });
+    expect(db.findWhere[0]).toEqual({ auction: { lootDrop: { eventId: 'e-9' } } });
+
+    await new AuctionsService(db).lootLog({ itemId: 'i-7' });
+    expect(db.findWhere[1]).toEqual({ auction: { lootDrop: { itemId: 'i-7' } } });
+
+    await new AuctionsService(db).lootLog({ memberId: 'm-2', eventId: 'e-9', itemId: 'i-7' });
+    expect(db.findWhere[2]).toEqual({
+      winnerId: 'm-2',
+      auction: { lootDrop: { eventId: 'e-9', itemId: 'i-7' } },
+    });
+  });
+
+  it('без фильтров where пуст — все выдачи; пагинация применяется', async () => {
+    const db = makeLootDb([
+      { id: 'w-1', createdAt: new Date('2026-11-10T19:00:00Z') },
+      { id: 'w-2', createdAt: new Date('2026-11-09T19:00:00Z') },
+    ]);
+    const service = new AuctionsService(db);
+    const first = await service.lootLog({});
+    expect(first.total).toBe(2);
+    expect(db.findWhere[0]).toEqual({});
+    expect(db.page[0]).toEqual({ take: 50, skip: 0 });
+
+    const second = await service.lootLog({ limit: 1, offset: 1 });
+    expect(second.entries.map((row) => row.awardId)).toEqual(['w-2']);
+    expect(second.total).toBe(2);
+  });
+
+  it('некорректный запрос отклоняется до БД', async () => {
+    const db = makeLootDb([]);
+    await expect(new AuctionsService(db).lootLog({ limit: 999 })).rejects.toThrow();
+    expect(db.findWhere).toHaveLength(0);
+  });
+});

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { COMBAT_ROLES, type CombatRole, type Rank } from './domain';
 import { weaponPairSchema, type Weapon } from './weapons';
+import type { ProfileLootRow } from './loot-log';
 export const AVATARS = [
   'AURORA',
   'EMBER',
@@ -96,6 +97,9 @@ export interface PlayerProfile {
     eventId: string | null;
     createdAt: string;
   }>;
+  /** Полученный лут (план 2.5): свежие PROFILE_LOOT_LIMIT выдач сверху. */
+  loot: ProfileLootRow[];
+  lootTotal: number;
 }
 
 /** GS в общем составе/карточке/виджете команды — только Главе/Админу. */

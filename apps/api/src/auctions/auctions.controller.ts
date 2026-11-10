@@ -29,4 +29,14 @@ export class AuctionsController {
       req.session!.user!.memberId,
     );
   }
+
+  /**
+   * Лут-лог (issue #99): ?memberId=&eventId=&itemId=&limit=&offset= —
+   * публичная история выдач; фильтры работают по одному и в сочетании.
+   */
+  @Get('loot-log')
+  @RequirePermission('members.view_roster')
+  lootLog(@Query() query: Record<string, string>): ReturnType<AuctionsService['lootLog']> {
+    return this.auctions.lootLog(query);
+  }
 }

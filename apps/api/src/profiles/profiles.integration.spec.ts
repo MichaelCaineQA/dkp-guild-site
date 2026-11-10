@@ -13,6 +13,17 @@ let avatarColor: import('@dkp/shared').AvatarColor | null = null;
 let audit: Array<unknown> = [];
 let failAudit = false;
 let actor: SessionUser | undefined;
+/** Полученный лут профиля (#99): перезаписывается в beforeEach. */
+let loot: Array<{
+  id: string;
+  itemName: string;
+  rarity?: string | null;
+  finalPrice: number;
+  markupPct?: number;
+  eventId?: string;
+  eventName?: string;
+  createdAt: Date;
+}> = [];
 const entries = Array.from({ length: 10_001 }, (_, i) => ({
   id: `entry-${i}`,
   type: 'CHECKIN_EARN',
@@ -55,6 +66,27 @@ const db: ProfilesDb = {
     },
   },
   dkpEntry: { findMany: async () => entries },
+  lootAward: {
+    findMany: async ({ take }) =>
+      loot.slice(0, take).map((award, index) => ({
+        id: award.id,
+        finalPrice: award.finalPrice,
+        markupPct: award.markupPct ?? 0,
+        createdAt: award.createdAt,
+        auction: {
+          id: `lot-${index}`,
+          lootDrop: {
+            event: {
+              id: award.eventId ?? 'e-1',
+              name: award.eventName ?? 'Поход',
+              startsAt: new Date('2026-11-10T18:00:00Z'),
+            },
+            item: { name: award.itemName, rarity: award.rarity ?? null },
+          },
+        },
+      })),
+    count: async () => loot.length,
+  },
   $transaction: async (work) => {
     let draftRole = role;
     let draftWeapons = [...weapons];
@@ -128,6 +160,7 @@ describe('профили через HTTP', () => {
     avatarColor = null;
     audit = [];
     failAudit = false;
+    loot = [];
   });
   const patch = (id: string, body: unknown) =>
     fetch(`${url}/profiles/${id}`, {
@@ -154,6 +187,44 @@ describe('профили через HTTP', () => {
     expect(profile.balance).toBe(9995);
     expect(profile.recentEntries).toHaveLength(10);
     expect(profile.discord).toBe('discord-player');
+  });
+
+  it('полученный лут в профиле: свежие выдачи с фактической стоимостью (#99)', async () => {
+    loot = [
+      {
+        id: 'w-2',
+        itemName: 'Щит стража',
+        finalPrice: 90,
+        eventName: 'Поход',
+        createdAt: new Date('2026-11-10T19:00:00Z'),
+      },
+      {
+        id: 'w-1',
+        itemName: 'Клинок зари',
+        rarity: 'эпический',
+        finalPrice: 225,
+        markupPct: 50,
+        eventName: 'Осада',
+        createdAt: new Date('2026-11-09T19:00:00Z'),
+      },
+    ];
+    const profile = (await (await fetch(`${url}/profiles/m1`)).json()) as {
+      loot: Array<{ awardId: string; itemName: string; finalPrice: number }>;
+      lootTotal: number;
+    };
+    // свежие сверху, стоимость и наценка как в фактической записи журнала
+    expect(profile.loot.map((award) => award.awardId)).toEqual(['w-2', 'w-1']);
+    expect(profile.loot[1]).toMatchObject({ itemName: 'Клинок зари', finalPrice: 225 });
+    expect(profile.lootTotal).toBe(2);
+  });
+
+  it('без выдач лут в профиле пуст — не «отсутствующие награды»', async () => {
+    const profile = (await (await fetch(`${url}/profiles/m1`)).json()) as {
+      loot: unknown[];
+      lootTotal: number;
+    };
+    expect(profile.loot).toEqual([]);
+    expect(profile.lootTotal).toBe(0);
   });
 
   it('GS отсутствует в чужом профиле у рядового и Офицера, но есть в своём и у Главы/Админа', async () => {

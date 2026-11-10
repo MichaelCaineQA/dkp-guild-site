@@ -31,6 +31,7 @@ import {
   PageHeader,
   ProfileDetails,
   ProfileHistory,
+  ProfileLoot,
   SectionTitle,
   Select,
   Stack,
@@ -334,6 +335,7 @@ export default function ProfilePage() {
             {message && <p role="status">{message}</p>}
           </Card>
         )}
+        <ProfileLoot loot={profile.loot} total={profile.lootTotal} memberId={profile.id} />
         <ProfileHistory entries={profile.recentEntries} />
       </Stack>
     </Page>

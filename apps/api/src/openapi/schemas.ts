@@ -56,6 +56,7 @@ const inputs: Record<string, unknown> = {
   CancelLot: shared.cancelLotSchema,
   CloseLotEarly: shared.closeLotEarlySchema,
   AssignWinner: shared.assignWinnerSchema,
+  LootLogQuery: shared.lootLogQuerySchema,
 };
 // Не разворачиваем union всех Zod-типов shared в типах конвертера.
 function convert(schema: unknown): SchemaObject {
@@ -439,11 +440,29 @@ export const schemas: Record<string, SchemaObject> = {
     createdAt: date,
   }),
   AuditPage: object({ entries: array(ref('AuditEntry')), total: num }),
+  ProfileLoot: object({
+    awardId: str,
+    lotId: str,
+    itemName: str,
+    rarity: nullable(str),
+    finalPrice: { ...num, description: 'Фактическое списание из журнала ДКП.' },
+    markupPct: num,
+    eventId: str,
+    eventName: str,
+    eventStartsAt: date,
+    createdAt: date,
+  }),
   Profile: object(
     {
       ...roster,
       balance: num,
       recentEntries: { ...array(object(entry)), maxItems: 10 },
+      loot: {
+        ...array(ref('ProfileLoot')),
+        maxItems: shared.PROFILE_LOOT_LIMIT,
+        description: 'Полученный лут (план 2.5): свежие выдачи сверху.',
+      },
+      lootTotal: num,
       gearScore: {
         ...nullable(
           object({
@@ -456,8 +475,23 @@ export const schemas: Record<string, SchemaObject> = {
           'Поле отсутствует у пользователей без права на GS. У владельца и Главы/Админа — последняя запись либо null.',
       },
     },
-    [...Object.keys(roster), 'balance', 'recentEntries'],
+    [...Object.keys(roster), 'balance', 'recentEntries', 'loot', 'lootTotal'],
   ),
+  LootLogRow: object({
+    awardId: str,
+    lotId: str,
+    itemName: str,
+    rarity: nullable(str),
+    winnerId: str,
+    winnerName: str,
+    finalPrice: { ...num, description: 'Фактическое списание из журнала ДКП.' },
+    markupPct: num,
+    eventId: str,
+    eventName: str,
+    eventStartsAt: date,
+    createdAt: date,
+  }),
+  LootLogPage: object({ entries: array(ref('LootLogRow')), total: num }),
   RulesPage: object({
     slug: enumeration(shared.RULES_SLUGS),
     title: str,

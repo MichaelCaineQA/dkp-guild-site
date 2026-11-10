@@ -15,6 +15,8 @@ const profile = {
   weapons: ['STAFF', 'WAND'],
   balance: 75,
   recentEntries: [],
+  loot: [],
+  lootTotal: 0,
 };
 beforeEach(() => {
   vi.clearAllMocks();
@@ -133,4 +135,39 @@ it('показывает 404 и сохраняет поля при ошибке 
     expect(screen.getByRole('alert').textContent).toContain('Не удалось сохранить'),
   );
   expect((screen.getByLabelText('Комментарий') as HTMLInputElement).value).toBe('Новая роль');
+});
+
+it('показывает полученный лут со стоимостью и ссылкой на лут-лог (#99)', async () => {
+  vi.mocked(api).mockResolvedValueOnce({
+    ...profile,
+    loot: [
+      {
+        awardId: 'w-1',
+        lotId: 'a-1',
+        itemName: 'Клинок зари',
+        rarity: 'эпический',
+        finalPrice: 225,
+        markupPct: 50,
+        eventId: 'e-1',
+        eventName: 'Осада',
+        eventStartsAt: '2026-11-09T18:00:00.000Z',
+        createdAt: '2026-11-09T19:00:00.000Z',
+      },
+    ],
+    lootTotal: 12,
+  });
+  render(<ProfilePage />);
+  expect(await screen.findByText('Полученный лут')).toBeDefined();
+  expect(screen.getByText('Клинок зари (эпический)')).toBeDefined();
+  expect(screen.getByText('Осада')).toBeDefined();
+  expect(screen.getByText('225 (+50%)')).toBeDefined();
+  // всего выдач больше показанных — ссылка на полный лут-лог игрока
+  const link = screen.getByRole('link', { name: /весь лут игрока в лут-логе/ });
+  expect(link).toHaveProperty('href', expect.stringContaining('/auction?loot-member=m1'));
+});
+
+it('без выдач — пустое состояние блока лута', async () => {
+  render(<ProfilePage />);
+  await screen.findByText('Профиль: Алистер');
+  expect(screen.getByText('Лута пока нет')).toBeDefined();
 });
