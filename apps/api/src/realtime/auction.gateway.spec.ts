@@ -28,6 +28,7 @@ const STATE: AuctionLiveState = {
     createdAt: '2026-11-10T17:00:00.000Z',
   },
   bids: [],
+  winner: null,
   serverTime: '2026-11-10T17:00:01.000Z',
 };
 

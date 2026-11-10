@@ -1,3 +1,4 @@
+import type { LotStatus } from './auction';
 import type { AuditRow } from './audit';
 import type { CombatRole, EventMode, Rank } from './domain';
 import type { Weapon } from './weapons';
@@ -62,12 +63,24 @@ export interface DashboardTeamMember {
   leader: boolean;
   gearScore?: number | null;
 }
+
+/** Виджет «Мой аукцион» (план 2.8, экран #98): предмет из лота с ближайшим
+ * окончанием среди ставок игрока; обновляется при открытии страницы. */
+export interface DashboardAuction {
+  lotId: string;
+  itemName: string;
+  rarity: string | null;
+  status: LotStatus;
+  endsAt: string | null;
+  topBid: { amount: number; memberName: string } | null;
+}
+
 export interface DashboardData {
   generatedAt: string;
   events: DashboardEvent[];
   team: { id: string; name: string; members: DashboardTeamMember[] } | null;
-  /** Лоты появятся вместе с аукционом на этапе 2. */
-  auction: null;
+  /** Виджет «Мой аукцион»: лот с ближайшим окончанием среди ставок игрока (2.8). */
+  auction: DashboardAuction | null;
   audit: AuditRow[] | null;
   gameTime: {
     gameTimeAnchor: string;

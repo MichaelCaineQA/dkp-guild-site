@@ -230,7 +230,35 @@ export function DashboardScreen() {
             ))}
         </DashboardWidget>
         <DashboardWidget title="Мой аукцион">
-          <Muted>Скоро тут будут ваши лоты</Muted>
+          {data?.auction ? (
+            <div className="flex h-full flex-col gap-2">
+              <div className="font-medium">{data.auction.itemName}</div>
+              <div className="flex flex-col gap-1">
+                <span>
+                  {data.auction.endsAt
+                    ? `Окончание: ${new Date(data.auction.endsAt).toLocaleString('ru-RU', {
+                        dateStyle: 'short',
+                        timeStyle: 'short',
+                      })}`
+                    : 'Таймер стартует с первой ставки'}
+                </span>
+                {data.auction.topBid ? (
+                  <span>
+                    Текущая ставка:{' '}
+                    <span className="tabular-nums">{data.auction.topBid.amount} ДКП</span> —{' '}
+                    {data.auction.topBid.memberName}
+                  </span>
+                ) : (
+                  <Muted>Ставок пока нет</Muted>
+                )}
+              </div>
+              <div className="mt-auto">
+                <Button onClick={() => (window.location.href = '/auction')}>Открыть аукцион</Button>
+              </div>
+            </div>
+          ) : (
+            <Muted>Скоро тут будут ваши лоты</Muted>
+          )}
         </DashboardWidget>
         <DashboardWidget title="Лог действий">
           {!auditAllowed ? (

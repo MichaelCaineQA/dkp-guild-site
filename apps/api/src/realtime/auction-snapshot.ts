@@ -29,6 +29,7 @@ interface StoredAuction {
   createdAt: Date;
   lootDrop: { item: { name: string } };
   bids: StoredBid[];
+  award: { winnerId: string; finalPrice: number; markupPct: number; winner: { nickname: string } } | null;
 }
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
@@ -36,7 +37,11 @@ export interface SnapshotDb {
   auction: {
     findUnique(args: {
       where: { id: string };
-      include: { lootDrop: { include: { item: true } }; bids: { include: { member: true } } };
+      include: {
+        lootDrop: { include: { item: true } };
+        bids: { include: { member: true } };
+        award: { include: { winner: true } };
+      };
     }): Promise<StoredAuction | null>;
   };
 }
@@ -60,11 +65,20 @@ export class AuctionSnapshotService {
       include: {
         lootDrop: { include: { item: true } },
         bids: { include: { member: true } },
+        award: { include: { winner: true } },
       },
     });
     if (!auction) return null;
     return {
       lot: toLotRow(auction),
+      winner: auction.award
+        ? {
+            memberId: auction.award.winnerId,
+            memberName: auction.award.winner.nickname,
+            finalPrice: auction.award.finalPrice,
+            markupPct: auction.award.markupPct,
+          }
+        : null,
       bids: [...auction.bids]
         .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
         .map((bid) => toBidRow(bid)),

@@ -10,6 +10,7 @@ import {
 } from '@dkp/shared';
 import type { PrismaClient } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
+import { AuctionsService } from '../auctions/auctions.service';
 export type DashboardDb = Pick<
   PrismaClient,
   'event' | 'member' | 'pack' | 'gearScoreRecord' | 'guild'
@@ -19,10 +20,11 @@ export class DashboardService {
   constructor(
     private readonly db: DashboardDb,
     private readonly audit: AuditService,
+    private readonly auctions: AuctionsService,
   ) {}
   async get(actor: PermissionActor, now = new Date()): Promise<DashboardData> {
     const { start, end } = getMoscowDayBounds(now);
-    const [events, team, audit, guild] = await Promise.all([
+    const [events, team, audit, guild, myAuction] = await Promise.all([
       this.db.event.findMany({
         where: { startsAt: { gte: start, lt: end }, status: { not: 'CANCELLED' } },
         orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
@@ -49,6 +51,9 @@ export class DashboardService {
         orderBy: { createdAt: 'asc' },
         select: { gameTimeAnchor: true, gameTimeDayMinutes: true, gameTimeNightMinutes: true },
       }),
+      // Виджет «Мой аукцион» (план 2.8): лот с ближайшим окончанием среди
+      // ставок игрока; обновляется при открытии страницы, без realtime.
+      this.auctions.myNearestBidLot(actor.memberId ?? null),
     ]);
     return {
       generatedAt: now.toISOString(),
@@ -62,7 +67,7 @@ export class DashboardService {
         }),
       ),
       team,
-      auction: null,
+      auction: myAuction,
       audit:
         audit?.entries.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() })) ?? null,
       gameTime: guild ? { ...guild, gameTimeAnchor: guild.gameTimeAnchor.toISOString() } : null,

@@ -53,6 +53,7 @@ const SNAPSHOT: AuctionLiveState = {
     endsAt: '2026-11-10T18:01:30.000Z',
     createdAt: '2026-11-10T17:59:00.000Z',
   },
+  winner: null,
   bids: [
     {
       id: 'bid-1',
@@ -152,12 +153,13 @@ describe('useAuctionLot (realtime лота, #97)', () => {
     act(() =>
       socket.emit(AUCTION_SOCKET_EVENTS.closed, {
         auctionId: LOT_ID,
-        winner: null,
+        winner: { memberId: 'm-2', memberName: 'Соперник', finalPrice: 150, markupPct: 0 },
         reason: 'EXPIRED',
         serverTime: '2026-11-10T18:01:31.000Z',
       }),
     );
     expect(result.current.state?.lot.status).toBe('CLOSED');
+    expect(result.current.state?.winner).toMatchObject({ memberName: 'Соперник' });
   });
 
   it('без lotId сокет не создаётся', () => {

@@ -40,6 +40,9 @@ export const AUCTIONS_ROOM = 'auctions';
  */
 @WebSocketGateway({
   path: '/socket.io',
+  // Без завершающего слэша: дев-прокси Next срезает его 308-редиректом,
+  // Caddy — префикс /api; оба варианта доходят одинаковым путём.
+  addTrailingSlash: false,
   cors: { origin: process.env.WEB_URL ?? 'http://localhost:3000', credentials: true },
 })
 export class AuctionGateway

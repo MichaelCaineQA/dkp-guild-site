@@ -1,3 +1,4 @@
+import type { AuctionsService } from '../auctions/auctions.service';
 import 'reflect-metadata';
 import { Module, type INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -60,6 +61,7 @@ const db = {
       useValue: new DashboardService(
         db as unknown as DashboardDb,
         { list } as unknown as AuditService,
+        { myNearestBidLot: async () => null } as unknown as AuctionsService,
       ),
     },
   ],
