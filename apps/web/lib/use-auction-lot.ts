@@ -41,6 +41,7 @@ export function useAuctionLot(lotId: string | null) {
     const sameOrigin = base.startsWith('/');
     const socket = io(sameOrigin ? window.location.origin : base, {
       path: sameOrigin ? `${base}/socket.io` : '/socket.io',
+      addTrailingSlash: false,
       withCredentials: true,
     });
     socketRef.current = socket;
@@ -72,9 +73,14 @@ export function useAuctionLot(lotId: string | null) {
       setState((prev) => (prev && event.auctionId === lotId ? { ...prev, lot: event.lot } : prev));
     });
     socket.on(AUCTION_SOCKET_EVENTS.closed, (event: AuctionClosedEvent) => {
+      // итог завершения приходит в событии; свежий срез следом подтвердит
       setState((prev) =>
         prev && event.auctionId === lotId
-          ? { ...prev, lot: { ...prev.lot, status: 'CLOSED' as const } }
+          ? {
+              ...prev,
+              lot: { ...prev.lot, status: 'CLOSED' as const },
+              winner: event.winner,
+            }
           : prev,
       );
     });

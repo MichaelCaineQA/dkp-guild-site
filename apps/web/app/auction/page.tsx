@@ -8,9 +8,12 @@ import {
   ITEM_TARGET_ROLES,
   can,
   formatTargetRoles,
+  type CombatRole,
   type ItemRow,
+  type PlayerProfile,
   type ItemTargetRole,
 } from '@dkp/shared';
+import { AuctionLots } from '../../components/auction-lots';
 import { useSession } from '../../components/session-context';
 import { api } from '../../lib/api';
 import {
@@ -71,8 +74,26 @@ export default function AuctionPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Боевая роль просматривающего — для подсказки «родной/чужой» и наценки (#98)
+  const [viewerRole, setViewerRole] = useState<CombatRole | null>(null);
 
   const canManage = user ? can(user, 'items.manage') : false;
+
+  useEffect(() => {
+    if (!user?.memberId) {
+      setViewerRole(null);
+      return;
+    }
+    let active = true;
+    void api<PlayerProfile>(`/profiles/${user.memberId}`)
+      .then((profile) => {
+        if (active) setViewerRole(profile.combatRole);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [user]);
 
   const load = useCallback(async () => {
     try {
@@ -200,10 +221,7 @@ export default function AuctionPage() {
       </div>
 
       {tab === 'lots' && (
-        <Card>
-          <SectionTitle>Лоты</SectionTitle>
-          <Muted>Торги появятся в следующем обновлении — сейчас доступен справочник предметов.</Muted>
-        </Card>
+        <AuctionLots viewerMemberId={user.memberId} viewerRole={viewerRole} />
       )}
 
       {tab === 'items' && (

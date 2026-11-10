@@ -1,3 +1,4 @@
+import { AuctionsService, type AuctionsDb } from '../auctions/auctions.service';
 import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { DashboardService } from './dashboard.service';
@@ -19,7 +20,11 @@ suite('Дашборд: PostgreSQL, границы дня и приватност
     if (!['127.0.0.1', 'localhost'].includes(parsed.hostname) || !parsed.pathname.endsWith('_test'))
       throw new Error('Только локальная *_test');
     db = new PrismaClient({ datasourceUrl: url });
-    service = new DashboardService(db, new AuditService(db as unknown as AuditDb));
+    service = new DashboardService(
+      db,
+      new AuditService(db as unknown as AuditDb),
+      new AuctionsService(db as unknown as AuctionsDb),
+    );
     const guild = await db.guild.create({
       data: { name: 'dashboard-test-' + randomUUID(), gameTimeAnchor: new Date('2026-01-01') },
     });

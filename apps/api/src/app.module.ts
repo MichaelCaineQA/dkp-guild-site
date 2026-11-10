@@ -19,6 +19,7 @@ import { BidsModule } from './bids/bids.module';
 import { AuctionCloseModule } from './auction-close/auction-close.module';
 import { AuctionManageModule } from './auction-manage/auction-manage.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { AuctionsModule } from './auctions/auctions.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     AuctionCloseModule,
     AuctionManageModule,
     RealtimeModule,
+    AuctionsModule,
   ],
   controllers: [AppController],
 })

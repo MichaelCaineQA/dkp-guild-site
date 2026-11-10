@@ -16,6 +16,7 @@ import { AuctionSnapshotService, type SnapshotDb } from './auction-snapshot';
  */
 
 interface LotRow {
+  award: { winnerId: string; finalPrice: number; markupPct: number; winner: { nickname: string } } | null;
   id: string;
   status: 'OPEN' | 'CLOSED' | 'CANCELLED';
   startPrice: number;
@@ -65,6 +66,7 @@ function makeStore() {
     endsAt: null,
     createdAt: new Date(),
     itemName: 'Клинок рассвета',
+    award: null,
   };
   const auctions = [auction];
   const bids: BidRowData[] = [];
@@ -145,13 +147,14 @@ function makeStore() {
     ...closeTxView,
     $transaction: async <R,>(work: (t: typeof closeTxView) => Promise<R>) => work(closeTxView),
   } as unknown as CloseDb;
-  const snapshotDb: SnapshotDb = {
+  const snapshotDb = {
     auction: {
       findUnique: async ({ where }: { where: { id: string } }) => {
         const found = auctions.find((row) => row.id === where.id);
         return found
           ? {
               ...withItem(found),
+              award: found.award,
               bids: bids.map((bid) => ({
                 ...bid,
                 member: MEMBERS.find((m) => m.id === bid.memberId)!,
@@ -160,7 +163,7 @@ function makeStore() {
           : null;
       },
     },
-  };
+  } as unknown as SnapshotDb;
   return { auctions, bids, bidsDb, closeDb, snapshotDb };
 }
 

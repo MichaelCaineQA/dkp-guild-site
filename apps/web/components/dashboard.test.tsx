@@ -160,3 +160,28 @@ it('показывает до трёх активных отсутствий: т
   expect(region.textContent).toContain('Все мои отсутствия');
   expect(region.textContent).toContain('Оформить отсутствие');
 });
+
+it('виджет «Мой аукцион»: лот из dashboard, переход в аукцион (#98)', async () => {
+  vi.mocked(api).mockImplementation(async (path: string) =>
+    path === '/dashboard'
+      ? {
+          ...summary,
+          auction: {
+            lotId: 'a-1',
+            itemName: 'Клинок рассвета',
+            rarity: 'Легендарный',
+            status: 'OPEN',
+            endsAt: '2026-11-10T18:01:30.000Z',
+            topBid: { amount: 150, memberName: 'Целитель' },
+          },
+        }
+      : [],
+  );
+  render(<DashboardScreen />);
+  const region = await screen.findByRole('region', { name: 'Мой аукцион' });
+  expect(region.textContent).toContain('Клинок рассвета');
+  expect(region.textContent).toContain('Окончание:');
+  expect(region.textContent).toContain('150 ДКП');
+  expect(region.textContent).toContain('Целитель');
+  expect(screen.getByRole('button', { name: 'Открыть аукцион' })).toBeDefined();
+});

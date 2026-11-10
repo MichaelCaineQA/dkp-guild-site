@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ItemTargetRole } from './items';
 
 /**
  * Открытый аукцион: дроп и создание лота (docs/PLAN.md, разделы 2.4 и 6,
@@ -550,5 +551,59 @@ export interface AuctionCreatedEvent {
 export interface AuctionLiveState {
   lot: AuctionLotRow;
   bids: BidRow[];
+  /** Выдача завершённого лота (null — открыт или без выдачи). */
+  winner: LotAwardRow | null;
   serverTime: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* Список лотов экрана аукциона и виджет «Мой аукцион» (issue #98).    */
+/* ------------------------------------------------------------------ */
+
+/** Вкладка списка лотов (план 6, п. 10). */
+export const AUCTION_LIST_STATUSES = ['OPEN', 'CLOSED', 'CANCELLED'] as const;
+export type AuctionListStatus = (typeof AUCTION_LIST_STATUSES)[number];
+
+/** Ведущая ставка лота для списка. */
+export interface AuctionTopBid {
+  memberId: string;
+  memberName: string;
+  amount: number;
+  /** Полная стоимость ведущей ставки (с наценкой, если применимо). */
+  fullCost: number;
+}
+
+/** Ставка просматривающего игрока на лоте. */
+export interface AuctionMyBid {
+  amount: number;
+  /** true — ставка просматривающего сейчас ведущая. */
+  leading: boolean;
+}
+
+/** Строка лота на вкладках аукциона (экран #98). */
+export interface AuctionListRow {
+  id: string;
+  status: LotStatus;
+  itemName: string;
+  rarity: string | null;
+  targetRoles: ItemTargetRole[];
+  startPrice: number;
+  step: number;
+  markupPct: number;
+  timerKind: LotTimerKind;
+  antiSnipeSec: number;
+  antiSnipeExtendSec: number;
+  noBidTimeoutSec: number | null;
+  firstBidAt: string | null;
+  endsAt: string | null;
+  createdAt: string;
+  topBid: AuctionTopBid | null;
+  myBid: AuctionMyBid | null;
+  winner: LotAwardRow | null;
+}
+
+/** Строка запроса списка лотов (экран #98). */
+export const auctionsQuerySchema = z.object({
+  status: z.enum(AUCTION_LIST_STATUSES).default('OPEN'),
+});
+export type AuctionsQuery = z.infer<typeof auctionsQuerySchema>;
