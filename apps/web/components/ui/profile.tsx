@@ -77,3 +77,71 @@ export function ProfileHistory({ entries }: { entries: PlayerProfile['recentEntr
     </Card>
   );
 }
+
+/** Полученный лут в профиле (план 2.5, issue #99): только фактические выдачи. */
+export function ProfileLoot({
+  loot,
+  total,
+  memberId,
+}: {
+  loot: PlayerProfile['loot'];
+  total: number;
+  memberId: string;
+}) {
+  return (
+    <Card>
+      <SectionTitle>Полученный лут</SectionTitle>
+      {!loot.length ? (
+        <p>Лута пока нет</p>
+      ) : (
+        <>
+          <Table>
+            <thead>
+              <tr>
+                {['Когда', 'Предмет', 'Событие', 'Стоимость'].map((title) => (
+                  <Table.Th key={title}>{title}</Table.Th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loot.map((award) => (
+                <tr key={award.awardId}>
+                  <Table.Td className="whitespace-nowrap">
+                    {new Date(award.createdAt).toLocaleString('ru-RU', {
+                      day: 'numeric',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </Table.Td>
+                  <Table.Td className="font-medium">
+                    {award.itemName}
+                    {award.rarity ? ` (${award.rarity})` : ''}
+                  </Table.Td>
+                  <Table.Td>{award.eventName}</Table.Td>
+                  <Table.Td className="tabular-nums">
+                    {award.finalPrice}
+                    {award.markupPct > 0 ? ` (+${award.markupPct}%)` : ''}
+                  </Table.Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+          {total > loot.length && (
+            <p className="mt-2 text-sm">
+              <Muted>
+                Показаны последние {loot.length} из {total} —{' '}
+                <a
+                  className="text-accent hover:underline"
+                  href={`/auction?loot-member=${encodeURIComponent(memberId)}`}
+                >
+                  весь лут игрока в лут-логе
+                </a>
+              </Muted>
+            </p>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}

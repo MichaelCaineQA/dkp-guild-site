@@ -78,6 +78,7 @@ suite('AuctionsService: PostgreSQL', () => {
   };
 
   beforeEach(async () => {
+    await db.dkpEntry.deleteMany({ where: { auctionId: { in: created.auctions } } });
     await db.lootAward.deleteMany({ where: { auctionId: { in: created.auctions } } });
     await db.bid.deleteMany({ where: { auctionId: { in: created.auctions } } });
     await db.auction.deleteMany({ where: { id: { in: created.auctions } } });
@@ -90,6 +91,7 @@ suite('AuctionsService: PostgreSQL', () => {
 
   afterAll(async () => {
     if (!db) return;
+    await db.dkpEntry.deleteMany({ where: { auctionId: { in: created.auctions } } });
     await db.lootAward.deleteMany({ where: { auctionId: { in: created.auctions } } });
     await db.bid.deleteMany({ where: { auctionId: { in: created.auctions } } });
     await db.auction.deleteMany({ where: { id: { in: created.auctions } } });
@@ -152,5 +154,127 @@ suite('AuctionsService: PostgreSQL', () => {
     const row = rows.find((item) => item.id === closed.id)!;
     expect(row.winner).toMatchObject({ finalPrice: 200 });
     expect(row.status).toBe('CLOSED');
+  });
+
+  // Лут-лог (issue #99): приёмка на настоящей PostgreSQL.
+  it('лут-лог: только фактические выдачи; отменённые лоты и лоты без выдачи не представлены', async () => {
+    const awarded = await makeLot({ status: 'CLOSED' });
+    await db.lootAward.create({
+      data: { auctionId: awarded.id, winnerId: memberId, finalPrice: 150, markupPct: 50 },
+    });
+    const cancelled = await makeLot({ status: 'CANCELLED' }); // отменённый — не лут
+    const noAward = await makeLot({ status: 'CLOSED' }); // без выдачи — предмет у гильдии
+
+    const page = await service.lootLog({});
+    const mine = page.entries.filter((row) => row.lotId === awarded.id);
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({
+      itemName: expect.any(String),
+      winnerId: memberId,
+      finalPrice: 150,
+      markupPct: 50,
+      eventId: expect.any(String),
+      eventName: 'Аукцион-тест',
+    });
+    const excluded = [cancelled.id, noAward.id];
+    expect(page.entries.some((row) => excluded.includes(row.lotId))).toBe(false);
+  });
+
+  it('лут-лог: каждый фильтр отдельно и в сочетании', async () => {
+    const first = await makeLot({ status: 'CLOSED' });
+    await db.lootAward.create({
+      data: { auctionId: first.id, winnerId: memberId, finalPrice: 100, markupPct: 0 },
+    });
+    const second = await makeLot({ status: 'CLOSED' });
+    await db.lootAward.create({
+      data: { auctionId: second.id, winnerId: otherId, finalPrice: 200, markupPct: 0 },
+    });
+    const lotOfFirst = await db.auction.findUnique({ where: { id: first.id } });
+    const dropOfFirst = await db.lootDrop.findUnique({ where: { id: lotOfFirst!.lootDropId } });
+
+    // по игроку: уникальный для прогона участник — точное число
+    const byMember = await service.lootLog({ memberId });
+    expect(byMember.total).toBe(1);
+    expect(byMember.entries[0]!.lotId).toBe(first.id);
+
+    // по событию лота первой выдачи: ивент уникален для прогона
+    const byEvent = await service.lootLog({ eventId: dropOfFirst!.eventId });
+    expect(byEvent.total).toBe(1);
+    expect(byEvent.entries[0]!.lotId).toBe(first.id);
+
+    // по предмету: оба лота на одном предмете прогона — обе выдачи
+    expect((await service.lootLog({ itemId })).total).toBe(2);
+
+    // в сочетании: игрок + событие первой выдачи
+    const combined = await service.lootLog({ memberId, eventId: dropOfFirst!.eventId });
+    expect(combined.total).toBe(1);
+    expect(combined.entries[0]!.lotId).toBe(first.id);
+  });
+
+  it('лут-лог: стоимость согласуется с журналом, история живёт после пересоздания сервиса', async () => {
+    const lot = await makeLot({ status: 'CLOSED' });
+    await db.lootAward.create({
+      data: { auctionId: lot.id, winnerId: memberId, finalPrice: 180, markupPct: 0 },
+    });
+    // фактическое списание — как пишут сервисы закрытия/назначения (#95/#96)
+    await db.dkpEntry.create({
+      data: {
+        requestId: `spec-loot-log:${lot.id}`,
+        memberId,
+        type: 'AUCTION_SPEND',
+        amount: -180,
+        auctionId: lot.id,
+        comment: 'Трата на аукционе',
+      },
+    });
+
+    // «перезапуск»: новый сервис над той же БД
+    const restarted = new AuctionsService(db as unknown as AuctionsDb);
+    const page = await restarted.lootLog({ memberId });
+    const row = page.entries.find((item) => item.lotId === lot.id)!;
+    const spend = await db.dkpEntry.findFirst({
+      where: { auctionId: lot.id, memberId, type: 'AUCTION_SPEND' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(row.finalPrice).toBe(-spend!.amount);
+
+    // исправление (смена победителя) обновляет выдачу, но не переписывает журнал:
+    // возврат прежнему и списание с нового — новые записи
+    await db.lootAward.update({
+      where: { auctionId: lot.id },
+      data: { winnerId: otherId, finalPrice: 90, markupPct: 0 },
+    });
+    await db.dkpEntry.create({
+      data: {
+        requestId: `spec-loot-log-refund:${lot.id}`,
+        memberId,
+        type: 'AUCTION_SPEND',
+        amount: 180,
+        auctionId: lot.id,
+        comment: 'Возврат траты: победитель изменён вручную',
+      },
+    });
+    await db.dkpEntry.create({
+      data: {
+        requestId: `spec-loot-log-award:${lot.id}`,
+        memberId: otherId,
+        type: 'AUCTION_SPEND',
+        amount: -90,
+        auctionId: lot.id,
+        comment: 'Трата на аукционе: победитель назначен вручную',
+      },
+    });
+    const after = await restarted.lootLog({ memberId: otherId });
+    const changed = after.entries.find((item) => item.lotId === lot.id)!;
+    expect(changed.finalPrice).toBe(90);
+    const newSpend = await db.dkpEntry.findFirst({
+      where: { auctionId: lot.id, memberId: otherId, type: 'AUCTION_SPEND' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(changed.finalPrice).toBe(-newSpend!.amount);
+    // старые записи журнала не тронуты — исправление не переписывает журнал
+    expect(
+      await db.dkpEntry.count({ where: { auctionId: lot.id, type: 'AUCTION_SPEND' } }),
+    ).toBe(3);
   });
 });

@@ -14,6 +14,7 @@ import {
   type ItemTargetRole,
 } from '@dkp/shared';
 import { AuctionLots } from '../../components/auction-lots';
+import { LootLog } from '../../components/loot-log';
 import { useSession } from '../../components/session-context';
 import { api } from '../../lib/api';
 import {
@@ -32,7 +33,7 @@ import {
   Table,
 } from '../../components/ui';
 
-type Tab = 'lots' | 'items';
+type Tab = 'lots' | 'log' | 'items';
 
 interface ItemFormState {
   id: string | null;
@@ -78,6 +79,11 @@ export default function AuctionPage() {
   const [viewerRole, setViewerRole] = useState<CombatRole | null>(null);
 
   const canManage = user ? can(user, 'items.manage') : false;
+
+  // Глубокая ссылка из профиля: ?loot-member=<id> сразу открывает лут-лог
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('loot-member')) setTab('log');
+  }, []);
 
   useEffect(() => {
     if (!user?.memberId) {
@@ -207,10 +213,11 @@ export default function AuctionPage() {
         subtitle="Открытый аукцион лута: справочник предметов и торги (план 2.4/6)."
       />
 
-      <div className="mb-4 flex gap-2" role="tablist" aria-label="Разделы аукциона">
+      <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Разделы аукциона">
         {(
           [
             ['lots', 'Лоты'],
+            ['log', 'Лут-лог'],
             ['items', 'Справочник предметов'],
           ] as Array<[Tab, string]>
         ).map(([key, label]) => (
@@ -223,6 +230,8 @@ export default function AuctionPage() {
       {tab === 'lots' && (
         <AuctionLots viewerMemberId={user.memberId} viewerRole={viewerRole} />
       )}
+
+      {tab === 'log' && <LootLog />}
 
       {tab === 'items' && (
         <Card>

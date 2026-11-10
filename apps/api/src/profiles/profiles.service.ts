@@ -9,10 +9,12 @@ import {
   canViewProfileGearScore,
   computeBalance,
   updateOwnProfileSchema,
+  PROFILE_LOOT_LIMIT,
   type CombatRole,
   type Weapon,
   formatWeapons,
   type PlayerProfile,
+  type ProfileLootRow,
   type Rank,
   type PermissionActor,
   type Avatar,
@@ -79,7 +81,33 @@ export interface ProfilesDb extends ProfileTransaction {
       }>
     >;
   };
+  lootAward: {
+    findMany(args: {
+      where: { winnerId: string };
+      orderBy: Array<{ createdAt?: 'desc'; id?: 'desc' }>;
+      take?: number;
+      include: {
+        auction: { include: { lootDrop: { include: { event: true; item: true } } } };
+      };
+    }): Promise<StoredProfileAward[]>;
+    count(args: { where: Record<string, unknown> }): Promise<number>;
+  };
   $transaction<T>(work: (tx: ProfileTransaction) => Promise<T>): Promise<T>;
+}
+
+/** Выдача для блока «Полученный лут» профиля (план 2.5). */
+interface StoredProfileAward {
+  id: string;
+  finalPrice: number;
+  markupPct: number;
+  createdAt: Date;
+  auction: {
+    id: string;
+    lootDrop: {
+      event: { id: string; name: string; startsAt: Date };
+      item: { name: string; rarity: string | null };
+    };
+  };
 }
 
 @Injectable()
@@ -100,6 +128,17 @@ export class ProfilesService {
             orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           })
         : undefined;
+    // Полученный лут (план 2.5) — фактические выдачи лотов игрока,
+    // свежие сверху; полная история — лут-лог с фильтром по игроку.
+    const [awards, lootTotal] = await Promise.all([
+      this.db.lootAward.findMany({
+        where: { winnerId: id },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: PROFILE_LOOT_LIMIT,
+        include: { auction: { include: { lootDrop: { include: { event: true, item: true } } } } },
+      }),
+      this.db.lootAward.count({ where: { winnerId: id } }),
+    ]);
     return {
       ...(gs === undefined
         ? {}
@@ -129,6 +168,24 @@ export class ProfilesService {
         eventId: entry.eventId,
         createdAt: entry.createdAt.toISOString(),
       })),
+      loot: awards.map((award) => this.toLootRow(award)),
+      lootTotal,
+    };
+  }
+
+  private toLootRow(award: StoredProfileAward): ProfileLootRow {
+    const drop = award.auction.lootDrop;
+    return {
+      awardId: award.id,
+      lotId: award.auction.id,
+      itemName: drop.item.name,
+      rarity: drop.item.rarity,
+      finalPrice: award.finalPrice,
+      markupPct: award.markupPct,
+      eventId: drop.event.id,
+      eventName: drop.event.name,
+      eventStartsAt: drop.event.startsAt.toISOString(),
+      createdAt: award.createdAt.toISOString(),
     };
   }
 
