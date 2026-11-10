@@ -20,6 +20,16 @@
   (issue #96). Удаление ивента/серии с дропами (#109, PR #115): ивент с лотом —
   409 (лоты и их история живут независимо от ивента, план 2.4), дропы без
   лотов — каскад в сериализуемой транзакции с перечитыванием и аудитом.
+  Realtime аукциона (Socket.IO + Redis adapter, #97, PR #118) — модуль
+  `apps/api/src/realtime`: gateway на `/socket.io` (cookie-сессия как у REST,
+  без входа — отказ), подписка `auction:join` → полный срез `auction:state`
+  (замена вместо накопления — без дублирования ставок), события
+  `auction:bid|lot|closed|created` шлются сервисами строго после сериализуемой
+  транзакции через порт `AUCTION_EVENTS`; Redis adapter и Redis-сессии — при
+  заданном `REDIS_URL`, иначе in-memory. Сессии — `apps/api/src/auth/session.ts`
+  (общий store для REST и WS-handshake; при переходе на Redis действующие
+  входы сбрасываются один раз). Веб-клиент — хук `apps/web/lib/use-auction-lot.ts`
+  (prod: `/api/socket.io` через Caddy, dev: прокси Next). Экран — #98.
 - `packages/shared` — общие типы, zod-схемы и чистая логика ядра.
 - `.github/workflows/ci.yml` — проверки CI.
 - `installer/` — установщик релизного Compose (`dkp`, Python 3 stdlib) для

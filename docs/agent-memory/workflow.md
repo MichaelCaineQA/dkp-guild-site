@@ -67,7 +67,15 @@ Production/staging и резервное копирование описаны �
   variable `DEPLOY_PATH`); ручной workflow_dispatch выбирает окружение
   и для production требует тег.
 - Проверка: `https://stage.suneclipse.ru/api/health`; вход — резервный
-  админ из серверного `.env.production`.
+  админ из серверного `.env.production`. Realtime (#97): engine.io-handshake —
+  `curl '.../api/socket.io/?EIO=4&transport=polling'` (ответ `0{"sid":...}`);
+  неавторизованный сокет-клиент получает `auction:error` и disconnect.
+- **Ожидание деплоя (проверено 2026-11-10): на один пуш в main стартуют ДВА
+  workflow-рана с одинаковым SHA — CI и Deploy; фильтр `runs?name=Deploy`
+  их не всегда различает. Жди завершения именно run'а workflow Deploy
+  (запоминай его id при старте); сборка api+web на VPS идёт ~10–15 минут,
+  `in_progress` всё это время — норма. Контейнер api при этом остаётся
+  старым до конца (`docker ps` покажет прежний CreatedAt).**
 - DNS стенда должен вести на VPS напрямую, без проксирования Cloudflare
   (иначе Let's Encrypt и WebSocket аукциона не работают). На 2026-11-10
   запись была за CF-прокси — переключение на владельце.
