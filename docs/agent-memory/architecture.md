@@ -10,6 +10,18 @@
   Справочник предметов аукциона — модуль `apps/api/src/items` (issue #92);
   дроп и создание лота в проведении ивента — `apps/api/src/loot` (issue #93);
   ставки с заморозкой и анти-снайпом — `apps/api/src/bids` (issue #94);
+  скидка за предпочитаемый предмет (#101, PR #125): на `Member` хранятся
+  `preferredItemId` + `prevPreferredItemId`/`preferredItemChangedAt` и
+  `prevCombatRole`/`combatRoleChangedAt` — prev-поля дают снимок «роли и
+  предпочтения на момент создания лота» (решение 18; кулдаун смены 14 дн
+  длиннее лота ≤14 дн, поэтому одной prev-записи достаточно). `bidFullCost`
+  в shared: сначала наценка, затем от наценной цены скидка, ceil;
+  `Auction.discountPct` — снимок настройки при создании лота, `Bid/LootAward
+  .discountPct` — применённые. Смена роли/предмета — кулдаун
+  `auction.profileChangeCooldownDays` (409 с датой), первый выбор сразу;
+  удаление предмета — FK SetNull (поле очищается у всех); настройки
+  `auction.preferredItemDiscountPct`/`foreignClassMarkupPct` — дефолты 10/10,
+  обе ≤100%. Список лотов отдаёт viewer-специфичное `myPreferred` по снимку;
   закрытие лотов и автосписание — `apps/api/src/auction-close` (issue #95):
   свипер каждые `AUCTION_CLOSE_INTERVAL_MS` мс (дефолт 1000, 0 — выкл)
   закрывает просроченные лоты в сериализуемой транзакции, после рестарта
