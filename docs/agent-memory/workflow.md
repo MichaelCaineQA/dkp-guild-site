@@ -57,6 +57,21 @@ Production/staging и резервное копирование описаны �
 - Коммиты: `feat|fix|chore|docs|refactor: суть изменения` (по-русски можно).
 - Не меняй чужие незакоммиченные правки в процессе своей задачи.
 
+## Стенд stage.suneclipse.ru (с 2026-11-10)
+
+- VPS 193.37.68.243 (root, ключ), Ubuntu 24.04, Docker Engine + Compose;
+  checkout `/opt/dkp-guild-site` с серверным `.env.production` (0600,
+  секреты только там). Деплой — workflow `Deploy`: пуш в `main` катит
+  staging автоматически через окружение GitHub `staging`
+  (secrets `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_SSH_KEY`/`DEPLOY_KNOWN_HOSTS`,
+  variable `DEPLOY_PATH`); ручной workflow_dispatch выбирает окружение
+  и для production требует тег.
+- Проверка: `https://stage.suneclipse.ru/api/health`; вход — резервный
+  админ из серверного `.env.production`.
+- DNS стенда должен вести на VPS напрямую, без проксирования Cloudflare
+  (иначе Let's Encrypt и WebSocket аукциона не работают). На 2026-11-10
+  запись была за CF-прокси — переключение на владельце.
+
 ## Жизненный цикл задачи (поручение владельца 2026-11-09)
 
 «Сделать задачу» — это полный цикл, а не только код:

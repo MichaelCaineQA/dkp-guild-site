@@ -194,16 +194,26 @@ Cloud, и домен у любого регистратора (например,
 `DISCORD_CALLBACK_URL` явно. `PUBLIC_API_URL` больше не задаёт адрес API
 для production web-образа.
 
-### Ручной деплой через GitHub Actions
+### Деплой через GitHub Actions
 
-Для ручного workflow `Deploy` настройте GitHub environments `staging` и
-`production`: secrets `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`,
-`DEPLOY_KNOWN_HOSTS` (проверенный ключ сервера) и variable `DEPLOY_PATH`
-(абсолютный путь к checkout с заранее настроенным `.env.production`).
+Workflow `Deploy` запускается автоматически при пуше в `main`: коммит из
+`main` уезжает на стенд через окружение `staging` (тот же механизм, что
+и ручной запуск — `git archive` по SSH и `scripts/deploy-prod.sh`).
+Для ручного запуска (workflow_dispatch) настроите GitHub environments
+`staging` и `production`: secrets `DEPLOY_HOST`, `DEPLOY_USER`,
+`DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` (проверенный ключ сервера)
+и variable `DEPLOY_PATH` (абсолютный путь к checkout с заранее
+настроенным `.env.production`).
 Выберите нужный ref и окружение в Actions. Production принимает только тег;
 правила подтверждения для GitHub environment настраиваются владельцем
 отдельно. У staging должны быть отдельные домены, БД, секреты и каталог
 сервера.
+
+**Стенд `stage.suneclipse.ru`** (окружение `staging`, VPS 193.37.68.243):
+checkout `/opt/dkp-guild-site` с локальным `.env.production`; каждый пуш
+в `main` обновляет его автоматически. DNS-запись должна указывать прямо
+на VPS (без проксирования Cloudflare), иначе Caddy не получит сертификат
+Let's Encrypt и не будут работать WebSocket-обновления аукциона.
 
 ### Локальная HTTPS-проверка production-стека
 
