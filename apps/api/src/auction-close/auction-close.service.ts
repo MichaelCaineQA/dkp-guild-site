@@ -13,6 +13,7 @@ interface StoredBid {
   amount: number;
   fullCost: number;
   markupPct: number;
+  discountPct: number;
 }
 
 interface StoredAuction {
@@ -48,7 +49,13 @@ export interface CloseTx {
   };
   lootAward: {
     create(args: {
-      data: { auctionId: string; winnerId: string; finalPrice: number; markupPct: number };
+      data: {
+        auctionId: string;
+        winnerId: string;
+        finalPrice: number;
+        markupPct: number;
+        discountPct: number;
+      };
     }): Promise<unknown>;
   };
   dkpEntry: {
@@ -192,6 +199,7 @@ export class AuctionCloseService {
           winnerId: top.memberId,
           finalPrice: top.fullCost,
           markupPct: top.markupPct,
+          discountPct: top.discountPct,
         },
       });
       await tx.dkpEntry.create({
@@ -203,7 +211,7 @@ export class AuctionCloseService {
           auctionId,
           comment:
             `Трата на аукционе: «${itemName}» за ${top.fullCost}` +
-            (top.markupPct > 0 ? ` (с наценкой ${top.markupPct}%)` : ''),
+            priceModifiers(top),
         },
       });
       await tx.auditLog.create({
@@ -216,7 +224,7 @@ export class AuctionCloseService {
           comment:
             `Лот «${itemName}» завершён: победитель ${top.member.nickname}, ` +
             `списано ${top.fullCost} ДКП` +
-            (top.markupPct > 0 ? ` (с наценкой ${top.markupPct}%)` : ''),
+            priceModifiers(top),
         },
       });
       return {
@@ -227,6 +235,7 @@ export class AuctionCloseService {
           memberName: top.member.nickname,
           finalPrice: top.fullCost,
           markupPct: top.markupPct,
+          discountPct: top.discountPct,
         },
       };
     });
@@ -251,4 +260,12 @@ export class AuctionCloseService {
       createdAt: lot.createdAt,
     };
   }
+}
+
+/** Наценка и скидка в комментарии журнала/аудита (пусто — чистая цена). */
+function priceModifiers(bid: { markupPct: number; discountPct: number }): string {
+  const parts: string[] = [];
+  if (bid.markupPct > 0) parts.push(`с наценкой ${bid.markupPct}%`);
+  if (bid.discountPct > 0) parts.push(`со скидкой ${bid.discountPct}%`);
+  return parts.length > 0 ? ` (${parts.join(', ')})` : '';
 }

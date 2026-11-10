@@ -13,6 +13,9 @@ const profile = {
   rank: 'MEMBER',
   combatRole: 'DPS',
   weapons: ['STAFF', 'WAND'],
+  preferredItem: null,
+  preferredItemChangedAt: null,
+  combatRoleChangedAt: null,
   balance: 75,
   recentEntries: [],
   loot: [],
@@ -25,9 +28,10 @@ beforeEach(() => {
     loading: false,
     reload: vi.fn(),
   });
-  vi.mocked(api).mockImplementation(async (_path, init) =>
-    init?.method === 'PATCH' ? { ok: true } : profile,
-  );
+  vi.mocked(api).mockImplementation(async (path, init) => {
+    if (path === '/items') return [];
+    return init?.method === 'PATCH' ? { ok: true } : profile;
+  });
 });
 afterEach(cleanup);
 
@@ -148,6 +152,7 @@ it('показывает полученный лут со стоимостью �
         rarity: 'эпический',
         finalPrice: 225,
         markupPct: 50,
+        discountPct: 0,
         eventId: 'e-1',
         eventName: 'Осада',
         eventStartsAt: '2026-11-09T18:00:00.000Z',
@@ -170,4 +175,47 @@ it('без выдач — пустое состояние блока лута', 
   render(<ProfilePage />);
   await screen.findByText('Профиль: Алистер');
   expect(screen.getByText('Лута пока нет')).toBeDefined();
+});
+
+it('выбор предпочитаемого предмета уходит в PATCH с комментарием (#101)', async () => {
+  vi.mocked(api).mockImplementation(async (path, init) => {
+    if (path === '/items') return [{ id: 'item-1', name: 'Клинок рассвета' }];
+    return init?.method === 'PATCH' ? { ok: true } : profile;
+  });
+  render(<ProfilePage />);
+  await screen.findByText('Профиль: Алистер');
+  fireEvent.change(screen.getByLabelText('Предпочитаемый предмет'), {
+    target: { value: 'item-1' },
+  });
+  fireEvent.change(screen.getByLabelText('Комментарий'), { target: { value: 'Мой предмет' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить профиль' }));
+  await screen.findByRole('status');
+  expect(api).toHaveBeenCalledWith('/profiles/m1', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      avatar: null,
+      avatarColor: null,
+      preferredItemId: 'item-1',
+      comment: 'Мой предмет',
+    }),
+  });
+});
+
+it('отказ кулдауна с сервера показывается в форме (#101)', async () => {
+  vi.mocked(api).mockImplementation(async (path, init) => {
+    if (path === '/items') return [{ id: 'item-1', name: 'Клинок рассвета' }];
+    if (init?.method === 'PATCH')
+      throw { status: 409, body: { message: 'Предпочитаемый предмет можно менять раз в 14 дн.' } };
+    return profile;
+  });
+  render(<ProfilePage />);
+  await screen.findByText('Профиль: Алистер');
+  fireEvent.change(screen.getByLabelText('Предпочитаемый предмет'), {
+    target: { value: 'item-1' },
+  });
+  fireEvent.change(screen.getByLabelText('Комментарий'), { target: { value: 'Мой предмет' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить профиль' }));
+  await waitFor(() =>
+    expect(screen.getByRole('alert').textContent).toContain('раз в 14 дн.'),
+  );
 });

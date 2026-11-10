@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   winningBid,
   lootLogQuerySchema,
+  prefersItemAtLotCreation,
   type AuctionListRow,
   type AuctionListStatus,
   type DashboardAuction,
@@ -30,12 +31,22 @@ interface StoredLot {
   antiSnipeExtendSec: number;
   noBidTimeoutSec: number | null;
   markupPct: number;
+  discountPct: number;
   firstBidAt: Date | null;
   endsAt: Date | null;
   createdAt: Date;
-  lootDrop: { item: { name: string; rarity: string | null; targetRoles: ItemTargetRole[] } };
+  lootDrop: {
+    itemId: string;
+    item: { name: string; rarity: string | null; targetRoles: ItemTargetRole[] };
+  };
   bids: StoredBid[];
-  award: { winnerId: string; finalPrice: number; markupPct: number; winner: { nickname: string } } | null;
+  award: {
+    winnerId: string;
+    finalPrice: number;
+    markupPct: number;
+    discountPct: number;
+    winner: { nickname: string };
+  } | null;
 }
 
 /** Выдача лут-лога: лот → дроп → предмет и событие, получатель, цена. */
@@ -43,6 +54,7 @@ interface StoredAward {
   id: string;
   finalPrice: number;
   markupPct: number;
+  discountPct: number;
   createdAt: Date;
   winner: { id: string; nickname: string };
   auction: {
@@ -66,6 +78,16 @@ export interface AuctionsDb {
         award: { include: { winner: true } };
       };
     }): Promise<StoredLot[]>;
+  };
+  member: {
+    findUnique(args: {
+      where: { id: string };
+    }): Promise<{
+      id: string;
+      preferredItemId: string | null;
+      prevPreferredItemId: string | null;
+      preferredItemChangedAt: Date | null;
+    } | null>;
   };
   lootAward: {
     findMany(args: {
@@ -100,16 +122,21 @@ export class AuctionsService {
       status === 'OPEN'
         ? [{ endsAt: 'asc' }, { createdAt: 'asc' }]
         : [{ createdAt: 'desc' }];
-    const lots = await this.db.auction.findMany({
-      where: { status },
-      orderBy,
-      include: {
-        lootDrop: { include: { item: true } },
-        bids: { include: { member: true } },
-        award: { include: { winner: true } },
-      },
-    });
-    return lots.map((lot) => this.toRow(lot, viewerMemberId));
+    const [lots, viewer] = await Promise.all([
+      this.db.auction.findMany({
+        where: { status },
+        orderBy,
+        include: {
+          lootDrop: { include: { item: true } },
+          bids: { include: { member: true } },
+          award: { include: { winner: true } },
+        },
+      }),
+      // Снимок предпочтения просматривающего (решение 18): myPreferred —
+      // на момент создания каждого лота, не текущий выбор.
+      viewerMemberId ? this.db.member.findUnique({ where: { id: viewerMemberId } }) : null,
+    ]);
+    return lots.map((lot) => this.toRow(lot, viewerMemberId, viewer));
   }
 
   /**
@@ -196,6 +223,7 @@ export class AuctionsService {
       winnerName: row.winner.nickname,
       finalPrice: row.finalPrice,
       markupPct: row.markupPct,
+      discountPct: row.discountPct,
       eventId: drop.event.id,
       eventName: drop.event.name,
       eventStartsAt: drop.event.startsAt.toISOString(),
@@ -203,7 +231,11 @@ export class AuctionsService {
     };
   }
 
-  private toRow(lot: StoredLot, viewerMemberId: string | null): AuctionListRow {
+  private toRow(
+    lot: StoredLot,
+    viewerMemberId: string | null,
+    viewer: Awaited<ReturnType<AuctionsDb['member']['findUnique']>>,
+  ): AuctionListRow {
     const top = winningBid(lot.bids);
     const mine = viewerMemberId
       ? lot.bids
@@ -220,6 +252,10 @@ export class AuctionsService {
       startPrice: lot.startPrice,
       step: lot.step,
       markupPct: lot.markupPct,
+      discountPct: lot.discountPct,
+      myPreferred: viewer
+        ? prefersItemAtLotCreation(viewer, lot.createdAt, lot.lootDrop.itemId)
+        : false,
       timerKind: lot.timerFromFirstBid ? 'FIRST_BID' : 'OPENING',
       antiSnipeSec: lot.antiSnipeSec,
       antiSnipeExtendSec: lot.antiSnipeExtendSec,
@@ -242,6 +278,7 @@ export class AuctionsService {
             memberName: lot.award.winner.nickname,
             finalPrice: lot.award.finalPrice,
             markupPct: lot.award.markupPct,
+            discountPct: lot.award.discountPct,
           }
         : null,
     };

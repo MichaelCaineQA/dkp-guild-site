@@ -9,6 +9,7 @@ import {
   canEditOwnProfile,
   updateOwnProfileSchema,
   type CombatRole,
+  type ItemRow,
   type Weapon,
   type PlayerProfile,
   AVATARS,
@@ -44,8 +45,10 @@ export default function ProfilePage() {
   const actor = { rank: user?.rank ?? null, memberId: user?.memberId, isAdmin: user?.isAdmin };
   const allowed = !!user && can(actor, 'profile.view');
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
+  const [items, setItems] = useState<ItemRow[] | null>(null);
   const [error, setError] = useState('');
   const [role, setRole] = useState<CombatRole | ''>('');
+  const [preferredItem, setPreferredItem] = useState<string>('');
   const [avatar, setAvatar] = useState<AvatarId | null>(null);
   const [avatarColor, setAvatarColor] = useState<AvatarColor | null>(null);
   const [weapons, setWeapons] = useState<Array<Weapon | ''>>([]);
@@ -62,6 +65,7 @@ export default function ProfilePage() {
     if (!allowed) return;
     let active = true;
     setProfile(null);
+    setItems(null);
     setError('');
     setMessage('');
     setComment('');
@@ -73,6 +77,7 @@ export default function ProfilePage() {
           setAvatar(data.avatar ?? null);
           setAvatarColor(data.avatarColor ?? null);
           setRole(data.combatRole ?? '');
+          setPreferredItem(data.preferredItem?.id ?? '');
           setWeapons(data.weapons ?? []);
         }
       })
@@ -86,6 +91,14 @@ export default function ProfilePage() {
                 : 'Не удалось загрузить профиль',
           );
       });
+    // Справочник предметов — для выбора предпочитаемого в своей форме (2.4).
+    api<ItemRow[]>('/items')
+      .then((data) => {
+        if (active) setItems(data);
+      })
+      .catch(() => {
+        if (active) setItems([]);
+      });
     return () => {
       active = false;
     };
@@ -94,8 +107,13 @@ export default function ProfilePage() {
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
+    // Предпочитаемый предмет отправляем только при изменении (2.4): снятие
+    // выбора и повторный выбор — тоже смена по кулдауну (решение 18).
+    const preferredDirty =
+      preferredItem !== ((profile?.preferredItem?.id ?? '') as string);
     const input = updateOwnProfileSchema.safeParse({
       ...(otherFieldsChanged ? { combatRole: role, weapons } : {}),
+      ...(preferredDirty ? { preferredItemId: preferredItem || null } : {}),
       avatar,
       avatarColor,
       ...(comment.trim() ? { comment } : {}),
@@ -106,7 +124,7 @@ export default function ProfilePage() {
       setSaveError('Выберите роль, два разных оружия и укажите комментарий от 3 до 500 символов');
       return;
     }
-    if (otherFieldsChanged && !input.data.comment) {
+    if ((otherFieldsChanged || preferredDirty) && !input.data.comment) {
       setSaveError('Укажите комментарий от 3 до 500 символов');
       return;
     }
@@ -122,6 +140,10 @@ export default function ProfilePage() {
               ...current,
               combatRole: input.data.combatRole ?? current.combatRole,
               weapons: input.data.weapons ?? current.weapons,
+              preferredItem:
+                input.data.preferredItemId === undefined
+                  ? current.preferredItem
+                  : ((items ?? []).find((item) => item.id === input.data.preferredItemId) ?? null),
               avatar: input.data.avatar,
               avatarColor: input.data.avatarColor,
             }
@@ -131,10 +153,13 @@ export default function ProfilePage() {
       window.dispatchEvent(new Event('profile:changed'));
       setMessage('Профиль сохранён');
     } catch (err) {
+      const { status, body } = err as { status?: number; body?: { message?: string } };
       setSaveError(
-        (err as { status?: number }).status === 403
+        status === 403
           ? 'Можно менять только свой профиль'
-          : 'Не удалось сохранить профиль. Попробуйте ещё раз.',
+          : status === 409 && body?.message
+            ? body.message
+            : 'Не удалось сохранить профиль. Попробуйте ещё раз.',
       );
     } finally {
       setBusy(false);
@@ -303,6 +328,25 @@ export default function ProfilePage() {
                     onChange={setWeapons}
                     required={otherFieldsChanged}
                   />
+                  <Field label="Предпочитаемый предмет">
+                    <Select
+                      value={preferredItem}
+                      onChange={(e) => setPreferredItem(e.target.value)}
+                      aria-label="Предпочитаемый предмет"
+                    >
+                      <option value="">Не выбран</option>
+                      {(items ?? []).map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="text-sm text-secondary">
+                      Даёт скидку при победе в лоте с этим предметом (план 2.4). Боевую роль
+                      и предпочитаемый предмет можно менять не чаще раза в 2 недели — у каждого
+                      поля свой отсчёт.
+                    </p>
+                  </Field>
                   <Field label="Комментарий">
                     <Input
                       required={otherFieldsChanged}
@@ -319,6 +363,7 @@ export default function ProfilePage() {
                       role === (profile.combatRole ?? '') &&
                       avatar === (profile.avatar ?? null) &&
                       avatarColor === (profile.avatarColor ?? null) &&
+                      preferredItem === (profile.preferredItem?.id ?? '') &&
                       JSON.stringify(weapons) === JSON.stringify(profile.weapons ?? [])
                     }
                   >

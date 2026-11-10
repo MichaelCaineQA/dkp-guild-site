@@ -30,6 +30,7 @@ interface StoredBid {
   amount: number;
   fullCost: number;
   markupPct: number;
+  discountPct: number;
   createdAt: Date;
   member: { nickname: string };
 }
@@ -38,6 +39,7 @@ interface StoredAward {
   winnerId: string;
   finalPrice: number;
   markupPct: number;
+  discountPct: number;
   winner: { nickname: string };
 }
 
@@ -52,6 +54,7 @@ interface StoredAuction {
   antiSnipeExtendSec: number;
   noBidTimeoutSec: number | null;
   markupPct: number;
+  discountPct: number;
   targetRoles: ItemTargetRole[];
   firstBidAt: Date | null;
   endsAt: Date | null;
@@ -79,11 +82,17 @@ export interface ManageTx {
   };
   lootAward: {
     create(args: {
-      data: { auctionId: string; winnerId: string; finalPrice: number; markupPct: number };
+      data: {
+        auctionId: string;
+        winnerId: string;
+        finalPrice: number;
+        markupPct: number;
+        discountPct: number;
+      };
     }): Promise<unknown>;
     update(args: {
       where: { auctionId: string };
-      data: { winnerId: string; finalPrice: number; markupPct: number };
+      data: { winnerId: string; finalPrice: number; markupPct: number; discountPct: number };
     }): Promise<unknown>;
   };
   dkpEntry: {
@@ -266,6 +275,7 @@ export class AuctionManageService {
           winnerId: top.memberId,
           finalPrice: top.fullCost,
           markupPct: top.markupPct,
+          discountPct: top.discountPct,
         },
       });
       await this.spendEntry(
@@ -275,7 +285,7 @@ export class AuctionManageService {
         -top.fullCost,
         auctionId,
         `Трата на аукционе: «${itemName}» за ${top.fullCost}` +
-          (top.markupPct > 0 ? ` (с наценкой ${top.markupPct}%)` : ''),
+          priceModifiers(top),
       );
       await this.audit(
         tx,
@@ -292,6 +302,7 @@ export class AuctionManageService {
           memberName: top.member.nickname,
           finalPrice: top.fullCost,
           markupPct: top.markupPct,
+          discountPct: top.discountPct,
         },
         null,
         false,
@@ -353,6 +364,7 @@ export class AuctionManageService {
               memberName: winner.nickname,
               finalPrice: input.price,
               markupPct: auction.award.markupPct,
+              discountPct: auction.award.discountPct,
             },
             null,
             true,
@@ -367,17 +379,29 @@ export class AuctionManageService {
         if (auction.status === 'OPEN') {
           await tx.auction.update({ where: { id: auctionId }, data: { status: 'CLOSED' } });
           await tx.lootAward.create({
-            data: { auctionId, winnerId: winner.id, finalPrice: input.price, markupPct: 0 },
+            data: {
+              auctionId,
+              winnerId: winner.id,
+              finalPrice: input.price,
+              markupPct: 0,
+              discountPct: 0,
+            },
           });
         } else if (auction.award) {
           await tx.lootAward.update({
             where: { auctionId },
-            data: { winnerId: winner.id, finalPrice: input.price, markupPct: 0 },
+            data: { winnerId: winner.id, finalPrice: input.price, markupPct: 0, discountPct: 0 },
           });
         } else {
           // завершён без ставок (план 6, п. 9) — выдача назначается вручную
           await tx.lootAward.create({
-            data: { auctionId, winnerId: winner.id, finalPrice: input.price, markupPct: 0 },
+            data: {
+              auctionId,
+              winnerId: winner.id,
+              finalPrice: input.price,
+              markupPct: 0,
+              discountPct: 0,
+            },
           });
         }
 
@@ -426,6 +450,7 @@ export class AuctionManageService {
             memberName: winner.nickname,
             finalPrice: input.price,
             markupPct: 0,
+            discountPct: 0,
           },
           refund,
           false,
@@ -530,6 +555,7 @@ export class AuctionManageService {
       antiSnipeExtendSec: auction.antiSnipeExtendSec,
       noBidTimeoutSec: auction.noBidTimeoutSec,
       markupPct: auction.markupPct,
+      discountPct: auction.discountPct,
       firstBidAt: auction.firstBidAt?.toISOString() ?? null,
       endsAt: auction.endsAt?.toISOString() ?? null,
       createdAt: auction.createdAt.toISOString(),
@@ -544,4 +570,12 @@ export class AuctionManageService {
   ): LotManageResult {
     return { lot: this.toLotRow(auction), winner, refund, repeated };
   }
+}
+
+/** Наценка и скидка в комментарии журнала (пусто — чистая цена). */
+function priceModifiers(bid: { markupPct: number; discountPct: number }): string {
+  const parts: string[] = [];
+  if (bid.markupPct > 0) parts.push(`с наценкой ${bid.markupPct}%`);
+  if (bid.discountPct > 0) parts.push(`со скидкой ${bid.discountPct}%`);
+  return parts.length > 0 ? ` (${parts.join(', ')})` : '';
 }

@@ -53,13 +53,19 @@ export const AVATAR_COLORS = [
 ] as const;
 export type AvatarColor = (typeof AVATAR_COLORS)[number];
 
-/** Самостоятельно меняются роль и оружия; ник и ранг здесь запрещены. */
+/**
+ * Самостоятельно меняются роль и оружия; ник и ранг здесь запрещены.
+ * Предпочитаемый предмет (план 2.4, решение 18) — один из справочника
+ * аукциона, nullable (снятие выбора); смена роли и предмета ограничена
+ * кулдауном (план 2.5).
+ */
 export const updateOwnProfileSchema = z
   .object({
     combatRole: z.enum(COMBAT_ROLES).optional(),
     weapons: weaponPairSchema.optional(),
     avatar: z.enum(AVATARS).nullable().optional(),
     avatarColor: z.enum(AVATAR_COLORS).nullable().optional(),
+    preferredItemId: z.string().min(1, 'Выберите предмет').nullable().optional(),
     comment: z.string().trim().min(3).max(500).optional(),
   })
   .strict()
@@ -88,6 +94,12 @@ export interface PlayerProfile {
   rank: Rank;
   combatRole: CombatRole | null;
   weapons: Weapon[];
+  /** Предпочитаемый предмет (план 2.4): null — не выбран. */
+  preferredItem: { id: string; name: string } | null;
+  /** Последняя смена предпочитаемого предмета — для кулдауна (план 2.5). */
+  preferredItemChangedAt: string | null;
+  /** Последняя смена боевой роли — для кулдауна (план 2.5). */
+  combatRoleChangedAt: string | null;
   balance: number;
   recentEntries: Array<{
     id: string;

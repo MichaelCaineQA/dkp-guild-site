@@ -22,6 +22,9 @@ function makeDb(seed: Stored[] = [], lotsByItem: Record<string, number> = {}) {
   const items = seed.map((item) => ({ ...item }));
   const audit: Array<Record<string, string | null>> = [];
   const db: ItemsDb = {
+    member: {
+      count: async () => 0,
+    },
     item: {
       findMany: async () =>
         [...items]

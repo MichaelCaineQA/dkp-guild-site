@@ -37,6 +37,8 @@ export interface LootLogRow {
   finalPrice: number;
   /** Применённая наценка «чужому» классу, % (0 — «родной» или вручную). */
   markupPct: number;
+  /** Применённая скидка за предпочитаемый предмет, % (0 — не предпочитался). */
+  discountPct: number;
   eventId: string;
   eventName: string;
   eventStartsAt: string;
@@ -51,6 +53,8 @@ export interface ProfileLootRow {
   rarity: string | null;
   finalPrice: number;
   markupPct: number;
+  /** Применённая скидка за предпочитаемый предмет, % (0 — не предпочитался). */
+  discountPct: number;
   eventId: string;
   eventName: string;
   eventStartsAt: string;

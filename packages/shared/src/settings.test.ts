@@ -10,7 +10,7 @@ import {
 } from './settings';
 
 describe('SETTINGS_REGISTRY', () => {
-  it('все настройки из плана 2.2/2.3/6 присутствуют (15 ключей)', () => {
+  it('все настройки из плана 2.2/2.3/2.4/2.5/6 присутствуют (18 ключей)', () => {
     expect(Object.keys(SETTINGS_REGISTRY).sort()).toEqual(
       [
         'checkin.generateBeforeStartSec',
@@ -27,6 +27,8 @@ describe('SETTINGS_REGISTRY', () => {
         'auction.antiSnipeLongSec',
         'auction.antiSnipeExtendLongSec',
         'auction.foreignClassMarkupPct',
+        'auction.preferredItemDiscountPct',
+        'auction.profileChangeCooldownDays',
         'auction.noBidTimeoutSec',
       ].sort(),
     );
@@ -46,7 +48,7 @@ describe('SETTINGS_REGISTRY', () => {
     }
   });
 
-  it('дефолты соответствуют плану (окна 3 мин, 50/50, шаг 1, наценка 50%)', () => {
+  it('дефолты соответствуют плану (решение 18: наценка 10%, скидка 10%, кулдаун 14 дн)', () => {
     expect(SETTING_DEFAULTS['checkin.generateBeforeStartSec']).toBe(180);
     expect(SETTING_DEFAULTS['checkin.windowSec']).toBe(180);
     expect(SETTING_DEFAULTS['checkin.attempts']).toBe(1);
@@ -60,8 +62,17 @@ describe('SETTINGS_REGISTRY', () => {
     expect(SETTING_DEFAULTS['auction.antiSnipeExtendLiveSec']).toBe(30);
     expect(SETTING_DEFAULTS['auction.antiSnipeLongSec']).toBe(600);
     expect(SETTING_DEFAULTS['auction.antiSnipeExtendLongSec']).toBe(600);
-    expect(SETTING_DEFAULTS['auction.foreignClassMarkupPct']).toBe(50);
+    expect(SETTING_DEFAULTS['auction.foreignClassMarkupPct']).toBe(10);
+    expect(SETTING_DEFAULTS['auction.preferredItemDiscountPct']).toBe(10);
+    expect(SETTING_DEFAULTS['auction.profileChangeCooldownDays']).toBe(14);
     expect(SETTING_DEFAULTS['auction.noBidTimeoutSec']).toBe(120);
+  });
+
+  it('наценка и скидка ограничены 100% (решение 18)', () => {
+    expect(() => parseSettingValue('auction.foreignClassMarkupPct', 101)).toThrow();
+    expect(() => parseSettingValue('auction.preferredItemDiscountPct', 101)).toThrow();
+    expect(parseSettingValue('auction.foreignClassMarkupPct', 100)).toBe(100);
+    expect(parseSettingValue('auction.preferredItemDiscountPct', 0)).toBe(0);
   });
 });
 

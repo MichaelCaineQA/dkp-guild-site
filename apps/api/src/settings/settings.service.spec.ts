@@ -62,7 +62,7 @@ describe('SettingsService.getAll', () => {
     const all = await service.getAll();
     expect(all['auction.step']).toBe(5);
     expect(all['checkin.windowSec']).toBe(SETTING_DEFAULTS['checkin.windowSec']);
-    expect(Object.keys(all)).toHaveLength(15);
+    expect(Object.keys(all)).toHaveLength(17);
   });
 });
 
@@ -141,7 +141,7 @@ describe('SettingsService.gameTime', () => {
 describe('settingsMetadata', () => {
   it('отдаёт подписи и единицы для UI по каждому ключу', () => {
     const meta = settingsMetadata();
-    expect(meta).toHaveLength(15);
+    expect(meta).toHaveLength(17);
     expect(meta[0]).toHaveProperty('label');
     expect(meta.find((m) => m.key === 'auction.step')!.unit).toBe('очк.');
   });

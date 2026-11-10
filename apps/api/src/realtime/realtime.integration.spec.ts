@@ -27,6 +27,7 @@ interface LotRow {
   antiSnipeExtendSec: number;
   noBidTimeoutSec: number | null;
   markupPct: number;
+  discountPct: number;
   targetRoles: 'DPS'[];
   firstBidAt: Date | null;
   endsAt: Date | null;
@@ -41,12 +42,31 @@ interface BidRowData {
   amount: number;
   fullCost: number;
   markupPct: number;
+  discountPct?: number;
   createdAt: Date;
 }
 
 const MEMBERS = [
-  { id: 'm-1', nickname: 'Воин', combatRole: 'DPS' as const },
-  { id: 'm-2', nickname: 'Целитель', combatRole: 'HEALER' as const },
+  {
+    id: 'm-1',
+    nickname: 'Воин',
+    combatRole: 'DPS' as const,
+    prevCombatRole: null,
+    combatRoleChangedAt: null,
+    preferredItemId: null,
+    prevPreferredItemId: null,
+    preferredItemChangedAt: null,
+  },
+  {
+    id: 'm-2',
+    nickname: 'Целитель',
+    combatRole: 'HEALER' as const,
+    prevCombatRole: null,
+    combatRoleChangedAt: null,
+    preferredItemId: null,
+    prevPreferredItemId: null,
+    preferredItemChangedAt: null,
+  },
 ];
 
 function makeStore() {
@@ -61,6 +81,7 @@ function makeStore() {
     antiSnipeExtendSec: 30,
     noBidTimeoutSec: 120,
     markupPct: 0,
+    discountPct: 0,
     targetRoles: ['DPS'],
     firstBidAt: null,
     endsAt: null,
@@ -75,7 +96,7 @@ function makeStore() {
 
   const withItem = <T,>(row: T & { itemName?: string }) => ({
     ...row,
-    lootDrop: { item: { name: row.itemName ?? 'Предмет' } },
+    lootDrop: { itemId: 'item-1', item: { name: row.itemName ?? 'Предмет' } },
   });
 
   const tx = {

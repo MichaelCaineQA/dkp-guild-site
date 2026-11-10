@@ -10,6 +10,11 @@ let role: CombatRole | null = 'DPS';
 let weapons: import('@dkp/shared').Weapon[] = ['STAFF', 'WAND'];
 let avatar: import('@dkp/shared').Avatar | null = null;
 let avatarColor: import('@dkp/shared').AvatarColor | null = null;
+/** Предпочитаемый предмет (#101) и время его последней смены — для кулдауна. */
+let preferredItemId: string | null = null;
+let preferredChangedAt: Date | null = null;
+/** Время последней смены роли — свой таймер кулдауна (решение 18). */
+let roleChangedAt: Date | null = null;
 let audit: Array<unknown> = [];
 let failAudit = false;
 let actor: SessionUser | undefined;
@@ -39,6 +44,10 @@ function member(id: string, combatRole: CombatRole | null) {
         nickname: 'Игрок',
         rank: 'MEMBER' as const,
         combatRole,
+        combatRoleChangedAt: null,
+        preferredItemId: null,
+        preferredItemChangedAt: null,
+        preferredItem: null,
         weapons,
         avatar,
         avatarColor,
@@ -60,18 +69,26 @@ const db: ProfilesDb = {
       throw new Error('Изменение вне транзакции');
     },
   },
+  item: {
+    findUnique: async ({ where }) =>
+      where.id === 'item-1' ? { id: 'item-1', name: 'Клинок рассвета' } : null,
+  },
+  setting: {
+    findMany: async () => [] as Array<{ key: string; value: unknown }>,
+  },
   auditLog: {
     create: async () => {
       throw new Error('Аудит вне транзакции');
     },
   },
   dkpEntry: { findMany: async () => entries },
-  lootAward: {
+      lootAward: {
     findMany: async ({ take }) =>
       loot.slice(0, take).map((award, index) => ({
         id: award.id,
         finalPrice: award.finalPrice,
         markupPct: award.markupPct ?? 0,
+        discountPct: 0,
         createdAt: award.createdAt,
         auction: {
           id: `lot-${index}`,
@@ -89,9 +106,12 @@ const db: ProfilesDb = {
   },
   $transaction: async (work) => {
     let draftRole = role;
+    let draftRoleChangedAt = roleChangedAt;
     let draftWeapons = [...weapons];
     let draftAvatar = avatar;
     let draftAvatarColor = avatarColor;
+    let draftPreferredItemId = preferredItemId;
+    let draftPreferredChangedAt = preferredChangedAt;
     const draftAudit: unknown[] = [];
     const tx: ProfileTransaction = {
       member: {
@@ -103,16 +123,34 @@ const db: ProfilesDb = {
                 weapons: draftWeapons,
                 avatar: draftAvatar,
                 avatarColor: draftAvatarColor,
+                combatRoleChangedAt: draftRoleChangedAt,
+                preferredItemId: draftPreferredItemId,
+                preferredItemChangedAt: draftPreferredChangedAt,
+                preferredItem: draftPreferredItemId
+                  ? { id: draftPreferredItemId, name: 'Клинок рассвета' }
+                  : null,
               }
             : null;
         },
         update: async ({ data }) => {
           if (data.combatRole !== undefined) draftRole = data.combatRole;
+          if (data.combatRoleChangedAt !== undefined)
+            draftRoleChangedAt = data.combatRoleChangedAt;
           if (data.weapons !== undefined) draftWeapons = data.weapons;
           if (data.avatar !== undefined) draftAvatar = data.avatar;
           if (data.avatarColor !== undefined) draftAvatarColor = data.avatarColor;
+          if (data.preferredItemId !== undefined) draftPreferredItemId = data.preferredItemId;
+          if (data.preferredItemChangedAt !== undefined)
+            draftPreferredChangedAt = data.preferredItemChangedAt;
           return {};
         },
+      },
+      item: {
+        findUnique: async ({ where }) =>
+          where.id === 'item-1' ? { id: 'item-1', name: 'Клинок рассвета' } : null,
+      },
+      setting: {
+        findMany: async () => [] as Array<{ key: string; value: unknown }>,
       },
       auditLog: {
         create: async ({ data }) => {
@@ -124,9 +162,12 @@ const db: ProfilesDb = {
     };
     const result = await work(tx);
     role = draftRole;
+    roleChangedAt = draftRoleChangedAt;
     weapons = draftWeapons;
     avatar = draftAvatar;
     avatarColor = draftAvatarColor;
+    preferredItemId = draftPreferredItemId;
+    preferredChangedAt = draftPreferredChangedAt;
     audit.push(...draftAudit);
     return result;
   },
@@ -158,6 +199,9 @@ describe('профили через HTTP', () => {
     weapons = ['STAFF', 'WAND'];
     avatar = null;
     avatarColor = null;
+    preferredItemId = null;
+    preferredChangedAt = null;
+    roleChangedAt = null;
     audit = [];
     failAudit = false;
     loot = [];
@@ -381,5 +425,64 @@ describe('профили через HTTP', () => {
       (await patch('m1', { weapons: ['STAFF', 'WAND'], combatRole: 'TANK', comment: 'Новая роль' }))
         .status,
     ).toBe(403);
+  });
+
+  it('предпочитаемый предмет: первый выбор сразу, смена и снятие — по кулдауну (#101)', async () => {
+    // Первый выбор — сразу, с комментарием (смена полей профиля).
+    expect((await patch('m1', { preferredItemId: 'item-1', comment: 'Мой предмет' })).status).toBe(
+      200,
+    );
+    expect(preferredItemId).toBe('item-1');
+    expect(preferredChangedAt).not.toBeNull();
+    expect(audit).toHaveLength(1);
+    expect(String((audit[0] as { comment: string }).comment)).toContain('Клинок рассвета');
+
+    // Тот же предмет повторно — без изменений, новый аудит не пишется.
+    expect((await patch('m1', { preferredItemId: 'item-1', comment: 'То же самое' })).status).toBe(
+      200,
+    );
+    expect(audit).toHaveLength(1);
+
+    // Смена до истечения интервала — 409 (решение 18: раз в 2 недели по умолчанию).
+    expect((await patch('m1', { preferredItemId: null, comment: 'Снять выбор' })).status).toBe(
+      409,
+    );
+    expect(preferredItemId).toBe('item-1');
+
+    // После истечения интервала смена разрешена, включая снятие.
+    preferredChangedAt = new Date(Date.now() - 15 * 86_400_000);
+    expect((await patch('m1', { preferredItemId: null, comment: 'Снимаю выбор' })).status).toBe(
+      200,
+    );
+    expect(preferredItemId).toBeNull();
+    expect(audit).toHaveLength(2);
+  });
+
+  it('предпочитаемый предмет: несуществующий — 404, без комментария — 400', async () => {
+    expect((await patch('m1', { preferredItemId: 'item-missing', comment: 'Нет такого' })).status).toBe(404);
+    expect((await patch('m1', { preferredItemId: 'item-1' })).status).toBe(400);
+    expect(preferredItemId).toBeNull();
+    expect(audit).toHaveLength(0);
+  });
+
+  it('боевая роль сменяется не чаще раза в интервал, независимо от предмета (#101)', async () => {
+    const body = { combatRole: 'TANK', weapons: ['SWORD_SHIELD', 'WAND'], comment: 'Новая роль' };
+    expect((await patch('m1', body)).status).toBe(200);
+    expect(role).toBe('TANK');
+    // Повторная смена роли до истечения — 409, а предмет выбрать можно сразу.
+    expect(
+      (
+        await patch('m1', {
+          combatRole: 'HEALER',
+          weapons: ['STAFF', 'WAND'],
+          comment: 'Ещё раз',
+        })
+      ).status,
+    ).toBe(409);
+    expect((await patch('m1', { preferredItemId: 'item-1', comment: 'Предмет' })).status).toBe(
+      200,
+    );
+    expect(role).toBe('TANK');
+    expect(preferredItemId).toBe('item-1');
   });
 });

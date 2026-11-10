@@ -8,6 +8,7 @@ interface StoredBid {
   amount: number;
   fullCost: number;
   markupPct: number;
+  discountPct: number;
   createdAt: Date;
   member: { nickname: string };
 }
@@ -23,13 +24,20 @@ interface StoredAuction {
   antiSnipeExtendSec: number;
   noBidTimeoutSec: number | null;
   markupPct: number;
+  discountPct: number;
   targetRoles: ItemTargetRole[];
   firstBidAt: Date | null;
   endsAt: Date | null;
   createdAt: Date;
   lootDrop: { item: { name: string } };
   bids: StoredBid[];
-  award: { winnerId: string; finalPrice: number; markupPct: number; winner: { nickname: string } } | null;
+  award: {
+    winnerId: string;
+    finalPrice: number;
+    markupPct: number;
+    discountPct: number;
+    winner: { nickname: string };
+  } | null;
 }
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
@@ -77,6 +85,7 @@ export class AuctionSnapshotService {
             memberName: auction.award.winner.nickname,
             finalPrice: auction.award.finalPrice,
             markupPct: auction.award.markupPct,
+            discountPct: auction.award.discountPct,
           }
         : null,
       bids: [...auction.bids]
@@ -99,6 +108,7 @@ function toLotRow(auction: StoredAuction): AuctionLotRow {
     antiSnipeExtendSec: auction.antiSnipeExtendSec,
     noBidTimeoutSec: auction.noBidTimeoutSec,
     markupPct: auction.markupPct,
+    discountPct: auction.discountPct,
     firstBidAt: auction.firstBidAt?.toISOString() ?? null,
     endsAt: auction.endsAt?.toISOString() ?? null,
     createdAt: auction.createdAt.toISOString(),
@@ -114,6 +124,7 @@ function toBidRow(bid: StoredBid): BidRow {
     amount: bid.amount,
     fullCost: bid.fullCost,
     markupPct: bid.markupPct,
+    discountPct: bid.discountPct,
     createdAt: bid.createdAt.toISOString(),
   };
 }

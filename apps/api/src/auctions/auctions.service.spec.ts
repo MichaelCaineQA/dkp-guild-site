@@ -7,16 +7,37 @@ interface LotSeed {
   endsAt?: Date | null;
   createdAt?: Date;
   itemName?: string;
+  itemId?: string;
   rarity?: string | null;
   targetRoles?: ItemTargetRole[];
   bids?: Array<{ memberId: string; nickname: string; amount: number; fullCost?: number }>;
   award?: { winnerId: string; nickname: string; finalPrice: number } | null;
 }
 
-function makeDb(lots: LotSeed[]): AuctionsDb & { queries: string[] } {
+/** Просматривающий со снимком предпочтения (решение 18). */
+function makeDb(
+  lots: LotSeed[],
+  viewer?: {
+    id: string;
+    preferredItemId: string | null;
+    prevPreferredItemId?: string | null;
+    preferredItemChangedAt?: Date | null;
+  },
+): AuctionsDb & { queries: string[] } {
   const queries: string[] = [];
   return {
     queries,
+    member: {
+      findUnique: async ({ where }) =>
+        viewer && viewer.id === where.id
+          ? {
+              id: viewer.id,
+              preferredItemId: viewer.preferredItemId,
+              prevPreferredItemId: viewer.prevPreferredItemId ?? null,
+              preferredItemChangedAt: viewer.preferredItemChangedAt ?? null,
+            }
+          : null,
+    },
     auction: {
       findMany: async ({ where, orderBy }) => {
         queries.push(JSON.stringify({ where, orderBy }));
@@ -47,10 +68,12 @@ function makeDb(lots: LotSeed[]): AuctionsDb & { queries: string[] } {
             antiSnipeExtendSec: 30,
             noBidTimeoutSec: 120,
             markupPct: 50,
+            discountPct: 10,
             firstBidAt: lot.bids?.length ? new Date('2026-11-10T18:00:00Z') : null,
             endsAt: lot.endsAt ?? null,
             createdAt: lot.createdAt ?? new Date('2026-11-10T17:00:00Z'),
             lootDrop: {
+              itemId: lot.itemId ?? 'item-1',
               item: {
                 name: lot.itemName ?? 'Предмет',
                 rarity: lot.rarity ?? null,
@@ -69,6 +92,7 @@ function makeDb(lots: LotSeed[]): AuctionsDb & { queries: string[] } {
                   winnerId: lot.award.winnerId,
                   finalPrice: lot.award.finalPrice,
                   markupPct: 0,
+                  discountPct: 0,
                   winner: { nickname: lot.award.nickname },
                 }
               : null,
@@ -107,6 +131,38 @@ describe('AuctionsService (issue #98)', () => {
       makeDb([{ id: 'a-1', bids: [{ memberId: 'm-2', nickname: 'Хил', amount: 10 }] }]),
     ).list('OPEN', null);
     expect(rows[0]!.myBid).toBeNull();
+  });
+
+  it('myPreferred — снимок предпочтения на момент создания лота (#101)', async () => {
+    const lots = [
+      { id: 'old', createdAt: new Date('2026-11-01T10:00:00Z') },
+      { id: 'new', createdAt: new Date('2026-11-09T10:00:00Z') },
+    ];
+    // Предмет выбирали до обоих лотов, сменили 10-го — после создания обоих.
+    const viewer = {
+      id: 'm-1',
+      preferredItemId: 'item-2',
+      prevPreferredItemId: 'item-1',
+      preferredItemChangedAt: new Date('2026-11-10T10:00:00Z'),
+    };
+    const rows = await new AuctionsService(makeDb(lots, viewer)).list('OPEN', 'm-1');
+    expect(rows.map((row) => row.myPreferred)).toEqual([true, true]);
+    expect(rows.map((row) => row.discountPct)).toEqual([10, 10]);
+
+    // Смена до создания нового лота: старый лот — со скидкой, новый — без.
+    const viewer2 = {
+      id: 'm-1',
+      preferredItemId: 'item-2',
+      prevPreferredItemId: 'item-1',
+      preferredItemChangedAt: new Date('2026-11-05T10:00:00Z'),
+    };
+    const rows2 = await new AuctionsService(makeDb(lots, viewer2)).list('OPEN', 'm-1');
+    expect(rows2.map((row) => row.myPreferred)).toEqual([true, false]);
+
+    // Другой предмет в предпочтениях — скидки нет на любом лоте.
+    const viewer3 = { id: 'm-1', preferredItemId: 'item-other' };
+    const rows3 = await new AuctionsService(makeDb(lots, viewer3)).list('OPEN', 'm-1');
+    expect(rows3.map((row) => row.myPreferred)).toEqual([false, false]);
   });
 
   it('завершённый лот несёт победителя, архив сортируется свежими сверху', async () => {
@@ -184,6 +240,9 @@ function makeLootDb(
     auction: {
       findMany: async () => [],
     },
+    member: {
+      findUnique: async () => null,
+    },
     lootAward: {
       findMany: async ({ where, take, skip }) => {
         findWhere.push(where);
@@ -195,6 +254,7 @@ function makeLootDb(
             id: award.id,
             finalPrice: award.finalPrice ?? 100,
             markupPct: award.markupPct ?? 0,
+            discountPct: 0,
             createdAt: award.createdAt ?? new Date('2026-11-10T19:00:00Z'),
             winner: { id: award.winnerId ?? 'm-1', nickname: award.winnerName ?? 'Воин' },
             auction: {

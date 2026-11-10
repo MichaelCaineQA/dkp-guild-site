@@ -10,6 +10,8 @@ import { BidsService, type BidsDb, type BidsTx } from './bids.service';
 
 const NOW = new Date('2026-11-09T20:00:00Z');
 const ACTOR = { memberId: 'm-1', isAdmin: false };
+/** Лот создан за день до ставки — снимки роли/предпочтения берутся на этот момент. */
+const LOT_CREATED_AT = new Date('2026-11-08T20:00:00Z');
 
 interface AuctionSeed {
   id: string;
@@ -21,10 +23,13 @@ interface AuctionSeed {
   antiSnipeSec: number;
   antiSnipeExtendSec: number;
   markupPct: number;
+  discountPct?: number;
   targetRoles: ItemTargetRole[];
   firstBidAt: Date | null;
   endsAt: Date | null;
+  createdAt?: Date;
   itemName?: string;
+  itemId?: string;
 }
 
 const LIVE_LOT: AuctionSeed = {
@@ -37,10 +42,13 @@ const LIVE_LOT: AuctionSeed = {
   antiSnipeSec: 30,
   antiSnipeExtendSec: 10,
   markupPct: 50,
+  discountPct: 10,
   targetRoles: ['DPS'],
   firstBidAt: null,
   endsAt: null,
+  createdAt: LOT_CREATED_AT,
   itemName: 'Клинок рассвета',
+  itemId: 'item-1',
 };
 
 interface BidSeed {
@@ -49,12 +57,25 @@ interface BidSeed {
   amount: number;
   fullCost: number;
   markupPct?: number;
+  discountPct?: number;
+}
+
+/** Игрок со снимками для цены лота (решение 18); без них — null. */
+interface MemberSeed {
+  id: string;
+  nickname: string;
+  combatRole: 'DPS' | 'HEALER' | 'TANK' | null;
+  prevCombatRole?: 'DPS' | 'HEALER' | 'TANK' | null;
+  combatRoleChangedAt?: Date | null;
+  preferredItemId?: string | null;
+  prevPreferredItemId?: string | null;
+  preferredItemChangedAt?: Date | null;
 }
 
 function makeDb(options: {
   auctions?: AuctionSeed[];
   bids?: BidSeed[];
-  members?: Array<{ id: string; nickname: string; combatRole: 'DPS' | 'HEALER' | 'TANK' | null }>;
+  members?: MemberSeed[];
   dkp?: Record<string, number>;
 }) {
   const auctions = (options.auctions ?? [LIVE_LOT]).map((seed) => ({ ...seed }));
@@ -64,14 +85,22 @@ function makeDb(options: {
     bids.push({
       id: `b-${++bidSeq}`,
       markupPct: 0,
+      discountPct: 0,
       createdAt: new Date(NOW.getTime() + bidSeq * 1000),
       ...seed,
     });
   }
-  const members = options.members ?? [
+  const members: Array<Required<MemberSeed>> = (options.members ?? [
     { id: 'm-1', nickname: 'Воин', combatRole: 'DPS' as const },
     { id: 'm-2', nickname: 'Целитель', combatRole: 'HEALER' as const },
-  ];
+  ]).map((seed) => ({
+    prevCombatRole: null,
+    combatRoleChangedAt: null,
+    preferredItemId: null,
+    prevPreferredItemId: null,
+    preferredItemChangedAt: null,
+    ...seed,
+  }));
   const dkp = options.dkp ?? { 'm-1': 1000 };
   const audit: Array<Record<string, unknown>> = [];
 
@@ -82,7 +111,8 @@ function makeDb(options: {
         if (!found) return null;
         return {
           ...found,
-          lootDrop: { item: { name: found.itemName ?? 'Предмет' } },
+          createdAt: found.createdAt ?? LOT_CREATED_AT,
+          lootDrop: { itemId: found.itemId ?? 'item-1', item: { name: found.itemName ?? 'Предмет' } },
         } as never;
       },
       findMany: async ({ where }) =>
@@ -239,7 +269,79 @@ describe('BidsService (issue #94)', () => {
 
     const ok = await service(db).place('a-1', { amount: 100 }, { memberId: 'm-2', isAdmin: false });
     expect(ok.bid).toMatchObject({ amount: 100, fullCost: 150, markupPct: 50 });
-    expect(String(audit[0]!.comment)).toContain('полная стоимость 150 с наценкой 50%');
+    expect(String(audit[0]!.comment)).toContain('полная стоимость 150, с наценкой 50%');
+  });
+
+  it('скидка за предпочитаемый предмет: сначала наценка, затем от неё скидка (решение 18)', async () => {
+    // «Чужой» класс с предпочитаемым предметом: наценка 50%, скидка 10%
+    // → 100 × 1,5 = 150 → 150 × 0,9 = 135.
+    const { db, bids } = makeDb({
+      dkp: { 'm-2': 1000 },
+      members: [{ id: 'm-2', nickname: 'Целитель', combatRole: 'HEALER', preferredItemId: 'item-1' }],
+    });
+    const ok = await service(db).place('a-1', { amount: 100 }, { memberId: 'm-2', isAdmin: false });
+    expect(ok.bid).toMatchObject({
+      amount: 100,
+      fullCost: 135,
+      markupPct: 50,
+      discountPct: 10,
+    });
+    expect(bids[0]).toMatchObject({ fullCost: 135, discountPct: 10 });
+  });
+
+  it('скидка «родному» классу с предпочитаемым предметом: 105 → 94,5 → 95', async () => {
+    const { db } = makeDb({
+      members: [{ id: 'm-1', nickname: 'Воин', combatRole: 'DPS', preferredItemId: 'item-1' }],
+    });
+    const ok = await service(db).place('a-1', { amount: 105 }, ACTOR);
+    expect(ok.bid).toMatchObject({ fullCost: 95, markupPct: 0, discountPct: 10 });
+  });
+
+  it('чужой предпочитаемый предмет скидки не даёт', async () => {
+    const { db } = makeDb({
+      members: [{ id: 'm-1', nickname: 'Воин', combatRole: 'DPS', preferredItemId: 'item-other' }],
+    });
+    const ok = await service(db).place('a-1', { amount: 100 }, ACTOR);
+    expect(ok.bid).toMatchObject({ fullCost: 100, discountPct: 0 });
+  });
+
+  it('смена предпочтения после создания лота цену не меняет — снимок (решение 18)', async () => {
+    const changedAfter = new Date('2026-11-09T10:00:00Z'); // лот создан 08-го
+    const { db } = makeDb({
+      members: [
+        {
+          id: 'm-1',
+          nickname: 'Воин',
+          combatRole: 'DPS',
+          preferredItemId: 'item-other',
+          prevPreferredItemId: 'item-1',
+          preferredItemChangedAt: changedAfter,
+        },
+      ],
+    });
+    const ok = await service(db).place('a-1', { amount: 100 }, ACTOR);
+    expect(ok.bid).toMatchObject({ fullCost: 90, discountPct: 10 }); // 100 × 0,9
+  });
+
+  it('снятие предпочтения после создания лота скидку сохраняет, смена роли — наценку', async () => {
+    const changedAfter = new Date('2026-11-09T10:00:00Z');
+    const { db } = makeDb({
+      dkp: { 'm-2': 1000 },
+      members: [
+        {
+          id: 'm-2',
+          nickname: 'Целитель',
+          combatRole: 'HEALER', // сейчас хил, при создании лота был ДД — «родной»
+          prevCombatRole: 'DPS',
+          combatRoleChangedAt: changedAfter,
+          preferredItemId: null, // выбор снят после создания лота — скидка остаётся
+          prevPreferredItemId: 'item-1',
+          preferredItemChangedAt: changedAfter,
+        },
+      ],
+    });
+    const ok = await service(db).place('a-1', { amount: 100 }, { memberId: 'm-2', isAdmin: false });
+    expect(ok.bid).toMatchObject({ fullCost: 90, markupPct: 0, discountPct: 10 });
   });
 
   it('замороженные лидирующие ставки по другим лотам уменьшают доступный баланс', async () => {

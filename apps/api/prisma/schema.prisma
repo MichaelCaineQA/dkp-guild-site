@@ -198,6 +198,23 @@ model Member {
   rank Rank @default(MEMBER)
   combatRole CombatRole?
   weapons Weapon[] @default([])
+
+  /// Снимки для цены лота (план 6 п. 6, решение 18): при создании лота берутся
+  /// роль и предпочитаемый предмет на этот момент. prevCombatRole — значение
+  /// до последней смены: кулдаун (14 дн) длиннее любого лота (14 дн), поэтому
+  /// за жизнь лота поле меняется не более одного раза.
+  prevCombatRole CombatRole?
+  combatRoleChangedAt DateTime?
+
+  /// Предпочитаемый предмет (план 2.4, решение 18): один из справочника;
+  /// удаление предмета очищает выбор у всех (SetNull). Кулдаун смены —
+  /// auction.profileChangeCooldownDays, отсчёт свой у каждого поля.
+  preferredItemId String?
+  preferredItem Item? @relation("PreferredItem", fields: [preferredItemId], references: [id])
+  prevPreferredItemId String?
+  prevPreferredItem Item? @relation("PrevPreferredItem", fields: [prevPreferredItemId], references: [id])
+  preferredItemChangedAt DateTime?
+
   packJoinedAt DateTime?
   packId String?
   pack Pack? @relation("PackMembers", fields: [packId], references: [id])
@@ -352,6 +369,11 @@ model Item {
   targetRoles ItemTargetRole[]
   defaultStartPrice Int?
   lootDrops LootDrop[]
+
+  /// Предпочитающие предмет (план 2.4, решение 18); при удалении предмета
+  /// связь исчезает — поле предпочитаемого очищается у всех (SetNull).
+  preferredBy Member[] @relation("PreferredItem")
+  prevPreferredBy Member[] @relation("PrevPreferredItem")
   createdAt DateTime @default(now())
 
   @@unique([name])
@@ -393,8 +415,10 @@ model Auction {
 
   /// Наценка «чужому» классу и разметка «кому нужна» фиксируются при создании
   /// лота (раздел 6, п. 6): изменения настроек и справочника действуют только
-  /// на новые лоты.
+  /// на новые лоты. Скидка за предпочитаемый предмет — тем же снимком
+  /// (решение 18): default 10%, не более 100%.
   markupPct Int @default(0)
+  discountPct Int @default(0)
   targetRoles ItemTargetRole[] @default([])
 
   firstBidAt DateTime?
@@ -413,11 +437,14 @@ model Bid {
   member Member @relation(fields: [memberId], references: [id])
   amount Int
 
-  /// Полная стоимость ставки с применимой наценкой, округлённая вверх
-  /// (раздел 6, п. 5): заморожена, пока ставка лидирует; списывается
-  /// при победе. markupPct — применённая наценка «чужому» классу (0 — «родной»).
+  /// Полная стоимость ставки с применимой наценкой и скидкой за предпочитаемый
+  /// предмет, округлённая вверх (раздел 6, п. 5, решение 18): заморожена,
+  /// пока ставка лидирует; списывается при победе. markupPct — применённая
+  /// наценка «чужому» классу (0 — «родной»), discountPct — применённая скидка
+  /// (0 — предмет не предпочитался на момент создания лота).
   fullCost Int @default(0)
   markupPct Int @default(0)
+  discountPct Int @default(0)
   createdAt DateTime @default(now())
 
   @@index([auctionId])
@@ -431,6 +458,7 @@ model LootAward {
   winner Member @relation(fields: [winnerId], references: [id])
   finalPrice Int
   markupPct Int @default(0) // применённая наценка «чужому» классу, %
+  discountPct Int @default(0) // применённая скидка за предпочитаемый предмет, %
   createdAt DateTime @default(now())
 }
 

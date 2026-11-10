@@ -109,10 +109,22 @@ export const AUCTION_SETTINGS = {
     plan: '6 (окно и продление независимы)',
   },
   'auction.foreignClassMarkupPct': {
-    schema: intSetting(0, 500),
+    schema: intSetting(0, 100),
     label: 'Наценка «чужому» классу',
     unit: '%',
-    plan: '6',
+    plan: '6 (решение 18: по умолчанию +10%, не более 100%)',
+  },
+  'auction.preferredItemDiscountPct': {
+    schema: intSetting(0, 100),
+    label: 'Скидка за предпочитаемый предмет',
+    unit: '%',
+    plan: '2.4 (решение 18: по умолчанию 10%, не более 100%)',
+  },
+  'auction.profileChangeCooldownDays': {
+    schema: intSetting(1, 90),
+    label: 'Перерыв смены боевой роли и предпочитаемого предмета',
+    unit: 'дн',
+    plan: '2.5 (решение 18: не чаще раза в 2 недели, у каждого поля свой отсчёт)',
   },
   'auction.noBidTimeoutSec': {
     schema: intSetting(30, 3600),
@@ -151,7 +163,9 @@ export const SETTING_DEFAULTS: Record<SettingKey, number> = Object.fromEntries(
           'auction.antiSnipeExtendLiveSec': 30,
           'auction.antiSnipeLongSec': 600,
           'auction.antiSnipeExtendLongSec': 600,
-          'auction.foreignClassMarkupPct': 50,
+          'auction.foreignClassMarkupPct': 10,
+          'auction.preferredItemDiscountPct': 10,
+          'auction.profileChangeCooldownDays': 14,
           'auction.noBidTimeoutSec': 120,
         } as Record<SettingKey, number>
       )[key],
