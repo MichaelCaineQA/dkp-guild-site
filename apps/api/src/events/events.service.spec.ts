@@ -18,6 +18,12 @@ interface EventRecord {
   seriesId: string | null;
 }
 
+interface DropRecord {
+  id: string;
+  eventId: string;
+  auctionId: string | null;
+}
+
 function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
   const events: EventRecord[] = seed.map((e) => ({
     name: 'Сбор гильдии',
@@ -33,15 +39,18 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
     seriesId: null,
     ...e,
   }));
+  const drops: DropRecord[] = [];
   const audit: Array<Record<string, string | null>> = [];
   const db: EventsDb = {
     $transaction: async (work) => {
       const snapshot = structuredClone(events);
+      const snapshotDrops = structuredClone(drops);
       const logs = [...audit];
       try {
-        return await work({ event: db.event, auditLog: db.auditLog });
+        return await work({ event: db.event, lootDrop: db.lootDrop, auditLog: db.auditLog });
       } catch (error) {
         events.splice(0, events.length, ...snapshot);
+        drops.splice(0, drops.length, ...snapshotDrops);
         audit.splice(0, audit.length, ...logs);
         throw error;
       }
@@ -124,13 +133,40 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
       count: async ({ where }) =>
         events.filter((e) => e.seriesId === where.seriesId && e.status !== 'PLANNED').length,
     },
+    lootDrop: {
+      findFirst: async ({ where }) =>
+        drops.find((d) => {
+          if (where.eventId && d.eventId !== where.eventId) return false;
+          if (where.event?.seriesId) {
+            const host = events.find((e) => e.id === d.eventId);
+            if (!host || host.seriesId !== where.event.seriesId) return false;
+          }
+          if (where.NOT && !d.auctionId) return false;
+          return true;
+        }) ?? null,
+      deleteMany: async ({ where }) => {
+        let count = 0;
+        for (let i = drops.length - 1; i >= 0; i -= 1) {
+          const drop = drops[i]!;
+          const byEvent = where.eventId ? drop.eventId === where.eventId : true;
+          const bySeries = where.event?.seriesId
+            ? events.find((e) => e.id === drop.eventId)?.seriesId === where.event.seriesId
+            : true;
+          if (byEvent && bySeries) {
+            drops.splice(i, 1);
+            count += 1;
+          }
+        }
+        return { count };
+      },
+    },
     auditLog: {
       create: async ({ data }) => {
         audit.push({ actorMemberId: data.actorMemberId, action: data.action, entityType: data.entityType, entityId: data.entityId, comment: data.comment ?? null });
       },
     },
   };
-  return { db, events, audit };
+  return { db, events, drops, audit };
 }
 
 const ACTOR: EventsActor = { memberId: 'm-leader', isAdmin: false, rank: 'GUILD_LEADER' };
@@ -337,6 +373,61 @@ describe('EventsService.deleteOne', () => {
     const service = new EventsService(db);
 
     await expect(service.deleteOne('e-1', ACTOR)).rejects.toThrow(ConflictException);
+  });
+
+  it('ивент с лотом аукциона не удаляется — 409, дроп остаётся (#109)', async () => {
+    const { db, events, drops, audit } = makeDb([{ id: 'e-1' }]);
+    drops.push({ id: 'd-1', eventId: 'e-1', auctionId: 'a-1' });
+    const service = new EventsService(db);
+
+    await expect(service.deleteOne('e-1', ACTOR)).rejects.toThrow(ConflictException);
+    expect(events).toHaveLength(1);
+    expect(drops).toHaveLength(1);
+    expect(audit).toHaveLength(0);
+  });
+
+  it('дропы без лотов удаляются каскадом вместе с ивентом (#109)', async () => {
+    const { db, events, drops, audit } = makeDb([{ id: 'e-1' }]);
+    drops.push({ id: 'd-1', eventId: 'e-1', auctionId: null });
+    drops.push({ id: 'd-2', eventId: 'e-1', auctionId: null });
+    const service = new EventsService(db);
+
+    await service.deleteOne('e-1', ACTOR);
+    expect(events).toHaveLength(0);
+    expect(drops).toHaveLength(0);
+    expect(audit[0]).toMatchObject({ action: 'EVENT_DELETE', entityId: 'e-1' });
+    expect(audit[0]!.comment).toContain('дропов: 2');
+  });
+});
+
+describe('EventsService.delete с дропами серии (#109)', () => {
+  it('серия с лотом не удаляется — 409, дроп и ивенты остаются', async () => {
+    const { db, events, drops, audit } = makeDb([
+      { id: 'e-1', seriesId: 's' },
+      { id: 'e-2', seriesId: 's' },
+    ]);
+    drops.push({ id: 'd-1', eventId: 'e-2', auctionId: 'a-1' });
+    const service = new EventsService(db);
+
+    await expect(service.deleteSeries('s', ACTOR)).rejects.toThrow(ConflictException);
+    expect(events).toHaveLength(2);
+    expect(drops).toHaveLength(1);
+    expect(audit).toHaveLength(0);
+  });
+
+  it('дропы без лотов уходят вместе с серией, аудит считает дропы', async () => {
+    const { db, events, drops, audit } = makeDb([
+      { id: 'e-1', seriesId: 's' },
+      { id: 'e-2', seriesId: 's' },
+    ]);
+    drops.push({ id: 'd-1', eventId: 'e-1', auctionId: null });
+    const service = new EventsService(db);
+
+    await expect(service.deleteSeries('s', ACTOR)).resolves.toEqual({ deleted: 2 });
+    expect(events).toHaveLength(0);
+    expect(drops).toHaveLength(0);
+    expect(audit[0]).toMatchObject({ action: 'EVENT_SERIES_DELETE', entityId: 's' });
+    expect(audit[0]!.comment).toContain('дропов: 1');
   });
 });
 

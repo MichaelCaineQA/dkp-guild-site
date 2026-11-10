@@ -25,6 +25,7 @@ import {
   type UpdateEventInput,
 } from '@dkp/shared';
 import type { AuditWriter } from '../members/members.service';
+import { serializable } from '../prisma/serializable';
 
 /** Строка списка/календаря. */
 export interface EventRow {
@@ -115,9 +116,28 @@ export interface EventsDb {
     delete(args: { where: { id: string } }): Promise<unknown>;
     count(args: { where: { seriesId: string; status: { not: string } } }): Promise<number>;
   };
+  /** Дропы ивентов (issue #109): без лотов — каскад при удалении, с лотом — блокировка. */
+  lootDrop: {
+    findFirst(args: {
+      where: {
+        eventId?: string;
+        event?: { seriesId: string };
+        NOT?: { auction: null };
+      };
+    }): Promise<{ id: string; eventId: string } | null>;
+    deleteMany(args: {
+      where: { eventId?: string; event?: { seriesId: string } };
+    }): Promise<{ count: number }>;
+  };
   auditLog: AuditWriter;
-  $transaction<T>(work: (tx: Pick<EventsDb, 'event' | 'auditLog'>) => Promise<T>): Promise<T>;
+  $transaction<T>(work: (tx: EventsDbTx) => Promise<T>): Promise<T>;
+  $transaction<T>(
+    work: (tx: EventsDbTx) => Promise<T>,
+    options: { isolationLevel: 'Serializable'; timeout?: number },
+  ): Promise<T>;
 }
+
+type EventsDbTx = Pick<EventsDb, 'event' | 'lootDrop' | 'auditLog'>;
 
 /** Действующий пользователь сессии — для прав и аудита. */
 export interface EventsActor {
@@ -253,7 +273,11 @@ export class EventsService {
     });
   }
 
-  /** Удаление серии целиком — только пока все ивенты PLANNED (issue #8). */
+  /**
+   * Удаление серии целиком — только пока все ивенты PLANNED (issue #8).
+   * Лоты аукциона живут независимо от ивента (план 2.4) и не удаляются —
+   * серия с лотом отклоняется 409; дропы без лотов уходят каскадом (#109).
+   */
   async deleteSeries(seriesId: string, actor: EventsActor): Promise<{ deleted: number }> {
     if (!can({ ...actor, rank: actor.rank ?? null }, 'events.manage')) {
       const events = await this.db.event.findMany({
@@ -277,17 +301,37 @@ export class EventsService {
     if (active > 0) {
       throw new ConflictException('В серии есть незапланированные ивенты — удалить нельзя');
     }
-    const result = await this.db.event.deleteMany({ where: { seriesId, status: 'PLANNED' } });
-    await this.audit(
-      actor,
-      'EVENT_SERIES_DELETE',
-      seriesId,
-      `Удалена серия целиком (${result.count} ивентов)`,
-    );
+    const result = await serializable(this.db, async (tx) => {
+      const withLot = await tx.lootDrop.findFirst({
+        where: { event: { seriesId }, NOT: { auction: null } },
+      });
+      if (withLot) {
+        throw new ConflictException(
+          'В серии есть ивенты с лотами аукциона — удалить нельзя: лоты живут независимо от ивента (раздел 2.4)',
+        );
+      }
+      const drops = await tx.lootDrop.deleteMany({ where: { event: { seriesId } } });
+      const events = await tx.event.deleteMany({ where: { seriesId, status: 'PLANNED' } });
+      await this.audit(
+        actor,
+        'EVENT_SERIES_DELETE',
+        seriesId,
+        `Удалена серия целиком (${events.count} ивентов` +
+          (drops.count > 0 ? `, каскадом удалено дропов: ${drops.count}` : '') +
+          ')',
+        tx.auditLog,
+      );
+      return events;
+    });
     return { deleted: result.count };
   }
 
-  /** Удаление одиночного ивента — только PLANNED (CRUD-полнота, план 2.1). */
+  /**
+   * Удаление одиночного ивента — только PLANNED (CRUD-полнота, план 2.1).
+   * Лоты аукциона живут независимо от ивента (план 2.4) и не удаляются —
+   * ивент с лотом отклоняется 409; дропы без лотов финансовых данных не
+   * несут и удаляются каскадом вместе с ивентом (issue #109).
+   */
   async deleteOne(id: string, actor: EventsActor): Promise<{ ok: true }> {
     const event = await this.mustExist(id);
     if (!canManageEvent({ ...actor, rank: actor.rank ?? null }, event)) {
@@ -296,8 +340,27 @@ export class EventsService {
     if (event.status !== 'PLANNED') {
       throw new ConflictException('Удалить можно только запланированный ивент');
     }
-    await this.db.event.delete({ where: { id } });
-    await this.audit(actor, 'EVENT_DELETE', id, `Удалён ивент ${event.startsAt.toISOString()}`);
+    await serializable(this.db, async (tx) => {
+      // перечитываем дропы в транзакции: лот могли создать после проверки статуса
+      const withLot = await tx.lootDrop.findFirst({
+        where: { eventId: id, NOT: { auction: null } },
+      });
+      if (withLot) {
+        throw new ConflictException(
+          'Нельзя удалить ивент с лотами аукциона: лоты живут независимо от ивента (раздел 2.4)',
+        );
+      }
+      const drops = await tx.lootDrop.deleteMany({ where: { eventId: id } });
+      await tx.event.delete({ where: { id } });
+      await this.audit(
+        actor,
+        'EVENT_DELETE',
+        id,
+        `Удалён ивент ${event.startsAt.toISOString()}` +
+          (drops.count > 0 ? `, каскадом удалено дропов: ${drops.count}` : ''),
+        tx.auditLog,
+      );
+    });
     return { ok: true };
   }
 

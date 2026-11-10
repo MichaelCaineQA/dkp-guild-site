@@ -32,6 +32,8 @@ const approve = jest.fn(async () => ({ ok: true }));
 const db = {
   $transaction: async <T>(work: (tx: unknown) => Promise<T>) => work(db),
   event: { findUnique: async () => event, update, delete: remove },
+  // удаление ивента проверяет дропы (#109): в моке дропов нет
+  lootDrop: { findFirst: async () => null, deleteMany: async () => ({ count: 0 }) },
   auditLog: { create: record },
   dkpEntry: { create: ledger },
   setting: { findMany: async () => [] },
