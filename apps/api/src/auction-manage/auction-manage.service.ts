@@ -22,6 +22,7 @@ import {
   type LotStatus,
 } from '@dkp/shared';
 import { serializable } from '../prisma/serializable';
+import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction-events';
 
 interface StoredBid {
   id: string;
@@ -150,6 +151,7 @@ export class AuctionManageService {
   constructor(
     private readonly db: ManageDb,
     private readonly now: () => Date = () => new Date(),
+    private readonly events: AuctionEventsPort = NOOP_AUCTION_EVENTS,
   ) {}
 
   /** Продление действующего лота (план 6, п. 8). */
@@ -161,7 +163,7 @@ export class AuctionManageService {
       );
     }
     const now = this.now();
-    return serializable(this.db, async (tx) => {
+    const result = await serializable(this.db, async (tx) => {
       const auction = await this.mustLoadLot(tx, auctionId);
       await this.assertCanConduct(tx, auction, actor, 'Продлить лот');
       const rejection = checkLotExtendAllowed(
@@ -188,6 +190,9 @@ export class AuctionManageService {
       );
       return this.result(updated, null, null, false);
     });
+    // Новое окончание — подписчикам лота после фиксации (issue #97).
+    this.events.lotUpdated(auctionId, result.lot, null);
+    return result;
   }
 
   /** Отмена действующего лота (план 6, п. 8): заморозки снимаются, списаний нет. */
@@ -196,7 +201,7 @@ export class AuctionManageService {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Укажите причину отмены');
     }
-    return serializable(this.db, async (tx) => {
+    const result = await serializable(this.db, async (tx) => {
       const auction = await this.mustLoadLot(tx, auctionId);
       await this.assertCanConduct(tx, auction, actor, 'Отменить лот');
       if (auction.status !== 'OPEN')
@@ -216,6 +221,9 @@ export class AuctionManageService {
       );
       return this.result(updated, null, null, false);
     });
+    // Отмена — событие закрытия после фиксации (issue #97).
+    this.events.lotClosed(auctionId, null, 'CANCELLED');
+    return result;
   }
 
   /**
@@ -230,7 +238,7 @@ export class AuctionManageService {
         parsed.error.issues[0]?.message ?? 'Укажите причину досрочного завершения',
       );
     }
-    return serializable(this.db, async (tx) => {
+    const result = await serializable(this.db, async (tx) => {
       const auction = await this.mustLoadLot(tx, auctionId);
       this.assertCanDecide(actor, 'Завершить лот досрочно');
       if (auction.status !== 'OPEN')
@@ -289,6 +297,9 @@ export class AuctionManageService {
         false,
       );
     });
+    // Досрочное завершение — событие закрытия после фиксации (issue #97).
+    this.events.lotClosed(auctionId, result.winner, 'EARLY');
+    return result;
   }
 
   /**
@@ -314,10 +325,12 @@ export class AuctionManageService {
     const input = parsed.data;
     // retryUnique: повтор уже применённого requestId после чужой смены
     // победителя упирается в уникальность requestId и отдаёт понятный отказ.
-    return serializable(
+    let wasOpen = false;
+    const result = await serializable(
       this.db,
       async (tx) => {
         const auction = await this.mustLoadLot(tx, auctionId);
+        wasOpen = auction.status === 'OPEN';
         this.assertCanDecide(actor, 'Назначить победителя');
         if (auction.status === 'CANCELLED')
           throw new ConflictException('Отменённый лот не меняется');
@@ -420,6 +433,13 @@ export class AuctionManageService {
       },
       true,
     );
+    // Назначение остановило торги — событие закрытия; смена победителя
+    // завершённого лота — обновление лота. Повтор (repeated) молчит (#97).
+    if (!result.repeated) {
+      if (wasOpen) this.events.lotClosed(auctionId, result.winner, 'ASSIGNED');
+      else this.events.lotUpdated(auctionId, result.lot, result.winner);
+    }
+    return result;
   }
 
   private async mustLoadLot(tx: ManageTx, auctionId: string): Promise<StoredAuction> {

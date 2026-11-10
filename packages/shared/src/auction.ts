@@ -490,3 +490,65 @@ export interface LotManageResult {
   /** Повтор уже выполненного запроса — данные не менялись. */
   repeated: boolean;
 }
+
+/* ------------------------------------------------------------------ */
+/* Realtime аукциона (issue #97, план §7): Socket.IO + Redis adapter.  */
+/* Источник истины — сервер; события несут серверное время для таймера. */
+/* ------------------------------------------------------------------ */
+
+/** Имена событий Socket.IO — единые для API и веб-клиента. */
+export const AUCTION_SOCKET_EVENTS = {
+  /** Клиент → сервер: подписка на лот (ответ — auction:state). */
+  join: 'auction:join',
+  /** Сервер → клиент: полный срез состояния лота (подписка/переподключение). */
+  state: 'auction:state',
+  /** Принятая ставка (включая новое окончание при анти-снайпе). */
+  bid: 'auction:bid',
+  /** Изменение лота без закрытия: продление, смена победителя вручную. */
+  lot: 'auction:lot',
+  /** Лот закрыт/отменён: подписчикам лота и общему каналу списка. */
+  closed: 'auction:closed',
+  /** Новый лот создан — общий канал списка лотов. */
+  created: 'auction:created',
+} as const;
+
+/** Причина закрытия лота в событии auction:closed. */
+export type AuctionCloseReason = 'EXPIRED' | 'CANCELLED' | 'EARLY' | 'ASSIGNED';
+
+/** Событие принятой ставки: ставка и актуальное окончание лота. */
+export interface AuctionBidEvent {
+  auctionId: string;
+  bid: BidRow;
+  endsAt: string | null;
+  serverTime: string;
+}
+
+/** Событие изменения лота: продление или ручное назначение победителя. */
+export interface AuctionLotEvent {
+  auctionId: string;
+  lot: AuctionLotRow;
+  /** Победитель после действия (null — не менялся/лот без выдачи). */
+  winner: LotAwardRow | null;
+  serverTime: string;
+}
+
+/** Событие закрытия лота (канал списка); комнате лота шлётся свежий срез. */
+export interface AuctionClosedEvent {
+  auctionId: string;
+  winner: LotAwardRow | null;
+  reason: AuctionCloseReason;
+  serverTime: string;
+}
+
+/** Событие создания лота (канал списка). */
+export interface AuctionCreatedEvent {
+  lot: AuctionLotRow;
+  serverTime: string;
+}
+
+/** Полный срез состояния лота — ответ на подписку и переподключение. */
+export interface AuctionLiveState {
+  lot: AuctionLotRow;
+  bids: BidRow[];
+  serverTime: string;
+}

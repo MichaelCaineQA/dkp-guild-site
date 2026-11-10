@@ -20,6 +20,7 @@ import {
   type LootDropRow,
   type LotStatus,
 } from '@dkp/shared';
+import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction-events';
 import type { EventsActor } from '../events/events.service';
 import type { AuditWriter } from '../members/members.service';
 
@@ -132,7 +133,10 @@ const AUCTION_SETTING_KEYS = [
  */
 @Injectable()
 export class LootService {
-  constructor(private readonly db: LootDb) {}
+  constructor(
+    private readonly db: LootDb,
+    private readonly events: AuctionEventsPort = NOOP_AUCTION_EVENTS,
+  ) {}
 
   /** Дропы ивента с лотами — просмотр управляющим на любом статусе. */
   async listForActor(
@@ -249,7 +253,10 @@ export class LootService {
             : `длинный лот ${durationSec} сек от открытия`
         }, анти-снайп ${input.antiSnipeSec} сек (продление ${antiSnipeExtendSec} сек)`,
     );
-    return this.toLotRow(auction);
+    const lot = this.toLotRow(auction);
+    // Новый лот — в общий канал списка сразу после фиксации (issue #97).
+    this.events.lotCreated(lot);
+    return lot;
   }
 
   /**

@@ -1,3 +1,4 @@
+import type { AuctionEventsPort } from '../realtime/auction-events';
 import { AuctionCloseService, type CloseDb } from './auction-close.service';
 
 /**
@@ -193,5 +194,30 @@ describe('AuctionCloseService (issue #95)', () => {
     const closedCount = await service(db).closeDue();
     expect(closedCount).toBe(1);
     expect(created.audits).toHaveLength(1);
+  });
+});
+
+describe('AuctionCloseService: событие realtime (issue #97)', () => {
+  it('закрытие отправляет lotClosed с победителем, повторный проход молчит', async () => {
+    const events: AuctionEventsPort = {
+      lotCreated: jest.fn(),
+      bidPlaced: jest.fn(),
+      lotUpdated: jest.fn(),
+      lotClosed: jest.fn(),
+    };
+    const { db } = makeDb([longLot({ bids: [{ id: 'b1', memberId: 'm1', amount: 100, fullCost: 100, markupPct: 0, member: { nickname: 'ДД' } }] })]);
+    const svc = new AuctionCloseService(db, () => NOW, 0, events);
+
+    await svc.closeExpiredLot('lot-1');
+    expect(events.lotClosed).toHaveBeenCalledTimes(1);
+    expect(events.lotClosed).toHaveBeenCalledWith(
+      'lot-1',
+      expect.objectContaining({ memberName: 'ДД', finalPrice: 100 }),
+      'EXPIRED',
+    );
+
+    // уже закрыт (skipped) — события нет
+    await svc.closeExpiredLot('lot-1');
+    expect(events.lotClosed).toHaveBeenCalledTimes(1);
   });
 });
