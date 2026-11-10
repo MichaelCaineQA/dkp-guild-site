@@ -36,9 +36,16 @@
 - `apps/api/src/auctions` (issue #98): список лотов `GET /auctions?status=`
   (открытые — по ближайшему окончанию, архив — свежие сверху; ведущая ставка,
   своя `myBid.leading`, победитель) и виджет дашборда «Мой аукцион»
-  (`myNearestBidLot`, ближайший лот среди ставок). Экран лотов, история и
-  форма ставки с наценкой — `apps/web/components/auction-lots.tsx` (вкладка
-  «Лоты» на `/auction`, realtime через хук), виджет — `components/dashboard.tsx`.
+  (`myNearestBidLot`, ближайший лот среди ставок). Лут-лог (#99, PR #122):
+  `GET /auctions/loot-log?memberId=&eventId=&itemId=` — публичная история
+  фактических выдач (только `LootAward`: отменённые лоты и лоты без выдачи
+  не представлены), фильтры по одному и в сочетании; `finalPrice` — фактическое
+  списание журнала. Профиль (`profiles.service`) отдаёт `loot` (свежие
+  `PROFILE_LOOT_LIMIT`) и `lootTotal`. Экран лотов, история и форма ставки
+  с наценкой — `apps/web/components/auction-lots.tsx` (вкладка «Лоты»
+  на `/auction`, realtime через хук), лут-лог — `components/loot-log.tsx`
+  (вкладка «Лут-лог»; глубокая ссылка `?loot-member=<id>` из профиля
+  открывает её с фильтром), виджет — `components/dashboard.tsx`.
 - `packages/shared` — общие типы, zod-схемы и чистая логика ядра.
 - `.github/workflows/ci.yml` — проверки CI.
 - `installer/` — установщик релизного Compose (`dkp`, Python 3 stdlib) для
