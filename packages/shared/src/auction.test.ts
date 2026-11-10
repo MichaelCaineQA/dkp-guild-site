@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assignWinnerSchema,
   bidFullCost,
+  canChangeProfileField,
   cancelLotSchema,
   checkBidAllowed,
   checkLotExtendAllowed,
@@ -16,6 +17,8 @@ import {
   lotExpired,
   minBidAmount,
   placeBidSchema,
+  prefersItemAtLotCreation,
+  roleAtLotCreation,
   suggestLotDefaults,
   winningBid,
   type AuctionSettingValues,
@@ -30,6 +33,7 @@ const SETTINGS: AuctionSettingValues = {
   antiSnipeLongSec: 600,
   noBidTimeoutSec: 120,
   foreignClassMarkupPct: 50,
+  preferredItemDiscountPct: 10,
 };
 
 const LIVE_LOT = {
@@ -121,6 +125,7 @@ describe('suggestLotDefaults (план 6, п. 1)', () => {
       startPrice: 120,
       step: 1,
       markupPct: 50,
+      discountPct: 10,
       live: { durationValue: 1, durationUnit: 'MINUTES', antiSnipeSec: 30, noBidTimeoutSec: 120 },
       long: { durationValue: 2, durationUnit: 'DAYS', antiSnipeSec: 600 },
     });
@@ -203,6 +208,99 @@ describe('bidFullCost', () => {
     expect(bidFullCost(101, 50, true)).toBe(152); // 151,5 → 152
     expect(bidFullCost(100, 50, true)).toBe(150);
     expect(bidFullCost(7, 0, true)).toBe(7);
+  });
+  it('скидка за предпочитаемый предмет — от наценной цены, итог вверх (решение 18)', () => {
+    // «родной» класс + скидка 10%: 105 → 94,5 → 95
+    expect(bidFullCost(105, 10, false, 10)).toBe(95);
+    // наценка 10% и скидка 10%: 100 → 110 → 99
+    expect(bidFullCost(100, 10, true, 10)).toBe(99);
+    // наценка 50%, скидка 33%: 101 → 151,5 → 101,505 → 102
+    expect(bidFullCost(101, 50, true, 33)).toBe(102);
+  });
+  it('скидка 100% — предмет бесплатен', () => {
+    expect(bidFullCost(100, 10, true, 100)).toBe(0);
+    expect(bidFullCost(100, 0, false, 100)).toBe(0);
+  });
+  it('без скидки поведение прежнее', () => {
+    expect(bidFullCost(101, 50, true, 0)).toBe(152);
+    expect(bidFullCost(100, 0, false)).toBe(100);
+  });
+});
+
+describe('снимок роли и предпочтения на момент создания лота (решение 18)', () => {
+  const lotCreatedAt = new Date('2026-11-01T12:00:00Z');
+  const changedAfter = new Date('2026-11-05T12:00:00Z');
+
+  it('роль без смены — текущая; смена после создания лота — прежняя', () => {
+    expect(
+      roleAtLotCreation(
+        { combatRole: 'TANK', prevCombatRole: 'DPS', combatRoleChangedAt: changedAfter },
+        lotCreatedAt,
+      ),
+    ).toBe('DPS');
+    expect(
+      roleAtLotCreation(
+        { combatRole: 'TANK', prevCombatRole: 'DPS', combatRoleChangedAt: changedAfter },
+        new Date('2026-11-06T12:00:00Z'),
+      ),
+    ).toBe('TANK'); // лот создан после смены
+    expect(
+      roleAtLotCreation(
+        { combatRole: 'HEALER', prevCombatRole: null, combatRoleChangedAt: null },
+        lotCreatedAt,
+      ),
+    ).toBe('HEALER');
+    // прежней роли нет — как игрок без роли (наценка)
+    expect(
+      roleAtLotCreation(
+        { combatRole: 'DPS', prevCombatRole: null, combatRoleChangedAt: changedAfter },
+        lotCreatedAt,
+      ),
+    ).toBeNull();
+  });
+
+  it('предпочтение без смены — текущее; смена после создания лота — прежнее', () => {
+    expect(
+      prefersItemAtLotCreation(
+        { preferredItemId: 'item-2', prevPreferredItemId: 'item-1', preferredItemChangedAt: changedAfter },
+        lotCreatedAt,
+        'item-1',
+      ),
+    ).toBe(true);
+    expect(
+      prefersItemAtLotCreation(
+        { preferredItemId: 'item-2', prevPreferredItemId: 'item-1', preferredItemChangedAt: changedAfter },
+        lotCreatedAt,
+        'item-2',
+      ),
+    ).toBe(false);
+    expect(
+      prefersItemAtLotCreation(
+        { preferredItemId: null, prevPreferredItemId: 'item-1', preferredItemChangedAt: changedAfter },
+        lotCreatedAt,
+        'item-1',
+      ),
+    ).toBe(true); // снятие после создания лота не отнимает скидку
+    expect(
+      prefersItemAtLotCreation(
+        { preferredItemId: 'item-1', prevPreferredItemId: null, preferredItemChangedAt: null },
+        lotCreatedAt,
+        'item-1',
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('кулдаун смены роли и предпочитаемого предмета (план 2.5, решение 18)', () => {
+  const now = new Date('2026-11-10T12:00:00Z');
+  it('первое изменение (поле никогда не менялось) — сразу', () => {
+    expect(canChangeProfileField(null, 14, now)).toBe(true);
+  });
+  it('не чаще раза в cooldownDays, у каждого поля свой отсчёт', () => {
+    const changed = new Date('2026-11-01T12:00:00Z'); // 9 дней назад
+    expect(canChangeProfileField(changed, 14, now)).toBe(false);
+    expect(canChangeProfileField(new Date('2026-10-27T12:00:00Z'), 14, now)).toBe(true); // ровно 14 дней
+    expect(canChangeProfileField(changed, 7, now)).toBe(true); // другой интервал настройки
   });
 });
 

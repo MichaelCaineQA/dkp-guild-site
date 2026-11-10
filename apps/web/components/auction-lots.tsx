@@ -222,6 +222,9 @@ function LotModal({
           <Badge tone={row.targetRoles.includes('ALL') ? 'neutral' : 'accent'}>
             Кому нужна: {formatTargetRoles(row.targetRoles)}
           </Badge>
+          {row.myPreferred && row.discountPct > 0 && (
+            <Badge tone="accent">Ваш предпочитаемый — скидка {row.discountPct}%</Badge>
+          )}
           {connection.status === 'connecting' && state && <Muted>Переподключение…</Muted>}
         </div>
 
@@ -233,6 +236,7 @@ function LotModal({
             label="Наценка «чужим»"
             value={row.markupPct > 0 ? `+${row.markupPct}%` : 'нет'}
           />
+          <Detail label="Скидка за предмет" value={row.discountPct > 0 ? `−${row.discountPct}%` : 'нет'} />
           <Detail label="Анти-снайп" value={`${row.antiSnipeSec} с (+${row.antiSnipeExtendSec} с)`} />
           <Detail
             label="Класс предмета"
@@ -270,7 +274,8 @@ function LotModal({
             <div>
               Торги завершены: предмет получил <strong>{winner.memberName}</strong> за{' '}
               <span className="tabular-nums">{winner.finalPrice} ДКП</span>
-              {winner.markupPct > 0 && ` (с наценкой ${winner.markupPct}%)`}.
+              {winner.markupPct > 0 && ` (с наценкой ${winner.markupPct}%)`}
+              {winner.discountPct > 0 && ` (со скидкой ${winner.discountPct}%)`}.
             </div>
           ) : (
             <div>Торги завершены без победителя — предмет остаётся в гильдии.</div>
@@ -285,6 +290,7 @@ function LotModal({
             startPrice={row.startPrice}
             step={row.step}
             markupPct={row.markupPct}
+            discountPct={row.myPreferred ? row.discountPct : 0}
             targetRoles={row.targetRoles}
             topAmount={bids && bids.length > 0 ? bids[bids.length - 1]!.amount : null}
             viewerRole={viewerRole}
@@ -318,6 +324,7 @@ function LotModal({
                     <Table.Td className="tabular-nums">
                       {bid.fullCost}
                       {bid.markupPct > 0 && <Muted> (+{bid.markupPct}%)</Muted>}
+                      {bid.discountPct > 0 && <Muted> (−{bid.discountPct}%)</Muted>}
                     </Table.Td>
                     <Table.Td>{new Date(bid.createdAt).toLocaleTimeString('ru-RU')}</Table.Td>
                   </tr>
@@ -364,6 +371,7 @@ function BidForm({
   startPrice,
   step,
   markupPct,
+  discountPct,
   targetRoles,
   topAmount,
   viewerRole,
@@ -372,6 +380,8 @@ function BidForm({
   startPrice: number;
   step: number;
   markupPct: number;
+  /** Скидка за предпочитаемый предмет, если предмет лота — ваш (решение 18). */
+  discountPct: number;
   targetRoles: AuctionListRow['targetRoles'];
   /** Ведущая сумма живой ставки — минимум растёт realtime. */
   topAmount: number | null;
@@ -396,7 +406,7 @@ function BidForm({
   const foreign = isForeignBidder(targetRoles, viewerRole);
   const parsed = Number(amount);
   const valid = Number.isInteger(parsed) && parsed >= min;
-  const fullCost = valid ? bidFullCost(parsed, markupPct, foreign) : null;
+  const fullCost = valid ? bidFullCost(parsed, markupPct, foreign, discountPct) : null;
 
   const submit = async () => {
     setSubmitting(true);
@@ -436,7 +446,9 @@ function BidForm({
         </Button>
         {fullCost !== null && (
           <Muted>
-            Итоговая стоимость{foreign && markupPct > 0 ? ` с наценкой ${markupPct}%` : ''}:{' '}
+            Итоговая стоимость
+            {foreign && markupPct > 0 ? ` с наценкой ${markupPct}%` : ''}
+            {discountPct > 0 ? ` со скидкой ${discountPct}%` : ''}:{' '}
             <span className="tabular-nums">{fullCost} ДКП</span>
           </Muted>
         )}

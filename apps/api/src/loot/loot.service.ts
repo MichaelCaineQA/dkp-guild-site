@@ -44,6 +44,7 @@ interface StoredAuction {
   antiSnipeExtendSec: number;
   noBidTimeoutSec: number | null;
   markupPct: number;
+  discountPct: number;
   firstBidAt: Date | null;
   endsAt: Date | null;
   createdAt: Date;
@@ -97,6 +98,7 @@ export interface LootDb {
         antiSnipeExtendSec: number;
         noBidTimeoutSec: number | null;
         markupPct: number;
+        discountPct: number;
         targetRoles: ItemTargetRole[];
         endsAt: Date | null;
       };
@@ -121,6 +123,7 @@ const AUCTION_SETTING_KEYS = [
   'auction.antiSnipeExtendLongSec',
   'auction.noBidTimeoutSec',
   'auction.foreignClassMarkupPct',
+  'auction.preferredItemDiscountPct',
 ] as const;
 
 /**
@@ -237,6 +240,7 @@ export class LootService {
         antiSnipeExtendSec,
         noBidTimeoutSec: fromFirstBid ? (input.noBidTimeoutSec ?? null) : null,
         markupPct: settings.foreignClassMarkupPct,
+        discountPct: settings.preferredItemDiscountPct,
         targetRoles: drop.item.targetRoles,
         endsAt: fromFirstBid ? null : new Date(Date.now() + durationSec * 1000),
       },
@@ -251,7 +255,8 @@ export class LootService {
           fromFirstBid
             ? `живая раздача ${durationSec} сек от первой ставки, тайм-аут без ставок ${input.noBidTimeoutSec} сек`
             : `длинный лот ${durationSec} сек от открытия`
-        }, анти-снайп ${input.antiSnipeSec} сек (продление ${antiSnipeExtendSec} сек)`,
+        }, анти-снайп ${input.antiSnipeSec} сек (продление ${antiSnipeExtendSec} сек), ` +
+        `наценка ${settings.foreignClassMarkupPct}%, скидка ${settings.preferredItemDiscountPct}%`,
     );
     const lot = this.toLotRow(auction);
     // Новый лот — в общий канал списка сразу после фиксации (issue #97).
@@ -313,6 +318,7 @@ export class LootService {
       antiSnipeExtendLongSec: read('auction.antiSnipeExtendLongSec'),
       noBidTimeoutSec: read('auction.noBidTimeoutSec'),
       foreignClassMarkupPct: read('auction.foreignClassMarkupPct'),
+      preferredItemDiscountPct: read('auction.preferredItemDiscountPct'),
     };
   }
 
@@ -328,6 +334,7 @@ export class LootService {
       antiSnipeExtendSec: auction.antiSnipeExtendSec,
       noBidTimeoutSec: auction.noBidTimeoutSec,
       markupPct: auction.markupPct,
+      discountPct: auction.discountPct,
       firstBidAt: auction.firstBidAt?.toISOString() ?? null,
       endsAt: auction.endsAt?.toISOString() ?? null,
       createdAt: auction.createdAt.toISOString(),

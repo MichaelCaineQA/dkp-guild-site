@@ -117,6 +117,7 @@ export interface AuctionSettingValues {
   antiSnipeExtendLongSec: number;
   noBidTimeoutSec: number;
   foreignClassMarkupPct: number;
+  preferredItemDiscountPct: number;
 }
 
 /** Начальные значения формы лота для обоих типов таймера (план 6, п. 1). */
@@ -124,6 +125,8 @@ export interface LotDefaults {
   startPrice: number;
   step: number;
   markupPct: number;
+  /** Скидка за предпочитаемый предмет — снимок настройки (решение 18). */
+  discountPct: number;
   live: {
     durationValue: number;
     durationUnit: 'MINUTES';
@@ -152,6 +155,7 @@ export function suggestLotDefaults(
     startPrice: item.defaultStartPrice ?? 0,
     step: settings.step,
     markupPct: settings.foreignClassMarkupPct,
+    discountPct: settings.preferredItemDiscountPct,
     live: {
       durationValue: settings.liveDurationSec / 60,
       durationUnit: 'MINUTES',
@@ -192,6 +196,8 @@ export interface AuctionLotRow {
   noBidTimeoutSec: number | null;
   /** Наценка «чужому» классу, зафиксированная при создании лота (план 6, п. 6). */
   markupPct: number;
+  /** Скидка за предпочитаемый предмет, зафиксированная при создании лота (решение 18). */
+  discountPct: number;
   firstBidAt: string | null;
   endsAt: string | null;
   createdAt: string;
@@ -269,12 +275,78 @@ export function isForeignBidder(
 }
 
 /**
- * Полная стоимость ставки с наценкой, округлённая до целого вверх
- * (план 6, п. 5 и 7). Именно она проверяется по балансу, замораживается
- * у лидера и списывается при победе.
+ * Полная стоимость ставки с наценкой и скидкой за предпочитаемый предмет,
+ * округлённая до целого вверх (план 6, п. 5 и 7; решение 18). Сначала
+ * применяется наценка «чужому» классу, затем от наценной цены — скидка;
+ * округление — одно, в конце. Именно эта сумма проверяется по балансу,
+ * замораживается у лидера и списывается при победе.
  */
-export function bidFullCost(amount: number, markupPct: number, foreign: boolean): number {
-  return foreign ? Math.ceil((amount * (100 + markupPct)) / 100) : amount;
+export function bidFullCost(
+  amount: number,
+  markupPct: number,
+  foreign: boolean,
+  discountPct = 0,
+): number {
+  const markedUp = foreign ? (amount * (100 + markupPct)) / 100 : amount;
+  return discountPct > 0 ? Math.ceil((markedUp * (100 - discountPct)) / 100) : Math.ceil(markedUp);
+}
+
+/**
+ * Роль и предпочитаемый предмет на момент создания лота (план 6, п. 6;
+ * решение 18): смена класса или предпочтения после создания лота цену лота
+ * не меняет. Member хранит текущее и предыдущее значение с датой смены;
+ * кулдаун смены (auction.profileChangeCooldownDays, дефолт 14 дней) длиннее
+ * максимального лота (14 дней), поэтому за жизнь лота поле меняется
+ * не более одного раза и предыдущего значения достаточно.
+ */
+export interface BidderSnapshotFields {
+  combatRole: 'DPS' | 'HEALER' | 'TANK' | null;
+  prevCombatRole: 'DPS' | 'HEALER' | 'TANK' | null;
+  combatRoleChangedAt: Date | null;
+  preferredItemId: string | null;
+  prevPreferredItemId: string | null;
+  preferredItemChangedAt: Date | null;
+}
+
+/** Боевая роль игрока, действовавшая на момент создания лота. */
+export function roleAtLotCreation(
+  member: Pick<BidderSnapshotFields, 'combatRole' | 'prevCombatRole' | 'combatRoleChangedAt'>,
+  lotCreatedAt: Date,
+): 'DPS' | 'HEALER' | 'TANK' | null {
+  const changedAfter =
+    member.combatRoleChangedAt !== null &&
+    member.combatRoleChangedAt.getTime() > lotCreatedAt.getTime();
+  return changedAfter ? member.prevCombatRole : member.combatRole;
+}
+
+/** Предпочитался ли этот предмет игроком на момент создания лота. */
+export function prefersItemAtLotCreation(
+  member: Pick<
+    BidderSnapshotFields,
+    'preferredItemId' | 'prevPreferredItemId' | 'preferredItemChangedAt'
+  >,
+  lotCreatedAt: Date,
+  itemId: string,
+): boolean {
+  const changedAfter =
+    member.preferredItemChangedAt !== null &&
+    member.preferredItemChangedAt.getTime() > lotCreatedAt.getTime();
+  const preferredThen = changedAfter ? member.prevPreferredItemId : member.preferredItemId;
+  return preferredThen === itemId;
+}
+
+/**
+ * Разрешена ли смена боевой роли / предпочитаемого предмета сейчас
+ * (план 2.5, решение 18): не чаще раза в cooldownDays, у каждого поля свой
+ * отсчёт; первый выбор (поле никогда не менялось) — сразу.
+ */
+export function canChangeProfileField(
+  changedAt: Date | null,
+  cooldownDays: number,
+  now: Date,
+): boolean {
+  if (changedAt === null) return true;
+  return now.getTime() - changedAt.getTime() >= cooldownDays * 86_400_000;
 }
 
 /**
@@ -336,10 +408,12 @@ export interface BidRow {
   memberId: string;
   memberName: string;
   amount: number;
-  /** Полная стоимость с наценкой на момент ставки (заморожена у лидера). */
+  /** Полная стоимость с наценкой и скидкой на момент ставки (заморожена у лидера). */
   fullCost: number;
   /** Применённая наценка «чужому» классу, % (0 — «родной» класс). */
   markupPct: number;
+  /** Применённая скидка за предпочитаемый предмет, % (0 — не предпочитался). */
+  discountPct: number;
   createdAt: string;
 }
 
@@ -393,7 +467,13 @@ export interface LotCloseResult {
   closed: boolean;
   /** Лот уже был закрыт/отменён или таймер ещё не истёк. */
   skipped: boolean;
-  winner: { memberId: string; memberName: string; finalPrice: number; markupPct: number } | null;
+  winner: {
+    memberId: string;
+    memberName: string;
+    finalPrice: number;
+    markupPct: number;
+    discountPct: number;
+  } | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -434,9 +514,10 @@ export type CloseLotEarlyInput = z.infer<typeof closeLotEarlySchema>;
 
 /**
  * Ручной победитель — Глава/Админ (план 6, п. 8): получатель — любой игрок,
- * цена произвольная, включая 0, без наценки; списание сразу и может увести
- * баланс в минус. requestId фиксирует повтор запроса: возврат прежнему
- * победителю и списание с нового не выполняются дважды.
+ * цена произвольная, включая 0, без наценки и без скидки за предпочитаемый
+ * предмет; списание сразу и может увести баланс в минус. requestId фиксирует
+ * повтор запроса: возврат прежнему победителю и списание с нового
+ * не выполняются дважды.
  */
 export const assignWinnerSchema = z.object({
   requestId: z.string().uuid('Повторите действие — некорректный идентификатор запроса'),
@@ -479,6 +560,8 @@ export interface LotAwardRow {
   finalPrice: number;
   /** Наценка в цене выдачи: 0 — «родной» класс или ручное назначение. */
   markupPct: number;
+  /** Скидка за предпочитаемый предмет в цене выдачи: 0 — не предпочитался. */
+  discountPct: number;
 }
 
 /** Результат ручных действий с лотом для UI. */
@@ -590,6 +673,10 @@ export interface AuctionListRow {
   startPrice: number;
   step: number;
   markupPct: number;
+  /** Скидка за предпочитаемый предмет, зафиксированная при создании лота. */
+  discountPct: number;
+  /** Предмет лота — предпочитаемый просматривающим на момент создания лота. */
+  myPreferred: boolean;
   timerKind: LotTimerKind;
   antiSnipeSec: number;
   antiSnipeExtendSec: number;

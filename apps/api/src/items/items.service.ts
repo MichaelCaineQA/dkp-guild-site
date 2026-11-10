@@ -38,6 +38,9 @@ export interface ItemsDb {
   lootDrop: {
     count(args: { where: { itemId: string } }): Promise<number>;
   };
+  member: {
+    count(args: { where: { preferredItemId: string } }): Promise<number>;
+  };
   auditLog: AuditWriter;
 }
 
@@ -89,6 +92,7 @@ export class ItemsService {
   /**
    * Удаление: только если предмет ни разу не выставлялся лотом. Иначе 409 —
    * история лотов (приёмка issue #92) не должна терять ссылку на предмет.
+   * Предпочитаемым поле становится пустым у всех выбравших (SetNull, решение 18).
    */
   async remove(id: string, actor: ItemsActor): Promise<{ ok: true }> {
     const existing = await this.mustExist(id);
@@ -98,8 +102,17 @@ export class ItemsService {
         `Предмет «${existing.name}» используется в лотах (${lots}) — удаление запрещено`,
       );
     }
+    const preferredBy = await this.db.member.count({ where: { preferredItemId: id } });
     await this.db.item.delete({ where: { id } });
-    await this.audit(actor, 'ITEM_DELETE', id, `Удалён предмет «${existing.name}»`);
+    await this.audit(
+      actor,
+      'ITEM_DELETE',
+      id,
+      `Удалён предмет «${existing.name}»` +
+        (preferredBy > 0
+          ? `; предпочитаемый предмет очищен у ${preferredBy} игрок(ов)`
+          : ''),
+    );
     return { ok: true };
   }
 

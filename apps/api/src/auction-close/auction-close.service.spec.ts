@@ -13,6 +13,7 @@ interface FakeBid {
   amount: number;
   fullCost: number;
   markupPct: number;
+  discountPct?: number;
   member: { nickname: string };
 }
 
@@ -83,8 +84,8 @@ describe('AuctionCloseService (issue #95)', () => {
     const { db, created } = makeDb([
       longLot({
         bids: [
-          { id: 'b1', memberId: 'm1', amount: 100, fullCost: 100, markupPct: 0, member: { nickname: 'ДД' } },
-          { id: 'b2', memberId: 'm2', amount: 150, fullCost: 225, markupPct: 50, member: { nickname: 'Хил' } },
+          { id: 'b1', memberId: 'm1', amount: 100, fullCost: 100, markupPct: 0, discountPct: 0, member: { nickname: 'ДД' } },
+          { id: 'b2', memberId: 'm2', amount: 150, fullCost: 225, markupPct: 50, discountPct: 0, member: { nickname: 'Хил' } },
         ],
       }),
     ]);
@@ -92,10 +93,16 @@ describe('AuctionCloseService (issue #95)', () => {
     expect(result).toEqual({
       closed: true,
       skipped: false,
-      winner: { memberId: 'm2', memberName: 'Хил', finalPrice: 225, markupPct: 50 },
+      winner: {
+        memberId: 'm2',
+        memberName: 'Хил',
+        finalPrice: 225,
+        markupPct: 50,
+        discountPct: 0,
+      },
     });
     expect(created.awards).toEqual([
-      { auctionId: 'lot-1', winnerId: 'm2', finalPrice: 225, markupPct: 50 },
+      { auctionId: 'lot-1', winnerId: 'm2', finalPrice: 225, markupPct: 50, discountPct: 0 },
     ]);
     expect(created.entries).toEqual([
       {
@@ -113,6 +120,39 @@ describe('AuctionCloseService (issue #95)', () => {
       action: 'AUCTION_CLOSE',
       entityType: 'Auction',
       entityId: 'lot-1',
+    });
+  });
+
+  it('победа со скидкой за предпочитаемый предмет: списание и комментарий (#101)', async () => {
+    const { db, created } = makeDb([
+      longLot({
+        bids: [
+          {
+            id: 'b1',
+            memberId: 'm1',
+            amount: 100,
+            fullCost: 90,
+            markupPct: 0,
+            discountPct: 10,
+            member: { nickname: 'ДД' },
+          },
+        ],
+      }),
+    ]);
+    const result = await service(db).closeExpiredLot('lot-1');
+    expect(result.winner).toEqual({
+      memberId: 'm1',
+      memberName: 'ДД',
+      finalPrice: 90,
+      markupPct: 0,
+      discountPct: 10,
+    });
+    expect(created.awards).toEqual([
+      { auctionId: 'lot-1', winnerId: 'm1', finalPrice: 90, markupPct: 0, discountPct: 10 },
+    ]);
+    expect(created.entries[0]).toMatchObject({
+      amount: -90,
+      comment: 'Трата на аукционе: «Меч» за 90 (со скидкой 10%)',
     });
   });
 

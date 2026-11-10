@@ -14,6 +14,8 @@ import {
   isForeignBidder,
   minBidAmount,
   placeBidSchema,
+  prefersItemAtLotCreation,
+  roleAtLotCreation,
   type BidLotParams,
   type BidRow,
   type ItemTargetRole,
@@ -34,10 +36,12 @@ interface StoredAuction {
   antiSnipeSec: number;
   antiSnipeExtendSec: number;
   markupPct: number;
+  discountPct: number;
   targetRoles: ItemTargetRole[];
   firstBidAt: Date | null;
   endsAt: Date | null;
-  lootDrop: { item: { name: string } };
+  createdAt: Date;
+  lootDrop: { itemId: string; item: { name: string } };
 }
 
 interface StoredBid {
@@ -47,6 +51,7 @@ interface StoredBid {
   amount: number;
   fullCost: number;
   markupPct: number;
+  discountPct: number;
   createdAt: Date;
 }
 
@@ -54,6 +59,11 @@ interface StoredMember {
   id: string;
   nickname: string;
   combatRole: 'DPS' | 'HEALER' | 'TANK' | null;
+  prevCombatRole: 'DPS' | 'HEALER' | 'TANK' | null;
+  combatRoleChangedAt: Date | null;
+  preferredItemId: string | null;
+  prevPreferredItemId: string | null;
+  preferredItemChangedAt: Date | null;
 }
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
@@ -85,6 +95,7 @@ export interface BidsTx {
         amount: number;
         fullCost: number;
         markupPct: number;
+        discountPct: number;
       };
     }): Promise<StoredBid>;
   };
@@ -199,8 +210,13 @@ export class BidsService {
       const member = await tx.member.findUnique({ where: { id: memberId } });
       if (!member) throw new ForbiddenException('Ставить может только член гильдии');
 
-      const foreign = isForeignBidder(lot.targetRoles, member.combatRole);
-      const fullCost = bidFullCost(amount, lot.markupPct, foreign);
+      // Снимок на момент создания лота (план 6, п. 6, решение 18): смена роли
+      // или предпочитаемого предмета после создания лота цену не меняет.
+      const roleThen = roleAtLotCreation(member, auction.createdAt);
+      const preferredThen = prefersItemAtLotCreation(member, auction.createdAt, auction.lootDrop.itemId);
+      const foreign = isForeignBidder(lot.targetRoles, roleThen);
+      const discountPct = preferredThen ? auction.discountPct : 0;
+      const fullCost = bidFullCost(amount, lot.markupPct, foreign, discountPct);
       const entries = await tx.dkpEntry.findMany({
         where: { memberId },
         select: { amount: true },
@@ -220,6 +236,7 @@ export class BidsService {
           amount,
           fullCost,
           markupPct: foreign ? lot.markupPct : 0,
+          discountPct,
         },
       });
       const nextEndsAt = endsAtAfterBid(lot, now);
@@ -239,7 +256,12 @@ export class BidsService {
           entityId: auctionId,
           comment:
             `Ставка ${amount} на лот «${auction.lootDrop.item.name}»` +
-            (foreign ? ` (полная стоимость ${fullCost} с наценкой ${lot.markupPct}%)` : ''),
+            (foreign || discountPct > 0
+              ? ` (полная стоимость ${fullCost}` +
+                (foreign ? `, с наценкой ${lot.markupPct}%` : '') +
+                (discountPct > 0 ? `, со скидкой ${discountPct}%` : '') +
+                ')'
+              : ''),
         },
       });
 
@@ -279,6 +301,7 @@ export class BidsService {
       amount: bid.amount,
       fullCost: bid.fullCost,
       markupPct: bid.markupPct,
+      discountPct: bid.discountPct,
       createdAt: bid.createdAt.toISOString(),
     };
   }

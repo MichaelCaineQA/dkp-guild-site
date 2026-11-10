@@ -23,6 +23,7 @@ const STATE: AuctionLiveState = {
     antiSnipeExtendSec: 30,
     noBidTimeoutSec: 120,
     markupPct: 0,
+    discountPct: 0,
     firstBidAt: null,
     endsAt: null,
     createdAt: '2026-11-10T17:00:00.000Z',

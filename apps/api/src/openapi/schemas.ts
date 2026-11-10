@@ -205,6 +205,10 @@ export const schemas: Record<string, SchemaObject> = {
     },
     noBidTimeoutSec: nullable(num),
     markupPct: num,
+    discountPct: {
+      ...num,
+      description: 'Скидка за предпочитаемый предмет, зафиксированная при создании лота (решение 18).',
+    },
     firstBidAt: nullable(date),
     endsAt: nullable(date),
     createdAt: date,
@@ -224,6 +228,12 @@ export const schemas: Record<string, SchemaObject> = {
     startPrice: num,
     step: num,
     markupPct: num,
+    discountPct: num,
+    myPreferred: {
+      ...{ type: 'boolean' },
+      description:
+        'Предмет лота — предпочитаемый просматривающим на момент создания лота (снимок, решение 18).',
+    },
     timerKind: enumeration(['FIRST_BID', 'OPENING']),
     antiSnipeSec: num,
     antiSnipeExtendSec: num,
@@ -242,7 +252,13 @@ export const schemas: Record<string, SchemaObject> = {
       }),
     ),
     winner: nullable(
-      object({ memberId: str, memberName: str, finalPrice: num, markupPct: num }),
+      object({
+        memberId: str,
+        memberName: str,
+        finalPrice: num,
+        markupPct: num,
+        discountPct: num,
+      }),
     ),
   }),
   DashboardMyAuction: object({
@@ -268,6 +284,7 @@ export const schemas: Record<string, SchemaObject> = {
     startPrice: num,
     step: num,
     markupPct: num,
+    discountPct: num,
     live: object({
       durationValue: { type: 'number' },
       durationUnit: enumeration(['MINUTES']),
@@ -297,6 +314,11 @@ export const schemas: Record<string, SchemaObject> = {
       ...num,
       description: 'Применённая наценка «чужому» классу, % (0 — «родной» класс).',
     },
+    discountPct: {
+      ...num,
+      description:
+        'Применённая скидка за предпочитаемый предмет, % (0 — не предпочитался на момент создания лота).',
+    },
     createdAt: date,
   }),
   PlaceBidResult: object({
@@ -314,6 +336,10 @@ export const schemas: Record<string, SchemaObject> = {
     markupPct: {
       ...num,
       description: 'Наценка в цене выдачи: 0 — «родной» класс или ручное назначение.',
+    },
+    discountPct: {
+      ...num,
+      description: 'Скидка за предпочитаемый предмет в цене выдачи: 0 — не предпочитался.',
     },
   }),
   LotManageResult: object({
@@ -447,6 +473,7 @@ export const schemas: Record<string, SchemaObject> = {
     rarity: nullable(str),
     finalPrice: { ...num, description: 'Фактическое списание из журнала ДКП.' },
     markupPct: num,
+    discountPct: num,
     eventId: str,
     eventName: str,
     eventStartsAt: date,
@@ -455,6 +482,19 @@ export const schemas: Record<string, SchemaObject> = {
   Profile: object(
     {
       ...roster,
+      preferredItem: {
+        ...nullable(object({ id: str, name: str })),
+        description:
+          'Предпочитаемый предмет (план 2.4): null — не выбран; даёт скидку при победе в лоте.',
+      },
+      preferredItemChangedAt: {
+        ...nullable(date),
+        description: 'Последняя смена предпочитаемого предмета — кулдаун (план 2.5, решение 18).',
+      },
+      combatRoleChangedAt: {
+        ...nullable(date),
+        description: 'Последняя смена боевой роли — кулдаун (план 2.5, решение 18).',
+      },
       balance: num,
       recentEntries: { ...array(object(entry)), maxItems: 10 },
       loot: {
@@ -475,7 +515,16 @@ export const schemas: Record<string, SchemaObject> = {
           'Поле отсутствует у пользователей без права на GS. У владельца и Главы/Админа — последняя запись либо null.',
       },
     },
-    [...Object.keys(roster), 'balance', 'recentEntries', 'loot', 'lootTotal'],
+    [
+      ...Object.keys(roster),
+      'preferredItem',
+      'preferredItemChangedAt',
+      'combatRoleChangedAt',
+      'balance',
+      'recentEntries',
+      'loot',
+      'lootTotal',
+    ],
   ),
   LootLogRow: object({
     awardId: str,
@@ -486,6 +535,7 @@ export const schemas: Record<string, SchemaObject> = {
     winnerName: str,
     finalPrice: { ...num, description: 'Фактическое списание из журнала ДКП.' },
     markupPct: num,
+    discountPct: num,
     eventId: str,
     eventName: str,
     eventStartsAt: date,
