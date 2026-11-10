@@ -1,5 +1,8 @@
 name: Deploy
 on:
+  # Автодеплой стенда после мержа в main; secrets берутся из окружения staging.
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       environment:
@@ -10,8 +13,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    concurrency: deploy-${{ inputs.environment }}
+    environment: ${{ inputs.environment || 'staging' }}
+    concurrency: deploy-${{ inputs.environment || 'staging' }}
     steps:
       - uses: actions/checkout@v4
       - name: Require a version tag for production
