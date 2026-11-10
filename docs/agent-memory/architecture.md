@@ -29,7 +29,16 @@
   заданном `REDIS_URL`, иначе in-memory. Сессии — `apps/api/src/auth/session.ts`
   (общий store для REST и WS-handshake; при переходе на Redis действующие
   входы сбрасываются один раз). Веб-клиент — хук `apps/web/lib/use-auction-lot.ts`
-  (prod: `/api/socket.io` через Caddy, dev: прокси Next). Экран — #98.
+  (prod: `/api/socket.io` через Caddy, dev: прокси Next). **`addTrailingSlash: false`
+  обязателен и на gateway, и в клиенте**: дев-прокси Next срезает завершающий
+  слэш 308-редиректом — без опции handshake `/api/socket.io/` ломается (ловили
+  вживую, #98). Срез `AuctionLiveState` включает `winner` для итога закрытия.
+- `apps/api/src/auctions` (issue #98): список лотов `GET /auctions?status=`
+  (открытые — по ближайшему окончанию, архив — свежие сверху; ведущая ставка,
+  своя `myBid.leading`, победитель) и виджет дашборда «Мой аукцион»
+  (`myNearestBidLot`, ближайший лот среди ставок). Экран лотов, история и
+  форма ставки с наценкой — `apps/web/components/auction-lots.tsx` (вкладка
+  «Лоты» на `/auction`, realtime через хук), виджет — `components/dashboard.tsx`.
 - `packages/shared` — общие типы, zod-схемы и чистая логика ядра.
 - `.github/workflows/ci.yml` — проверки CI.
 - `installer/` — установщик релизного Compose (`dkp`, Python 3 stdlib) для
