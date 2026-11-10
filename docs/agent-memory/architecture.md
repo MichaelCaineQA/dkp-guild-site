@@ -20,11 +20,20 @@
   (issue #96); известный дефект удаления ивента с дропом — issue #109.
 - `packages/shared` — общие типы, zod-схемы и чистая логика ядра.
 - `.github/workflows/ci.yml` — проверки CI.
-- `installer/` — установщик релизного Compose для одного домена, изолированного
-  проекта `dkp-guild` и состояния `/var/lib/dkp-guild`; упаковка по тегу —
-  `.github/workflows/release.yml` и `scripts/release/package.sh`. Для файлов
-  релиза используются digest образов и контрольные суммы. Реальную приёмку на
-  чистой VM нужно провести отдельно (issue #75).
+- `installer/` — установщик релизного Compose (`dkp`, Python 3 stdlib) для
+  Ubuntu 22.04/24.04 (amd64/arm64), один домен, изолированный проект
+  `dkp-guild`, состояние `/var/lib/dkp-guild` (конфиг 0600, `releases/<версия>`
+  + symlink `current`, флаг `migration-failed`, flock `operation.lock`).
+  Команды: `start` (мастер: домен/DNS, гильдия, админ, Discord, бэкап;
+  apt-установка Docker; миграции+seed; health-проверка HTTPS),
+  `update [vX.Y.Z]` (GitHub Releases, sha256+состав архива, копия до
+  миграции; при ошибке API остановлен), `backup setup|now|list|restore <id>`
+  (openssl AES-256-CBC PBKDF2 + HMAC-SHA256, ключ восстановления, scp/локально,
+  systemd-таймер, ротация), `status/logs/stop/restart/configure/leader`.
+  Упаковка по тегу — `.github/workflows/release.yml` и
+  `scripts/release/package.sh`; тесты — `installer/test_dkp.py` (10,
+  Linux-only, см. known-issues). Реальную приёмку на чистой VM нужно
+  провести отдельно (issue #75).
 - Production web использует same-origin `/api`: Caddy убирает префикс,
   dev — прокси Next.js на :3001. Локальный Docker Compose сохраняет явный
   `NEXT_PUBLIC_API_URL`. Discord необязателен: `/auth/providers` возвращает
