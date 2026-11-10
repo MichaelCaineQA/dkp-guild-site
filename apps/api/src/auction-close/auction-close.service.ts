@@ -5,6 +5,7 @@ import {
   type LotCloseResult,
 } from '@dkp/shared';
 import { serializable } from '../prisma/serializable';
+import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction-events';
 
 interface StoredBid {
   id: string;
@@ -105,6 +106,7 @@ export class AuctionCloseService {
     private readonly now: () => Date = () => new Date(),
     /** Период прохода свипера, мс; 0 — отключить (для тестов). */
     private readonly sweepIntervalMs = 1000,
+    private readonly events: AuctionEventsPort = NOOP_AUCTION_EVENTS,
   ) {}
 
   onModuleInit(): void {
@@ -154,7 +156,7 @@ export class AuctionCloseService {
    */
   async closeExpiredLot(auctionId: string): Promise<LotCloseResult> {
     const now = this.now();
-    return serializable(this.db, async (tx) => {
+    const result = await serializable(this.db, async (tx) => {
       const auction = await tx.auction.findUnique({
         where: { id: auctionId },
         include: { lootDrop: { include: { item: true } }, bids: { include: { member: true } } },
@@ -228,6 +230,10 @@ export class AuctionCloseService {
         },
       };
     });
+    // Realtime-событие — после фиксации закрытия (issue #97); повторный
+    // (skipped) проход ничего не отправляет.
+    if (result.closed) this.events.lotClosed(auctionId, result.winner, 'EXPIRED');
+    return result;
   }
 
   private toExpiryParams(lot: {

@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { ItemTargetRole } from '@dkp/shared';
+import type { AuctionEventsPort } from '../realtime/auction-events';
 import { BidsService, type BidsDb, type BidsTx } from './bids.service';
 
 const NOW = new Date('2026-11-09T20:00:00Z');
@@ -313,5 +314,37 @@ describe('BidsService (issue #94)', () => {
     const list = await service(db).list('a-1');
     expect(list.map((row) => row.amount)).toEqual([100, 105]);
     expect(list[1]).toMatchObject({ memberName: 'Целитель', fullCost: 158, markupPct: 50 });
+  });
+});
+
+describe('BidsService: события realtime (issue #97)', () => {
+  const events = (): AuctionEventsPort => ({
+    lotCreated: jest.fn(),
+    bidPlaced: jest.fn(),
+    lotUpdated: jest.fn(),
+    lotClosed: jest.fn(),
+  });
+
+  it('принятая ставка отправляет событие после фиксации — с новой ставкой и окончанием', async () => {
+    const emitted = events();
+    const { db } = makeDb({});
+    const result = await new BidsService(db, () => NOW, emitted).place(
+      'a-1',
+      { amount: 100 },
+      ACTOR,
+    );
+    expect(emitted.bidPlaced).toHaveBeenCalledTimes(1);
+    expect(emitted.bidPlaced).toHaveBeenCalledWith('a-1', result.bid, result.endsAt);
+  });
+
+  it('отклонённая ставка события не отправляет — «не выглядит принятой»', async () => {
+    const emitted = events();
+    const { db } = makeDb({
+      bids: [{ auctionId: 'a-1', memberId: 'm-2', amount: 100, fullCost: 100 }],
+    });
+    await expect(
+      new BidsService(db, () => NOW, emitted).place('a-1', { amount: 104 }, ACTOR),
+    ).rejects.toThrow(BadRequestException);
+    expect(emitted.bidPlaced).not.toHaveBeenCalled();
   });
 });
