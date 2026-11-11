@@ -1,11 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import {
   canViewGuildGearScore,
   can,
+  computeBalance,
+  frozenAmount,
   getMoscowDayBounds,
   selectDashboardEvents,
   sortTeamMembers,
+  winningBid,
   type DashboardData,
+  type MemberWallet,
   type PermissionActor,
 } from '@dkp/shared';
 import type { PrismaClient } from '@prisma/client';
@@ -13,7 +17,7 @@ import { AuditService } from '../audit/audit.service';
 import { AuctionsService } from '../auctions/auctions.service';
 export type DashboardDb = Pick<
   PrismaClient,
-  'event' | 'member' | 'pack' | 'gearScoreRecord' | 'guild'
+  'event' | 'member' | 'pack' | 'gearScoreRecord' | 'guild' | 'auction' | 'dkpEntry'
 >;
 @Injectable()
 export class DashboardService {
@@ -22,6 +26,46 @@ export class DashboardService {
     private readonly audit: AuditService,
     private readonly auctions: AuctionsService,
   ) {}
+  /**
+   * «Мой кошелёк» (issue #81, план 2.8 и 6 п. 5): фактический баланс журнала
+   * и замороженные очки — ожидаемые списания по открытым лотам, где игрок
+   * ведёт. Расчёт заморозки — общий с проверкой ставок (frozenAmount), т.е.
+   * для каждого лота только ведущая ставка с уже применёнными наценкой
+   * и скидкой; перебитая ставка, отменённый и завершённый лот исключаются.
+   * Ставки в журнал не пишутся — списание появится в балансе при завершении.
+   */
+  async wallet(actor: PermissionActor): Promise<MemberWallet> {
+    const memberId = actor.memberId;
+    if (!memberId) throw new ForbiddenException('Кошелёк доступен участникам гильдии');
+    const [lots, entries] = await Promise.all([
+      this.db.auction.findMany({
+        where: { status: 'OPEN' },
+        orderBy: [{ endsAt: 'asc' }, { createdAt: 'asc' }],
+        include: { lootDrop: { include: { item: true } }, bids: true },
+      }),
+      this.db.dkpEntry.findMany({
+        where: { memberId },
+        select: { amount: true },
+      }),
+    ]);
+    const balance = computeBalance(entries);
+    const frozen = frozenAmount(memberId, lots);
+    return {
+      balance,
+      frozen,
+      available: balance - frozen,
+      lots: lots
+        .map((lot) => ({ lot, top: winningBid(lot.bids) }))
+        .filter((row) => row.top !== null && row.top.memberId === memberId)
+        .map(({ lot, top }) => ({
+          lotId: lot.id,
+          itemName: lot.lootDrop.item.name,
+          fullCost: top!.fullCost,
+          endsAt: lot.endsAt?.toISOString() ?? null,
+        })),
+    };
+  }
+
   async get(actor: PermissionActor, now = new Date()): Promise<DashboardData> {
     const { start, end } = getMoscowDayBounds(now);
     const [events, team, audit, guild, myAuction] = await Promise.all([

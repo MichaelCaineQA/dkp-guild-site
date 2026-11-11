@@ -27,6 +27,16 @@ const pack = jest.fn(async () => ({
 }));
 const scores = jest.fn(async () => [{ memberId: 'self', value: 4242 }]);
 const events = jest.fn(async () => []);
+const walletLots = jest.fn(async () => [
+  {
+    id: 'lot-1',
+    endsAt: new Date('2026-11-11T20:00:00Z'),
+    createdAt: new Date('2026-11-01T00:00:00Z'),
+    lootDrop: { item: { name: 'Клинок' } },
+    bids: [{ memberId: 'self', amount: 100, fullCost: 110 }],
+  },
+]);
+const walletEntries = jest.fn(async () => [{ amount: 50 }, { amount: 60 }]);
 const list = jest.fn(async (_query: unknown, user: { rank: string | null }) =>
   user.rank === 'MEMBER'
     ? { entries: [], total: 0 }
@@ -52,6 +62,8 @@ const db = {
   event: { findMany: events },
   guild: { findFirst: async () => null },
   gearScoreRecord: { findMany: scores },
+  auction: { findMany: walletLots },
+  dkpEntry: { findMany: walletEntries },
 };
 @Module({
   controllers: [DashboardController],
@@ -132,5 +144,39 @@ describe('Дашборд через HTTP', () => {
     expect(body.audit).toHaveLength(1);
     expect(member).not.toHaveBeenCalled();
     expect(events).toHaveBeenCalledTimes(1);
+  });
+  it('кошелёк: без привязанного Member (включая резервного Админа) — 403', async () => {
+    actor = undefined;
+    expect((await fetch(url + '/dashboard/wallet')).status).toBe(401);
+    actor = { userId: 'new', username: 'Новый', memberId: null, rank: null, isAdmin: false };
+    expect((await fetch(url + '/dashboard/wallet')).status).toBe(403);
+    actor = { userId: 'admin:a', username: 'a', memberId: null, rank: null, isAdmin: true };
+    expect((await fetch(url + '/dashboard/wallet')).status).toBe(403);
+    expect(walletLots).not.toHaveBeenCalled();
+    expect(walletEntries).not.toHaveBeenCalled();
+  });
+  it('кошелёк: баланс журнала, заморозка ведущей ставки и доступная сумма', async () => {
+    const response = await fetch(url + '/dashboard/wallet');
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      balance: 110,
+      frozen: 110,
+      available: 0,
+      lots: [
+        {
+          lotId: 'lot-1',
+          itemName: 'Клинок',
+          fullCost: 110,
+          endsAt: '2026-11-11T20:00:00.000Z',
+        },
+      ],
+    });
+    expect(walletEntries).toHaveBeenCalledWith({
+      where: { memberId: 'self' },
+      select: { amount: true },
+    });
+    expect(walletLots).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { status: 'OPEN' } }),
+    );
   });
 });

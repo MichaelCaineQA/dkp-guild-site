@@ -269,6 +269,31 @@ export const schemas: Record<string, SchemaObject> = {
     endsAt: nullable(date),
     topBid: nullable(object({ amount: num, memberName: str })),
   }),
+  WalletLot: object({
+    lotId: str,
+    itemName: str,
+    fullCost: {
+      ...num,
+      description: 'Ожидаемое списание — полная стоимость ведущей ставки (наценка и скидка внутри).',
+    },
+    endsAt: nullable(date),
+  }),
+  MemberWallet: object({
+    balance: {
+      ...num,
+      description: 'Фактическая сумма append-only журнала ДКП; ставки не списывают заранее.',
+    },
+    frozen: {
+      ...num,
+      description:
+        'Ожидаемые списания: сумма полных стоимостей ведущих ставок на открытых лотах, где игрок ведёт.',
+    },
+    available: {
+      ...num,
+      description: 'balance − frozen — предел полной стоимости новой ставки.',
+    },
+    lots: array(ref('WalletLot')),
+  }),
   LootDrop: object({
     id: str,
     eventId: str,

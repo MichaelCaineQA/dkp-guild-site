@@ -358,6 +358,30 @@ export function hasAvailableBalance(balance: number, frozen: number, fullCost: n
   return balance - frozen >= fullCost;
 }
 
+/**
+ * Замороженные средства игрока (план 6, п. 5; issue #81): сумма полных
+ * стоимостей его ЛИДИРУЮЩИХ ставок на открытых лотах. Для каждого лота
+ * учитывается только актуальная ведущая ставка (максимум по amount), а не
+ * вся история ставок: перебитая собственная ставка исключается
+ * автоматически, повышение собственной заменяет старую сумму. fullCost уже
+ * содержит применимые наценку и скидку (снимок на момент ставки);
+ * отменённые и завершённые лоты в список открытых не попадают.
+ */
+export function frozenAmount(
+  memberId: string,
+  openLots: ReadonlyArray<{
+    id: string;
+    bids: ReadonlyArray<Pick<BidRow, 'memberId' | 'amount' | 'fullCost'>>;
+  }>,
+): number {
+  let frozen = 0;
+  for (const lot of openLots) {
+    const top = winningBid(lot.bids);
+    if (top && top.memberId === memberId) frozen += top.fullCost;
+  }
+  return frozen;
+}
+
 /** Причина отказа ставки — для сообщений API и тестов. */
 export type BidRejection =
   | 'LOT_NOT_OPEN' // лот закрыт или отменён
@@ -694,3 +718,34 @@ export const auctionsQuerySchema = z.object({
   status: z.enum(AUCTION_LIST_STATUSES).default('OPEN'),
 });
 export type AuctionsQuery = z.infer<typeof auctionsQuerySchema>;
+
+/* ------------------------------------------------------------------ */
+/* Кошелёк дашборда: баланс и замороженные очки (issue #81, план 2.8   */
+/* и 6 п. 5).                                                          */
+/* ------------------------------------------------------------------ */
+
+/** Лот, составляющий заморозку кошелька: ожидаемое списание при победе. */
+export interface WalletLotRow {
+  lotId: string;
+  itemName: string;
+  /** Полная стоимость ведущей ставки игрока (наценка и скидка уже внутри). */
+  fullCost: number;
+  endsAt: string | null;
+}
+
+/**
+ * «Мой кошелёк» (план 2.8, 6 п. 5): фактический баланс append-only журнала
+ * и ожидаемые списания по открытым лотам, где игрок ведёт. Ставки ничего
+ * не списывают заранее — журнал меняется только при фактическом завершении
+ * лота, поэтому ожидание победы расходной записи не создаёт.
+ */
+export interface MemberWallet {
+  /** Фактическая сумма журнала ДКП (computeBalance), без списания ставок. */
+  balance: number;
+  /** Ожидаемые списания: сумма полных стоимостей ведущих ставок (frozenAmount). */
+  frozen: number;
+  /** Баланс минус заморожено — предел полной стоимости новой ставки. */
+  available: number;
+  /** Открытые лоты, где игрок ведёт, — по ближайшему окончанию. */
+  lots: WalletLotRow[];
+}
