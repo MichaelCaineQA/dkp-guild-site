@@ -32,9 +32,11 @@ beforeEach(() => {
 afterEach(cleanup);
 it('шапка показывает игровой ник и некликабельный баланс из журнала', async () => {
   render(<UserMenu />);
-  expect((await screen.findByRole('link', { name: 'Мой профиль' })).textContent).toContain(
-    'ИгровойНик',
-  );
+  // ждём именно подстановку игрового ника: ссылка «Мой профиль» существует
+  // и до ответа (внутри username из Discord) — на медленном раннере assert
+  // по ней ловил ещё не обновлённый текст (флейк CI).
+  const profile = await screen.findByRole('link', { name: 'Мой профиль' });
+  await waitFor(() => expect(profile.textContent).toContain('ИгровойНик'));
   const balance = screen.getByLabelText('Баланс ДКП');
   expect(balance.textContent).toContain('15 ДКП');
   expect(balance.closest('a')).toBeNull();
