@@ -114,6 +114,10 @@ export interface PhaseSegment {
  * Разбивка интервала ивента на сегменты день/ночь (план 2.1): ивент,
  * накрывающий несколько фаз, сегментирован. Первый и последний сегменты
  * обрезаются границами ивента. Чистая функция для UI и тестов.
+ *
+ * Фазы известны только с якоря цикла: интервал до якоря не даёт сегментов,
+ * пересекающий якорь считается от якоря — настройка «якорь в будущем»
+ * не должна ронять карточку ивента (#133).
  */
 export function splitIntoPhaseSegments(
   startsAt: Date,
@@ -124,8 +128,13 @@ export function splitIntoPhaseSegments(
     return [];
   }
 
+  const from = Math.max(startsAt.getTime(), config.anchor.getTime());
+  if (from >= endsAt.getTime()) {
+    return [];
+  }
+
   const segments: PhaseSegment[] = [];
-  let cursor = new Date(startsAt.getTime());
+  let cursor = new Date(from);
 
   while (cursor.getTime() < endsAt.getTime()) {
     const { phase, switchesAt } = getGamePhase(cursor, config);
