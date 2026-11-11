@@ -71,6 +71,17 @@ function mockApi(drops: unknown[] = [DROP], opts: { postOk?: boolean } = {}) {
   });
 }
 
+/**
+ * Гонка медленного CI (#116): модалка появляется вместе с form, но сабмит должен идти
+ * только после подстановки дефолтов в поля — иначе POST не проходит валидацию,
+ * а поздние дефолты могут перезаписать уже изменённое поле.
+ */
+async function lotFormReady() {
+  await waitFor(() =>
+    expect((screen.getByLabelText('Стартовая цена') as HTMLInputElement).value).toBe('120'),
+  );
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   HTMLDialogElement.prototype.showModal = function () {
@@ -100,6 +111,8 @@ it('фиксирует дроп выбранным предметом', async ()
   mockApi([]);
   render(<LootPanel eventId="e-1" canEdit />);
   const select = await screen.findByLabelText('Предмет из справочника');
+  // селект существует до загрузки /items: ждём опцию, иначе change не прилипнет (гонка на медленном CI, #116)
+  await screen.findByText('Клинок рассвета (Эпический)');
   fireEvent.change(select, { target: { value: 'i-1' } });
   fireEvent.click(screen.getByRole('button', { name: 'Зафиксировать дроп' }));
   await waitFor(() =>
@@ -116,6 +129,7 @@ it('создаёт живую раздачу с дефолтами настро�
   render(<LootPanel eventId="e-1" canEdit />);
   fireEvent.click(await screen.findByRole('button', { name: 'Создать лот' }));
   await screen.findByText('Новый лот: Клинок рассвета');
+  await lotFormReady();
   const submit = screen.getAllByRole('button', { name: 'Создать лот' }).at(-1)!;
   fireEvent.click(submit);
   await waitFor(() =>
@@ -140,6 +154,7 @@ it('при переключении на длинный лот подставл�
   render(<LootPanel eventId="e-1" canEdit />);
   fireEvent.click(await screen.findByRole('button', { name: 'Создать лот' }));
   await screen.findByText('Новый лот: Клинок рассвета');
+  await lotFormReady();
   fireEvent.change(screen.getByLabelText('Тип таймера'), { target: { value: 'OPENING' } });
   expect(screen.queryByText('Тайм-аут без ставок, сек')).toBeNull();
   const submit = screen.getAllByRole('button', { name: 'Создать лот' }).at(-1)!;
@@ -165,6 +180,7 @@ it('некорректная длительность не уходит на с�
   render(<LootPanel eventId="e-1" canEdit />);
   fireEvent.click(await screen.findByRole('button', { name: 'Создать лот' }));
   await screen.findByText('Новый лот: Клинок рассвета');
+  await lotFormReady();
   const duration = screen.getByText('Длительность').querySelector('input')!;
   fireEvent.change(duration, { target: { value: '20' } });
   const submit = screen.getAllByRole('button', { name: 'Создать лот' }).at(-1)!;
