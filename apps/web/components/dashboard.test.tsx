@@ -26,7 +26,9 @@ const session = (rank: 'MEMBER' | 'OFFICER' | null, isAdmin = false) =>
   });
 beforeEach(() => {
   session('MEMBER');
-  vi.mocked(api).mockImplementation(async (path) => (path === '/dashboard' ? summary : []));
+  vi.mocked(api).mockImplementation(async (path) =>
+    path === '/dashboard' ? summary : path === '/dashboard/wallet' ? null : [],
+  );
 });
 afterEach(() => {
   cleanup();
@@ -35,7 +37,7 @@ afterEach(() => {
 it('рядовой видит личный лог и пустые состояния', async () => {
   render(<DashboardScreen />);
   await screen.findByText('Сегодня отдыхаем!');
-  expect(screen.getAllByRole('region')).toHaveLength(5);
+  expect(screen.getAllByRole('region')).toHaveLength(6);
   expect(
     screen.getByText('Здесь появится информация о твоём паке после того, как тебя распределят'),
   ).toBeDefined();
@@ -81,29 +83,33 @@ it('событие открывает общую с календарём кар�
   fireEvent.click(await screen.findByRole('button', { name: /Поход/ }));
   expect(screen.getByRole('dialog').textContent).toContain('Поход');
 });
-it('резервный Админ видит четыре виджета, без ожидания привязки', async () => {
+it('резервный Админ видит все виджеты, без ожидания привязки', async () => {
   session(null, true);
   render(<DashboardScreen />);
   await screen.findByText('Сегодня отдыхаем!');
-  expect(screen.getAllByRole('region')).toHaveLength(5);
+  expect(screen.getAllByRole('region')).toHaveLength(6);
+  expect(screen.getByText('Кошелёк доступен участникам гильдии.')).toBeDefined();
+  expect(api).not.toHaveBeenCalledWith('/dashboard/wallet');
   expect(screen.getByText('Перейти в лог действий')).toBeDefined();
 });
 it('ошибка сервера не маскируется под пустое расписание', async () => {
   vi.mocked(api).mockImplementation(async (path) => {
     if (path === '/dashboard') throw new Error('offline');
+    if (path === '/dashboard/wallet') return null;
     return [];
   });
   render(<DashboardScreen />);
   expect(await screen.findByRole('alert')).toBeDefined();
   expect(screen.queryByText('Сегодня отдыхаем!')).toBeNull();
-  expect(screen.getAllByRole('region')).toHaveLength(5);
+  expect(screen.getAllByRole('region')).toHaveLength(6);
 });
 
-it('показывает до трёх активных отсутствий: текущие перед будущими, с локальными датами и отметкой', async () => {
-  const now = Date.now();
-  vi.mocked(api).mockImplementation(async (path) => {
-    if (path === '/dashboard') return summary;
-    if (path === '/absences/mine')
+  it('показывает до трёх активных отсутствий: текущие перед будущими, с локальными датами и отметкой', async () => {
+    const now = Date.now();
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === '/dashboard') return summary;
+      if (path === '/dashboard/wallet') return null;
+      if (path === '/absences/mine')
       return [
         {
           id: 'future',
@@ -175,7 +181,9 @@ it('виджет «Мой аукцион»: лот из dashboard, перехо�
             topBid: { amount: 150, memberName: 'Целитель' },
           },
         }
-      : [],
+      : path === '/dashboard/wallet'
+        ? null
+        : [],
   );
   render(<DashboardScreen />);
   const region = await screen.findByRole('region', { name: 'Мой аукцион' });
@@ -184,4 +192,63 @@ it('виджет «Мой аукцион»: лот из dashboard, перехо�
   expect(region.textContent).toContain('150 ДКП');
   expect(region.textContent).toContain('Целитель');
   expect(screen.getByRole('button', { name: 'Открыть аукцион' })).toBeDefined();
+});
+
+it('кошелёк: баланс журнала, заморозка с наценкой, доступная сумма и ссылки (#81)', async () => {
+  vi.mocked(api).mockImplementation(async (path: string) =>
+    path === '/dashboard'
+      ? summary
+      : path === '/dashboard/wallet'
+        ? {
+            balance: 200,
+            frozen: 198,
+            available: 2,
+            lots: [
+              { lotId: 'near', itemName: 'Посох', fullCost: 88, endsAt: '2026-11-11T20:00:00Z' },
+              { lotId: 'far', itemName: 'Клинок', fullCost: 110, endsAt: '2026-11-12T18:00:00Z' },
+            ],
+          }
+        : [],
+  );
+  render(<DashboardScreen />);
+  const region = await screen.findByRole('region', { name: 'Мой кошелёк' });
+  expect(region.textContent).toContain('Баланс: 200 ДКП');
+  expect(region.textContent).toContain('Заморожено: 198 ДКП');
+  expect(region.textContent).toContain('Спишется, если вы выиграете текущие лоты');
+  expect(region.textContent).toContain('Доступно для новых ставок: 2 ДКП');
+  expect(region.textContent).toContain('Посох');
+  expect(region.textContent).toContain('88 ДКП');
+  expect(region.textContent).toContain('Клинок');
+  expect(region.textContent).toContain('110 ДКП');
+  const history = screen.getByRole('link', { name: 'История ДКП' }) as HTMLAnchorElement;
+  expect(history.getAttribute('href')).toBe('/dkp');
+  const lots = screen.getByRole('link', { name: 'Мои лоты' }) as HTMLAnchorElement;
+  expect(lots.getAttribute('href')).toBe('/auction');
+});
+
+it('кошелёк без заморозки не показывает список лотов', async () => {
+  vi.mocked(api).mockImplementation(async (path: string) =>
+    path === '/dashboard/wallet'
+      ? { balance: 55, frozen: 0, available: 55, lots: [] }
+      : path === '/dashboard'
+        ? summary
+        : [],
+  );
+  render(<DashboardScreen />);
+  const region = await screen.findByRole('region', { name: 'Мой кошелёк' });
+  expect(region.textContent).toContain('Заморожено: 0 ДКП');
+  expect(region.querySelectorAll('ul')).toHaveLength(0);
+});
+
+it('кошелёк: ошибка загрузки — предупреждение и повтор', async () => {
+  vi.mocked(api).mockImplementation(async (path: string) => {
+    if (path === '/dashboard/wallet') throw new Error('offline');
+    if (path === '/dashboard') return summary;
+    return [];
+  });
+  render(<DashboardScreen />);
+  const region = await screen.findByRole('region', { name: 'Мой кошелёк' });
+  expect(region.textContent).toContain('Не удалось загрузить кошелёк.');
+  fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+  expect(api).toHaveBeenCalledWith('/dashboard/wallet');
 });

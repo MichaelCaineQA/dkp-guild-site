@@ -10,6 +10,7 @@ import {
   checkBidAllowed,
   computeBalance,
   endsAtAfterBid,
+  frozenAmount,
   hasAvailableBalance,
   isForeignBidder,
   minBidAmount,
@@ -222,7 +223,8 @@ export class BidsService {
         select: { amount: true },
       });
       const balance = computeBalance(entries);
-      const frozen = frozenOf(memberId, auction.id, others);
+      // Заморозка по другим открытым лотам — общая логика с кошельком (#81).
+      const frozen = frozenAmount(memberId, others);
       if (!hasAvailableBalance(balance, frozen, fullCost)) {
         throw new BadRequestException(
           `Недостаточно доступного баланса: нужно ${fullCost}, доступно ${balance - frozen}`,
@@ -305,26 +307,4 @@ export class BidsService {
       createdAt: bid.createdAt.toISOString(),
     };
   }
-}
-
-/**
- * Замороженные средства игрока (план 6, п. 5): полные стоимости его
- * лидирующих ставок на других открытых лотах. Лидер — автор максимальной
- * ставки; при перебивании заморозка снимается автоматически (лидер меняется).
- */
-function frozenOf(
-  memberId: string,
-  currentAuctionId: string,
-  openLots: Array<{ id: string; bids: StoredBid[] }>,
-): number {
-  let frozen = 0;
-  for (const lot of openLots) {
-    if (lot.id === currentAuctionId) continue;
-    const top = lot.bids.reduce<StoredBid | null>(
-      (best, bid) => (best === null || bid.amount > best.amount ? bid : best),
-      null,
-    );
-    if (top && top.memberId === memberId) frozen += top.fullCost;
-  }
-  return frozen;
 }

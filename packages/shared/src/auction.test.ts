@@ -10,6 +10,7 @@ import {
   createLotSchema,
   endsAtAfterBid,
   extendLotSchema,
+  frozenAmount,
   extendedEndsAt,
   hasAvailableBalance,
   isForeignBidder,
@@ -310,6 +311,38 @@ describe('hasAvailableBalance', () => {
     expect(hasAvailableBalance(200, 50, 151)).toBe(false);
     expect(hasAvailableBalance(100, 0, 100)).toBe(true);
     expect(hasAvailableBalance(-10, 0, 1)).toBe(false);
+  });
+});
+
+describe('frozenAmount (кошелёк, issue #81, план 6 п. 5)', () => {
+  const bid = (id: string, memberId: string, amount: number, fullCost: number) => ({
+    id,
+    memberId,
+    amount,
+    fullCost,
+  });
+  it('без ставок и без лидерства заморозка нулевая', () => {
+    expect(frozenAmount('me', [{ id: 'a', bids: [] }])).toBe(0);
+    expect(frozenAmount('me', [{ id: 'a', bids: [bid('b1', 'other', 100, 110)] }])).toBe(0);
+  });
+  it('учитывается только ведущая ставка лота, а не вся история', () => {
+    // собственная ставка повышена: старая 50 (55) исключена, ведёт 80 (88)
+    const lot = { id: 'a', bids: [bid('b1', 'me', 50, 55), bid('b2', 'me', 80, 88)] };
+    expect(frozenAmount('me', [lot])).toBe(88);
+  });
+  it('несколько лотов суммируются; наценка уже внутри fullCost', () => {
+    expect(
+      frozenAmount('me', [
+        { id: 'a', bids: [bid('b1', 'me', 100, 110)] }, // +10% наценки
+        { id: 'b', bids: [bid('b2', 'me', 200, 180)] }, // скидка предпочитаемого
+        { id: 'c', bids: [bid('b3', 'other', 300, 300)] }, // не ведёт
+      ]),
+    ).toBe(290);
+  });
+  it('перебитая собственная ставка исключается — ведёт другой игрок', () => {
+    const outbid = { id: 'a', bids: [bid('b1', 'me', 50, 55), bid('b2', 'other', 60, 66)] };
+    expect(frozenAmount('me', [outbid])).toBe(0);
+    expect(frozenAmount('other', [outbid])).toBe(66);
   });
 });
 

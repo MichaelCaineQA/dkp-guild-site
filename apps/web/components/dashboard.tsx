@@ -6,6 +6,7 @@ import {
   getMoscowDayBounds,
   type DashboardData,
   type DashboardEvent,
+  type MemberWallet,
 } from '@dkp/shared';
 import { api } from '../lib/api';
 import { useSession } from './session-context';
@@ -58,6 +59,25 @@ export function DashboardScreen() {
   const [absences, setAbsences] = useState<DashboardAbsence[]>([]);
   const [absenceError, setAbsenceError] = useState(false);
   const [absenceLoading, setAbsenceLoading] = useState(true);
+  const [wallet, setWallet] = useState<MemberWallet | null>(null);
+  const [walletError, setWalletError] = useState(false);
+  const [walletLoading, setWalletLoading] = useState(true);
+  const loadWallet = useCallback(async () => {
+    if (!user?.memberId) {
+      setWallet(null);
+      setWalletLoading(false);
+      return;
+    }
+    setWalletLoading(true);
+    try {
+      setWallet(await api<MemberWallet>('/dashboard/wallet'));
+      setWalletError(false);
+    } catch {
+      setWalletError(true);
+    } finally {
+      setWalletLoading(false);
+    }
+  }, [user?.memberId]);
   const loadAbsences = useCallback(async () => {
     if (!user?.memberId) {
       setAbsences([]);
@@ -88,9 +108,18 @@ export function DashboardScreen() {
   useEffect(() => {
     if (!allowed) return;
     void loadAbsences();
-    const timer = setInterval(() => void loadAbsences(), 15_000);
+    // Кошелёк (issue #81): ставки, статусы лотов и баланс журнала меняются —
+    // карточка обновляется опросом, без перезагрузки страницы.
+    void loadWallet();
+    const timer = setInterval(() => {
+      void loadAbsences();
+      void loadWallet();
+    }, 15_000);
     const refresh = () => {
-      if (document.visibilityState === 'visible') void loadAbsences();
+      if (document.visibilityState === 'visible') {
+        void loadAbsences();
+        void loadWallet();
+      }
     };
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
@@ -99,7 +128,7 @@ export function DashboardScreen() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);
     };
-  }, [allowed, loadAbsences]);
+  }, [allowed, loadAbsences, loadWallet]);
   useEffect(() => {
     if (!allowed) return;
     const timer = setInterval(() => {
@@ -161,7 +190,46 @@ export function DashboardScreen() {
               <Muted>Сегодня отдыхаем!</Muted>
             ))}
         </DashboardWidget>
-        <DashboardWidget className="md:col-span-2" title="Мои отсутствия">
+        <DashboardWidget title="Мой кошелёк">
+          {walletError ? (
+            <div role="alert">
+              <ErrorText>Не удалось загрузить кошелёк.</ErrorText>
+              <Button onClick={() => void loadWallet()}>Повторить</Button>
+            </div>
+          ) : walletLoading && !wallet ? (
+            <Muted>Загрузка…</Muted>
+          ) : !wallet ? (
+            <Muted>Кошелёк доступен участникам гильдии.</Muted>
+          ) : (
+            <div className="flex h-full flex-col gap-2">
+              <p className="text-2xl font-semibold tabular-nums">Баланс: {wallet.balance} ДКП</p>
+              <p className="tabular-nums">Заморожено: {wallet.frozen} ДКП</p>
+              <Muted>Спишется, если вы выиграете текущие лоты</Muted>
+              <p className="tabular-nums">Доступно для новых ставок: {wallet.available} ДКП</p>
+              {wallet.lots.length > 0 && (
+                <ul className="space-y-1">
+                  {wallet.lots.map((lot) => (
+                    <li key={lot.lotId}>
+                      <a className="underline hover:text-accent" href="/auction">
+                        {lot.itemName}
+                      </a>{' '}
+                      — <span className="tabular-nums">{lot.fullCost} ДКП</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="mt-auto flex flex-wrap gap-4">
+                <a className="text-accent underline" href="/dkp">
+                  История ДКП
+                </a>
+                <a className="text-accent underline" href="/auction">
+                  Мои лоты
+                </a>
+              </div>
+            </div>
+          )}
+        </DashboardWidget>
+        <DashboardWidget title="Мои отсутствия">
           {absenceError ? (
             <div role="alert">
               <ErrorText>Не удалось загрузить отсутствия.</ErrorText>
