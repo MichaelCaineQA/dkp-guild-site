@@ -199,6 +199,32 @@ describe('splitIntoPhaseSegments', () => {
       ),
     ).toEqual([]);
   });
+
+  it('интервал целиком до якоря — без сегментов, исключения нет (#133)', () => {
+    // якорь 2026-01-01T00:00:00Z, ивент накануне — фазы не определены
+    expect(
+      splitIntoPhaseSegments(
+        new Date('2025-12-31T20:00:00Z'),
+        new Date('2025-12-31T22:00:00Z'),
+        CONFIG,
+      ),
+    ).toEqual([]);
+  });
+
+  it('интервал, пересекающий якорь, — сегменты от якоря (#133)', () => {
+    // 23:50 (до якоря) — 01:00: фазы считаются с якоря, первый сегмент — день
+    const segments = splitIntoPhaseSegments(
+      new Date('2025-12-31T23:50:00Z'),
+      new Date('2026-01-01T01:00:00Z'),
+      CONFIG,
+    );
+    expect(segments).toHaveLength(1);
+    expect(segments[0]).toMatchObject({
+      phase: 'DAY',
+      startsAt: new Date('2026-01-01T00:00:00Z'), // якорь
+      endsAt: new Date('2026-01-01T01:00:00Z'), // обрезан концом ивента
+    });
+  });
 });
 
 it('название обязательно, обрезается по краям и не может быть пустым', () => {
