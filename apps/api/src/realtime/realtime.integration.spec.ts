@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { INestApplication, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { AuctionBidEvent, AuctionLiveState, SessionUser } from '@dkp/shared';
+import { sign } from 'cookie-signature';
 import { io, type Socket } from 'socket.io-client';
 import { createSessionMiddleware, getSessionStore } from '../auth/session';
 import { BidsService, type BidsDb, type BidsTx } from '../bids/bids.service';
@@ -219,7 +220,12 @@ const USER_2: SessionUser = {
 function connect(app: INestApplication, sid: string | null): Socket {
   const url = `http://127.0.0.1:${app.getHttpServer().address().port}`;
   const extraHeaders: Record<string, string> = {};
-  if (sid) extraHeaders.cookie = `dkp.sid=${sid}`;
+  // Кука как в бою: `s:` + подпись (session.ts снимает её при чтении).
+  // Секрет берём в момент connect: ConfigModule мог подтянуть .env при старте приложения.
+  if (sid) {
+    const secret = process.env.SESSION_SECRET ?? 'dev-secret';
+    extraHeaders.cookie = `dkp.sid=${encodeURIComponent('s:' + sign(sid, secret))}`;
+  }
   return io(url, {
     path: '/socket.io',
     transports: ['websocket'],

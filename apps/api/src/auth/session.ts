@@ -2,12 +2,15 @@ import { Logger } from '@nestjs/common';
 import type { RequestHandler } from 'express';
 import type { IncomingMessage } from 'node:http';
 import session from 'express-session';
+import { unsign } from 'cookie-signature';
 import { RedisStore } from 'connect-redis';
 import { createClient } from 'redis';
 import type { SessionUser } from '@dkp/shared';
 
 const COOKIE_NAME = 'dkp.sid';
 const logger = new Logger('Session');
+
+const sessionSecret = (): string => process.env.SESSION_SECRET ?? 'dev-secret';
 
 let store: session.Store | null = null;
 
@@ -24,7 +27,7 @@ export function createSessionMiddleware(): RequestHandler {
   store = redisUrl ? createRedisStore(redisUrl) : new session.MemoryStore();
   return session({
     name: COOKIE_NAME,
-    secret: process.env.SESSION_SECRET ?? 'dev-secret',
+    secret: sessionSecret(),
     resave: false,
     saveUninitialized: false,
     store,
@@ -51,9 +54,15 @@ export function getSessionStore(): session.Store {
  * Пользователь из cookie-сессии произвольного HTTP-запроса — в первую
  * очередь handshake Socket.IO, который идёт мимо middleware Express.
  * null — нет сессии или нет входа.
+ *
+ * Ключ store — неподписанный id. Как и express-session при чтении:
+ * срезаем префикс `s:` и снимаем подпись unsign(secret) — lookup по
+ * подписанному значению целиком всегда промахивается (#100).
  */
 export async function readSessionUser(req: IncomingMessage): Promise<SessionUser | null> {
-  const sid = sidFromCookieHeader(req.headers.cookie);
+  const signed = sidFromCookieHeader(req.headers.cookie);
+  const sid =
+    signed?.startsWith('s:') === true ? unsign(signed.slice(2), sessionSecret()) : false;
   const current = store;
   if (!sid || !current) return null;
   return new Promise((resolve) => {
