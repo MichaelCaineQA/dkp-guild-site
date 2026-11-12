@@ -96,6 +96,29 @@
 - Проверка: `python3 -m unittest test_dkp` в каталоге с `dkp`, `compose.yml`
   и `Caddyfile` на Linux.
 
+## Ручной деплой с Windows: git archive ломает sh-скрипты
+
+- Источник: переезд стейджа 2026-11-12. `git archive HEAD` на машине
+  владельца (core.autocrlf=true, без .gitattributes) конвертирует текстовые
+  файлы в CRLF — на сервере `sh scripts/backup-prod.sh` падает
+  с `set: Illegal option -`.
+- Обход: для ручной заливки использовать `git -c core.autocrlf=false
+  archive HEAD | ssh ...`. Штатный путь — workflow Deploy на раннере
+  Linux, там проблемы нет.
+
+## FirstVDS Ubuntu 24.04: DNS в контейнерах и занятый порт 80
+
+- Источник: первичная настройка 188.120.225.204, 2026-11-12.
+- DNS: образ использует stub systemd-resolved (127.0.0.53), Docker копирует
+  его в контейнеры, где stub недоступен — Let's Encrypt и любые внешние
+  запросы из контейнеров падают с `read udp 127.0.0.53:53: connection
+  refused`. Лечится `/etc/docker/daemon.json` с явным `dns`
+  (указаны DNS FirstVDS 188.120.247.2/188.120.247.8) + restart docker.
+- В образе предустановлен nginx, слушающий :80 — caddy не стартует
+  (`address already in use`). Лечится `systemctl disable --now nginx`.
+- Парольная аутентификация root по паролю от FirstVDS оставлена включённой
+  (ключи добавлены); hardening sshd на новом сервере не делался.
+
 ## Как пополнять
 
 Для нового подтверждённого бага укажи дату, Issue, симптом, способ
@@ -173,3 +196,25 @@
 - Чистка: `delete from "Guild" where id not in (select id from "Guild"
   order by "createdAt" limit 1)` (зависимых строк нет).
 - Повторная проверка: изменение настройки через API сразу читается GET-ом.
+
+## Discord OAuth с РФ-хостинга: блокировка по SNI, обход через zapret
+
+- Источник: диагностика 2026-11-12 на FirstVDS 188.120.225.204. Симптом:
+  вход через Discord падает с 500, в логах API `InternalOAuthError: Failed
+  to obtain access token` / `ECONNRESET` к discord.com:443.
+- Причина: ТСПУ режет TLS по SNI `discord.com` — TCP к IP Discord проходит,
+  TLS с SNI cloudflare.com на тот же IP работает, с SNI discord.com — reset.
+- Решение: zapret v72.13 на хосте (`/opt/zapret`, релиз с бинарниками,
+  в git-клоне бинарников нет — качать asset релиза). Конфиг
+  `/opt/zapret/config`: MODE_FILTER=hostlist, hostlist
+  `ipset/zapret-hosts-user.txt` = домены Discord, стратегия
+  `--filter-tcp=443 --dpi-desync=fake --dpi-desync-fooling=md5sig
+  --dpi-desync-fake-tls=.../tls_clienthello_www_google_com.bin`
+  (перебраны 7 стратегий, рабочая нашлась скриптом-прогоном; fake+ttl3,
+  split2, multisplit не сработали). Правила в mangle/POSTROUTING покрывают
+  и хост, и Docker-контейнеры (NAT). Сервис: `systemctl enable --now zapret`.
+- Проверка: `curl -s https://discord.com/api/v10/gateway` с хоста и
+  `docker exec dkp-guild-site-api-1 node -e "fetch(...)" ` → 200; callback
+  с фейковым кодом даёт `invalid_grant` (Discord отвечает), а не сетевую
+  ошибку. Если после смены провайдера/аплинка снова сломается — перебрать
+  стратегии заново тем же прогоном.

@@ -57,15 +57,17 @@ Production/staging и резервное копирование описаны �
 - Коммиты: `feat|fix|chore|docs|refactor: суть изменения` (по-русски можно).
 - Не меняй чужие незакоммиченные правки в процессе своей задачи.
 
-## Стенд stage.suneclipse.ru (с 2026-11-10)
+## Стенд stage.suneclipse.ru (переехал 2026-11-12)
 
-- VPS 193.37.68.243 (root, ключ), Ubuntu 24.04, Docker Engine + Compose;
-  checkout `/opt/dkp-guild-site` с серверным `.env.production` (0600,
-  секреты только там). Деплой — workflow `Deploy`: пуш в `main` катит
+- VPS **188.120.225.204** (FirstVDS, root, ключ `~/.ssh/dkp_stage`, alias
+  `dkp-stage`), Ubuntu 24.04, 4 vCPU / 8 ГБ / 99 ГБ NVMe, Docker Engine
+  + Compose; checkout `/opt/dkp-guild-site` с серверным `.env.production`
+  (0600, секреты только там). Деплой — workflow `Deploy`: пуш в `main` катит
   staging автоматически через окружение GitHub `staging`
   (secrets `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_SSH_KEY`/`DEPLOY_KNOWN_HOSTS`,
   variable `DEPLOY_PATH`); ручной workflow_dispatch выбирает окружение
-  и для production требует тег.
+  и для production требует тег. Прежний VPS 193.37.68.243 выведен
+  из эксплуатации (docker-демон и SSH зависали у прошлого провайдера).
 - Проверка: `https://stage.suneclipse.ru/api/health`; вход — резервный
   админ из серверного `.env.production`. Realtime (#97): engine.io-handshake —
   `curl '.../api/socket.io/?EIO=4&transport=polling'` (ответ `0{"sid":...}`);
@@ -75,10 +77,17 @@ Production/staging и резервное копирование описаны �
   их не всегда различает. Жди завершения именно run'а workflow Deploy
   (запоминай его id при старте); сборка api+web на VPS идёт ~10–15 минут,
   `in_progress` всё это время — норма. Контейнер api при этом остаётся
-  старым до конца (`docker ps` покажет прежний CreatedAt).**
+  старым до конца (`docker ps` покажет прежний CreatedAt).** Если ран
+  висит в `pending` — проверь, не держит ли concurrency-группу
+  `deploy-staging` зависший прежний ран (отменить: POST
+  `/actions/runs/{id}/cancel`).
 - DNS стенда должен вести на VPS напрямую, без проксирования Cloudflare
-  (иначе Let's Encrypt и WebSocket аукциона не работают). На 2026-11-10
-  запись была за CF-прокси — переключение на владельце.
+  (иначе Let's Encrypt и WebSocket аукциона не работают). На 2026-11-12
+  stage.suneclipse.ru резолвится в 188.120.225.204 напрямую.
+- Бэкапы: cron `/etc/cron.d/dkp-guild-backup` — ежедневно в 03:17 локально
+  в `/opt/dkp-guild-site/backups` (лог `/var/log/dkp-guild-backup.log`).
+  Внешнее хранилище (`BACKUP_REMOTE`) пока НЕ настроено — на старом
+  сервере проверить не удалось, он был недоступен.
 
 ## Жизненный цикл задачи (поручение владельца 2026-11-09)
 
