@@ -1,16 +1,26 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   winningBid,
   lootLogQuerySchema,
   prefersItemAtLotCreation,
+  createStandaloneLotSchema,
+  lotDurationSec,
+  suggestLotDefaults,
   type AuctionListRow,
   type AuctionListStatus,
+  type AuctionLotRow,
   type DashboardAuction,
   type ItemTargetRole,
+  type LotDefaults,
+  type LotStatus,
   type LootLogPage,
   type LootLogQuery,
   type LootLogRow,
 } from '@dkp/shared';
+import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction-events';
+import { readAuctionSettings, type AuctionSettingsDb } from '../settings/auction-settings';
+import type { EventsActor } from '../events/events.service';
+import type { AuditWriter } from '../members/members.service';
 
 interface StoredBid {
   id: string;
@@ -60,14 +70,49 @@ interface StoredAward {
   auction: {
     id: string;
     lootDrop: {
-      event: { id: string; name: string; startsAt: Date };
+      /** null — лот вне ивента, «хранилище гильдии» (#137). */
+      event: { id: string; name: string; startsAt: Date } | null;
       item: { name: string; rarity: string | null };
     };
   };
 }
 
+interface StoredItem {
+  id: string;
+  name: string;
+  rarity: string | null;
+  slot: string | null;
+  targetRoles: ItemTargetRole[];
+  defaultStartPrice: number | null;
+}
+
+interface StoredAuction {
+  id: string;
+  status: string;
+  startPrice: number;
+  step: number;
+  timerFromFirstBid: boolean;
+  durationSec: number;
+  antiSnipeSec: number;
+  antiSnipeExtendSec: number;
+  noBidTimeoutSec: number | null;
+  markupPct: number;
+  discountPct: number;
+  firstBidAt: Date | null;
+  endsAt: Date | null;
+  createdAt: Date;
+}
+
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
-export interface AuctionsDb {
+export interface AuctionsDb extends AuctionSettingsDb {
+  item: {
+    findUnique(args: { where: { id: string } }): Promise<StoredItem | null>;
+  };
+  lootDrop: {
+    create(args: {
+      data: { eventId: null; itemId: string };
+    }): Promise<{ id: string; createdAt: Date }>;
+  };
   auction: {
     findMany(args: {
       where: { status: string };
@@ -78,6 +123,22 @@ export interface AuctionsDb {
         award: { include: { winner: true } };
       };
     }): Promise<StoredLot[]>;
+    create(args: {
+      data: {
+        lootDropId: string;
+        startPrice: number;
+        step: number;
+        durationSec: number;
+        timerFromFirstBid: boolean;
+        antiSnipeSec: number;
+        antiSnipeExtendSec: number;
+        noBidTimeoutSec: number | null;
+        markupPct: number;
+        discountPct: number;
+        targetRoles: ItemTargetRole[];
+        endsAt: Date | null;
+      };
+    }): Promise<StoredAuction>;
   };
   member: {
     findUnique(args: {
@@ -105,6 +166,7 @@ export interface AuctionsDb {
     }): Promise<StoredAward[]>;
     count(args: { where: Record<string, unknown> }): Promise<number>;
   };
+  auditLog: AuditWriter;
 }
 
 /**
@@ -114,7 +176,10 @@ export interface AuctionsDb {
  */
 @Injectable()
 export class AuctionsService {
-  constructor(private readonly db: AuctionsDb) {}
+  constructor(
+    private readonly db: AuctionsDb,
+    private readonly events: AuctionEventsPort = NOOP_AUCTION_EVENTS,
+  ) {}
 
   /** Лоты одной вкладки: открытые — по ближайшему окончанию, архив — новые сверху. */
   async list(status: AuctionListStatus, viewerMemberId: string | null): Promise<AuctionListRow[]> {
@@ -137,6 +202,72 @@ export class AuctionsService {
       viewerMemberId ? this.db.member.findUnique({ where: { id: viewerMemberId } }) : null,
     ]);
     return lots.map((lot) => this.toRow(lot, viewerMemberId, viewer));
+  }
+
+  /** Начальные значения лота вне ивента (план 6, п. 1) — из настроек и предмета. */
+  async defaultsForItem(itemId: string): Promise<LotDefaults> {
+    const item = await this.mustGetItem(itemId);
+    const settings = await readAuctionSettings(this.db);
+    return suggestLotDefaults(item, settings);
+  }
+
+  /**
+   * Создание лота вне ивента — «хранилище гильдии» (#137, план 2.4): дроп
+   * без ивента + лот с теми же снапшотами и таймерами, что у лота по дропу
+   * ивента (план 6, п. 1–3 и 6). Права auctions.create (Глава/Админ) уже
+   * проверены гардом на контроллере — цели-ивента здесь нет.
+   */
+  async createLot(body: unknown, actor: EventsActor): Promise<AuctionLotRow> {
+    const parsed = createStandaloneLotSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(
+        parsed.error.issues[0]?.message ?? 'Некорректные параметры лота',
+      );
+    }
+    const input = parsed.data;
+    const item = await this.mustGetItem(input.itemId);
+    const settings = await readAuctionSettings(this.db);
+    const durationSec = lotDurationSec(input.durationValue, input.durationUnit);
+    const fromFirstBid = input.timerKind === 'FIRST_BID';
+    const antiSnipeExtendSec =
+      input.antiSnipeExtendSec ??
+      (fromFirstBid ? settings.antiSnipeExtendLiveSec : settings.antiSnipeExtendLongSec);
+    const drop = await this.db.lootDrop.create({
+      data: { eventId: null, itemId: item.id },
+    });
+    const auction = await this.db.auction.create({
+      data: {
+        lootDropId: drop.id,
+        startPrice: input.startPrice,
+        step: input.step,
+        durationSec,
+        timerFromFirstBid: fromFirstBid,
+        antiSnipeSec: input.antiSnipeSec,
+        antiSnipeExtendSec,
+        noBidTimeoutSec: fromFirstBid ? (input.noBidTimeoutSec ?? null) : null,
+        markupPct: settings.foreignClassMarkupPct,
+        discountPct: settings.preferredItemDiscountPct,
+        targetRoles: item.targetRoles,
+        endsAt: fromFirstBid ? null : new Date(Date.now() + durationSec * 1000),
+      },
+    });
+    await this.audit(
+      actor,
+      'AUCTION_CREATE',
+      'Auction',
+      auction.id,
+      `Лот «${item.name}» (хранилище гильдии): старт ${input.startPrice}, ` +
+        `шаг ${input.step}, ${
+          fromFirstBid
+            ? `живая раздача ${durationSec} сек от первой ставки, тайм-аут без ставок ${input.noBidTimeoutSec} сек`
+            : `длинный лот ${durationSec} сек от открытия`
+        }, анти-снайп ${input.antiSnipeSec} сек (продление ${antiSnipeExtendSec} сек), ` +
+        `наценка ${settings.foreignClassMarkupPct}%, скидка ${settings.preferredItemDiscountPct}%`,
+    );
+    const lot = this.toLotRow(auction);
+    // Новый лот — в общий канал списка сразу после фиксации (issue #97).
+    this.events.lotCreated(lot);
+    return lot;
   }
 
   /**
@@ -224,11 +355,55 @@ export class AuctionsService {
       finalPrice: row.finalPrice,
       markupPct: row.markupPct,
       discountPct: row.discountPct,
-      eventId: drop.event.id,
-      eventName: drop.event.name,
-      eventStartsAt: drop.event.startsAt.toISOString(),
+      eventId: drop.event?.id ?? null,
+      eventName: drop.event?.name ?? null,
+      eventStartsAt: drop.event?.startsAt.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
     };
+  }
+
+  private toLotRow(auction: StoredAuction): AuctionLotRow {
+    return {
+      id: auction.id,
+      status: auction.status as LotStatus,
+      startPrice: auction.startPrice,
+      step: auction.step,
+      timerKind: auction.timerFromFirstBid ? 'FIRST_BID' : 'OPENING',
+      durationSec: auction.durationSec,
+      antiSnipeSec: auction.antiSnipeSec,
+      antiSnipeExtendSec: auction.antiSnipeExtendSec,
+      noBidTimeoutSec: auction.noBidTimeoutSec,
+      markupPct: auction.markupPct,
+      discountPct: auction.discountPct,
+      firstBidAt: auction.firstBidAt?.toISOString() ?? null,
+      endsAt: auction.endsAt?.toISOString() ?? null,
+      createdAt: auction.createdAt.toISOString(),
+    };
+  }
+
+  private async mustGetItem(itemId: string): Promise<StoredItem> {
+    const item = await this.db.item.findUnique({ where: { id: itemId } });
+    if (!item) throw new NotFoundException('Предмет не найден');
+    return item;
+  }
+
+  private async audit(
+    actor: EventsActor,
+    action: string,
+    entityType: string,
+    entityId: string,
+    comment: string,
+  ): Promise<void> {
+    await this.db.auditLog.create({
+      data: {
+        actorMemberId: actor.memberId,
+        actorIsAdmin: actor.isAdmin,
+        action,
+        entityType,
+        entityId,
+        comment,
+      },
+    });
   }
 
   private toRow(

@@ -381,8 +381,11 @@ model Item {
 
 model LootDrop {
   id String @id @default(cuid())
-  eventId String
-  event Event @relation(fields: [eventId], references: [id])
+
+  /// Ивент, на котором зафиксирован дроп; null — лот вне ивента,
+  /// «хранилище гильдии» (#137, план 2.4).
+  eventId String?
+  event Event? @relation(fields: [eventId], references: [id])
   itemId String
   item Item @relation(fields: [itemId], references: [id])
   auction Auction?

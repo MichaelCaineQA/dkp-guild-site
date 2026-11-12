@@ -8,6 +8,7 @@ import {
   checkLotExtendAllowed,
   createDropSchema,
   createLotSchema,
+  createStandaloneLotSchema,
   endsAtAfterBid,
   extendLotSchema,
   frozenAmount,
@@ -108,6 +109,47 @@ describe('createLotSchema (issue #93)', () => {
     expect(createLotSchema.safeParse({ ...LIVE_LOT, step: 0 }).success).toBe(false);
     expect(createLotSchema.safeParse({ ...LIVE_LOT, step: 2.5 }).success).toBe(false);
     expect(createLotSchema.safeParse({ ...LIVE_LOT, antiSnipeSec: 7201 }).success).toBe(false);
+  });
+});
+
+describe('createStandaloneLotSchema (#137)', () => {
+  const LONG_LOT = {
+    ...LIVE_LOT,
+    timerKind: 'OPENING',
+    durationValue: 2,
+    durationUnit: 'DAYS',
+    antiSnipeSec: 600,
+    noBidTimeoutSec: undefined,
+    itemId: 'item-1',
+  };
+
+  it('принимает длинный лот с явно выбранным предметом', () => {
+    const parsed = createStandaloneLotSchema.parse(LONG_LOT);
+    expect(parsed.itemId).toBe('item-1');
+    expect(lotDurationSec(parsed.durationValue, parsed.durationUnit)).toBe(2 * 86_400);
+  });
+
+  it('требует предмет', () => {
+    const result = createStandaloneLotSchema.safeParse({ ...LONG_LOT, itemId: '' });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((i) => i.path.includes('itemId'))).toBe(true);
+    }
+  });
+
+  it('наследует границы параметров лота по дропу', () => {
+    expect(createStandaloneLotSchema.safeParse({ ...LONG_LOT, durationValue: 15 }).success).toBe(
+      false,
+    );
+    expect(
+      createStandaloneLotSchema.safeParse({
+        ...LONG_LOT,
+        timerKind: 'FIRST_BID',
+        durationValue: 2,
+        durationUnit: 'DAYS',
+        noBidTimeoutSec: null,
+      }).success,
+    ).toBe(false);
   });
 });
 

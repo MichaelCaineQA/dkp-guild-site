@@ -231,3 +231,67 @@ describe('AuctionLots: список (issue #98)', () => {
     expect(screen.queryByText('Сделать ставку')).toBeNull();
   });
 });
+
+describe('AuctionLots: создание лота вне ивента (#137)', () => {
+  it('кнопка «Создать лот» видна только с правом auctions.create', async () => {
+    vi.mocked(api).mockResolvedValue([]);
+    const { unmount } = render(<AuctionLots viewerMemberId="m-1" viewerRole="DPS" />);
+    await screen.findByText(/Открытых лотов нет/);
+    expect(screen.queryByRole('button', { name: 'Создать лот' })).toBeNull();
+    unmount();
+
+    render(<AuctionLots viewerMemberId="m-1" viewerRole="DPS" canCreateLot />);
+    expect(await screen.findByRole('button', { name: 'Создать лот' })).toBeDefined();
+  });
+
+  it('диалог создаёт лот и обновляет список', async () => {
+    let created = false;
+    vi.mocked(api).mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === '/items')
+        return [
+          {
+            id: 'i-1',
+            name: 'Клинок рассвета',
+            rarity: 'Эпический',
+            slot: 'Оружие',
+            targetRoles: ['DPS'],
+            defaultStartPrice: 120,
+            lotsCount: 0,
+          },
+        ];
+      if (path === '/auctions/lot-defaults/i-1')
+        return {
+          startPrice: 120,
+          step: 1,
+          markupPct: 50,
+          live: {
+            durationValue: 1,
+            durationUnit: 'MINUTES',
+            antiSnipeSec: 30,
+            antiSnipeExtendSec: 30,
+            noBidTimeoutSec: 120,
+          },
+          long: { durationValue: 2, durationUnit: 'DAYS', antiSnipeSec: 600, antiSnipeExtendSec: 600 },
+        };
+      if (path === '/auctions' && init?.method === 'POST') {
+        created = true;
+        return { id: 'a-9', status: 'OPEN' };
+      }
+      if (path.startsWith('/auctions?status=')) return created ? [row()] : [];
+      throw new Error(`unexpected ${path}`);
+    });
+    render(<AuctionLots viewerMemberId="m-1" viewerRole="DPS" canCreateLot />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Создать лот' }));
+    // в открытой модалке две кнопки «Создать лот» — шапка и сабмит формы
+    fireEvent.change(await screen.findByLabelText('Предмет из справочника'), {
+      target: { value: 'i-1' },
+    });
+    await waitFor(() =>
+      expect((screen.getByLabelText('Стартовая цена') as HTMLInputElement).value).toBe('120'),
+    );
+    fireEvent.click(screen.getAllByRole('button', { name: 'Создать лот' }).pop()!);
+
+    expect(await screen.findByText('Клинок рассвета')).toBeDefined();
+  });
+});

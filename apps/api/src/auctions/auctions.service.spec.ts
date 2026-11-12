@@ -1,5 +1,35 @@
+import { NotFoundException } from '@nestjs/common';
+import type { AuditWriter } from '../members/members.service';
 import type { ItemTargetRole } from '@dkp/shared';
 import { AuctionsService, type AuctionsDb } from './auctions.service';
+
+/** Настройки аукциона как Map Setting-строк (как в loot.service.spec). */
+const SETTINGS = new Map<string, number>([
+  ['auction.step', 5],
+  ['auction.liveDurationSec', 90],
+  ['auction.longDurationDays', 2],
+  ['auction.antiSnipeLiveSec', 30],
+  ['auction.antiSnipeExtendLiveSec', 30],
+  ['auction.antiSnipeLongSec', 600],
+  ['auction.antiSnipeExtendLongSec', 600],
+  ['auction.noBidTimeoutSec', 120],
+  ['auction.foreignClassMarkupPct', 50],
+  ['auction.preferredItemDiscountPct', 10],
+]);
+
+const settingsDb = () => ({
+  setting: {
+    findMany: async () =>
+      [...SETTINGS.entries()].map(([key, value]) => ({ key, value })),
+  },
+});
+
+const auditDb = () => {
+  const audit: Array<Record<string, unknown>> = [];
+  return { audit, auditLog: { create: async ({ data }: { data: Record<string, unknown> }) => { audit.push(data); } } as AuditWriter };
+};
+
+const noopAudit: AuditWriter = { create: async () => undefined };
 
 interface LotSeed {
   id: string;
@@ -27,18 +57,12 @@ function makeDb(
   const queries: string[] = [];
   return {
     queries,
-    member: {
-      findUnique: async ({ where }) =>
-        viewer && viewer.id === where.id
-          ? {
-              id: viewer.id,
-              preferredItemId: viewer.preferredItemId,
-              prevPreferredItemId: viewer.prevPreferredItemId ?? null,
-              preferredItemChangedAt: viewer.preferredItemChangedAt ?? null,
-            }
-          : null,
-    },
+    ...settingsDb(),
+    auditLog: noopAudit,
+    item: { findUnique: async () => null },
+    lootDrop: { create: async () => { throw new Error('не должен вызываться'); } },
     auction: {
+      create: async () => { throw new Error('не должен вызываться'); },
       findMany: async ({ where, orderBy }) => {
         queries.push(JSON.stringify({ where, orderBy }));
         const matched = lots.filter((lot) => (lot.status ?? 'OPEN') === where.status);
@@ -99,6 +123,18 @@ function makeDb(
           }));
       },
     },
+    member: {
+      findUnique: async ({ where }) =>
+        viewer && viewer.id === where.id
+          ? {
+              id: viewer.id,
+              preferredItemId: viewer.preferredItemId,
+              prevPreferredItemId: viewer.prevPreferredItemId ?? null,
+              preferredItemChangedAt: viewer.preferredItemChangedAt ?? null,
+            }
+          : null,
+    },
+    lootAward: { findMany: async () => [], count: async () => 0 },
   } as AuctionsDb & { queries: string[] };
 }
 
@@ -222,7 +258,7 @@ interface AwardSeed {
   createdAt?: Date;
   lotId?: string;
   itemId?: string;
-  eventId?: string;
+  eventId?: string | null;
   eventName?: string;
 }
 
@@ -237,7 +273,12 @@ function makeLootDb(
   } = {
     findWhere,
     page,
+    ...settingsDb(),
+    auditLog: noopAudit,
+    item: { findUnique: async () => null },
+    lootDrop: { create: async () => { throw new Error('не должен вызываться'); } },
     auction: {
+      create: async () => { throw new Error('не должен вызываться'); },
       findMany: async () => [],
     },
     member: {
@@ -260,11 +301,14 @@ function makeLootDb(
             auction: {
               id: award.lotId ?? 'a-1',
               lootDrop: {
-                event: {
-                  id: award.eventId ?? 'e-1',
-                  name: award.eventName ?? 'Поход',
-                  startsAt: new Date('2026-11-10T18:00:00Z'),
-                },
+                event:
+                  award.eventId === null
+                    ? null
+                    : {
+                        id: award.eventId ?? 'e-1',
+                        name: award.eventName ?? 'Поход',
+                        startsAt: new Date('2026-11-10T18:00:00Z'),
+                      },
                 item: { name: 'Клинок', rarity: 'эпический' },
               },
             },
@@ -341,5 +385,179 @@ describe('AuctionsService.lootLog (issue #99)', () => {
     const db = makeLootDb([]);
     await expect(new AuctionsService(db).lootLog({ limit: 999 })).rejects.toThrow();
     expect(db.findWhere).toHaveLength(0);
+  });
+
+  it('выдача лота вне ивента: event-поля null (#137)', async () => {
+    const result = await new AuctionsService(makeLootDb([{ id: 'w-1', eventId: null }])).lootLog(
+      {},
+    );
+    expect(result.entries[0]).toMatchObject({
+      awardId: 'w-1',
+      eventId: null,
+      eventName: null,
+      eventStartsAt: null,
+    });
+  });
+});
+
+/** Фейк БД для создания лота вне ивента (#137). */
+function makeCreateDb(item: {
+  id: string;
+  name: string;
+  targetRoles?: ItemTargetRole[];
+  defaultStartPrice?: number | null;
+} | null) {
+  const { audit, auditLog } = auditDb();
+  const created = {
+    drop: null as { data: { eventId: null; itemId: string } } | null,
+    auction: null as Record<string, unknown> | null,
+  };
+  const emitted: unknown[] = [];
+  const events = {
+    lotCreated: (lot: unknown) => {
+      emitted.push(lot);
+    },
+    bidPlaced: () => undefined,
+    lotUpdated: () => undefined,
+    lotClosed: () => undefined,
+  };
+  const db = {
+    ...settingsDb(),
+    auditLog,
+    item: {
+      findUnique: async () =>
+        item
+          ? {
+              id: item.id,
+              name: item.name,
+              rarity: null,
+              slot: null,
+              targetRoles: item.targetRoles ?? (['DPS'] as ItemTargetRole[]),
+              defaultStartPrice: item.defaultStartPrice ?? null,
+            }
+          : null,
+    },
+    lootDrop: {
+      create: async ({ data }: { data: { eventId: null; itemId: string } }) => {
+        created.drop = { data: { ...data } };
+        return { id: 'drop-1', createdAt: new Date('2026-11-12T10:00:00Z') };
+      },
+    },
+    auction: {
+      findMany: async () => [],
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        created.auction = { ...data };
+        return {
+          id: 'auc-1',
+          status: 'OPEN',
+          ...data,
+          firstBidAt: null,
+          createdAt: new Date('2026-11-12T10:00:00Z'),
+        } as never;
+      },
+    },
+    member: { findUnique: async () => null },
+    lootAward: { findMany: async () => [], count: async () => 0 },
+  };
+  return { db: db as unknown as AuctionsDb, created, audit, emitted, events };
+}
+
+const LONG_LOT_BODY = {
+  itemId: 'item-1',
+  startPrice: 120,
+  step: 5,
+  timerKind: 'OPENING',
+  durationValue: 2,
+  durationUnit: 'DAYS',
+  antiSnipeSec: 600,
+  noBidTimeoutSec: undefined,
+};
+
+describe('AuctionsService.createLot — лот вне ивента (#137)', () => {
+  it('дефолты по предмету: рекомендованная цена и настройки', async () => {
+    const { db } = makeCreateDb({ id: 'item-1', name: 'Клинок', defaultStartPrice: 120 });
+    const defaults = await new AuctionsService(db).defaultsForItem('item-1');
+    expect(defaults).toMatchObject({
+      startPrice: 120,
+      step: 5,
+      markupPct: 50,
+      discountPct: 10,
+      long: { durationValue: 2, durationUnit: 'DAYS', antiSnipeSec: 600 },
+    });
+  });
+
+  it('дефолты: предмет не найден — 404', async () => {
+    const { db } = makeCreateDb(null);
+    await expect(new AuctionsService(db).defaultsForItem('nope')).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('длинный лот: дроп без ивента, снапшоты настроек, endsAt от открытия', async () => {
+    const fake = makeCreateDb({ id: 'item-1', name: 'Клинок' });
+    const before = Date.now();
+    const lot = await new AuctionsService(fake.db as AuctionsDb, fake.events as never).createLot(
+      LONG_LOT_BODY,
+      { memberId: 'm-1', isAdmin: false },
+    );
+    expect(fake.created.drop).toEqual({ data: { eventId: null, itemId: 'item-1' } });
+    expect(fake.created.auction).toMatchObject({
+      lootDropId: 'drop-1',
+      startPrice: 120,
+      step: 5,
+      durationSec: 2 * 86_400,
+      timerFromFirstBid: false,
+      antiSnipeSec: 600,
+      antiSnipeExtendSec: 600, // из настроек для длинного лота
+      noBidTimeoutSec: null,
+      markupPct: 50,
+      discountPct: 10,
+      targetRoles: ['DPS'],
+    });
+    const endsAt = fake.created.auction!.endsAt as Date;
+    expect(endsAt.getTime()).toBeGreaterThanOrEqual(before + 2 * 86_400 * 1000);
+    expect(lot).toMatchObject({ id: 'auc-1', status: 'OPEN', timerKind: 'OPENING' });
+    // аудит и рассылка нового лота в общий канал
+    expect(fake.audit[0]).toMatchObject({
+      action: 'AUCTION_CREATE',
+      entityType: 'Auction',
+      entityId: 'auc-1',
+      actorMemberId: 'm-1',
+    });
+    expect(String(fake.audit[0]!.comment)).toContain('хранилище гильдии');
+    expect(fake.emitted).toHaveLength(1);
+  });
+
+  it('живая раздача: endsAt=null до первой ставки, тайм-аут без ставок', async () => {
+    const fake = makeCreateDb({ id: 'item-1', name: 'Клинок' });
+    await new AuctionsService(fake.db as AuctionsDb, fake.events as never).createLot(
+      {
+        ...LONG_LOT_BODY,
+        timerKind: 'FIRST_BID',
+        durationValue: 1.5,
+        durationUnit: 'MINUTES',
+        antiSnipeSec: 30,
+        noBidTimeoutSec: 120,
+      },
+      { memberId: null, isAdmin: true },
+    );
+    expect(fake.created.auction).toMatchObject({
+      timerFromFirstBid: true,
+      durationSec: 90,
+      endsAt: null,
+      noBidTimeoutSec: 120,
+      antiSnipeExtendSec: 30, // из настроек для живой раздачи
+    });
+    expect(fake.audit[0]).toMatchObject({ actorMemberId: null, actorIsAdmin: true });
+  });
+
+  it('некорректные параметры и неизвестный предмет отклоняются', async () => {
+    const fake = makeCreateDb({ id: 'item-1', name: 'Клинок' });
+    const service = new AuctionsService(fake.db as AuctionsDb);
+    await expect(service.createLot({ ...LONG_LOT_BODY, durationValue: 15 }, { memberId: 'm-1', isAdmin: false })).rejects.toThrow();
+    await expect(service.createLot({ ...LONG_LOT_BODY, itemId: '' }, { memberId: 'm-1', isAdmin: false })).rejects.toThrow();
+    await expect(
+      new AuctionsService(makeCreateDb(null).db).createLot(LONG_LOT_BODY, { memberId: 'm-1', isAdmin: false }),
+    ).rejects.toThrow(NotFoundException);
   });
 });

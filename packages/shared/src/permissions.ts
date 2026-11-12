@@ -23,6 +23,7 @@ export const PERMISSIONS = [
   'dkp.penalty', // штрафы и корректировки ДКП
   'items.manage', // справочник предметов
   'auction.bid', // ставки на аукционе
+  'auctions.create', // лот вне ивента («хранилище гильдии») — Глава/Админ
   'profile.view', // профили и статистика
   'profile.edit_own', // свой профиль: роль, прайм-тайм, GS-скрины
   'audit.view', // полный журнал действий — офицерам и выше
@@ -44,6 +45,7 @@ const MIN_RANK: Record<Permission, Rank> = {
   'dkp.penalty': 'GUILD_LEADER',
   'items.manage': 'OFFICER',
   'auction.bid': 'MEMBER',
+  'auctions.create': 'GUILD_LEADER',
   'profile.view': 'MEMBER',
   'profile.edit_own': 'MEMBER',
   'audit.view': 'OFFICER',

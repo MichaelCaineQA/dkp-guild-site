@@ -48,7 +48,16 @@
 - `apps/api/src/auctions` (issue #98): список лотов `GET /auctions?status=`
   (открытые — по ближайшему окончанию, архив — свежие сверху; ведущая ставка,
   своя `myBid.leading`, победитель) и виджет дашборда «Мой аукцион»
-  (`myNearestBidLot`, ближайший лот среди ставок). Кошелёк дашборда
+  (`myNearestBidLot`, ближайший лот среди ставок). Лот вне ивента
+  «хранилище гильдии» (#137, план 2.4): `POST /auctions` +
+  `GET /auctions/lot-defaults/:itemId` (право `auctions.create`, Глава/Админ)
+  — создаёт `LootDrop` с `eventId=null` и лот с обычными снапшотами/таймерами;
+  чтение настроек аукциона — общий `readAuctionSettings` в
+  `apps/api/src/settings/auction-settings.ts` (его же использует loot).
+  Продлить/отменить автономный лот — только Глава/Админ (в
+  `auction-manage` ветка `eventId === null` → `canDecideLotOutcome`);
+  event-поля лут-лога и профиля nullable, UI показывает «Хранилище гильдии».
+  Кошелёк дашборда
   «Мой кошелёк» (#81, PR #128): `GET /dashboard/wallet` — баланс журнала
   (`computeBalance`) + заморозка `frozenAmount` (shared, общая с проверкой
   ставок в `bids.service`): по открытому лоту только ведущая ставка с уже

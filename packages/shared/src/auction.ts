@@ -64,41 +64,55 @@ const intField = (bounds: { min: number; max: number }, label: string) =>
  * Параметры нового лота (приёмка #93): предмет задаётся дропом, дальше —
  * стартовая цена, шаг, тип запуска таймера, длительность и анти-снайп.
  */
-export const createLotSchema = z
-  .object({
-    startPrice: intField(LOT_LIMITS.startPrice, 'Стартовая цена'),
-    step: intField(LOT_LIMITS.step, 'Шаг ставки'),
-    timerKind: z.enum(LOT_TIMER_KINDS),
-    durationValue: z
-      .number({ invalid_type_error: 'Длительность — число' })
-      .positive('Длительность больше нуля'),
-    durationUnit: z.enum(LOT_DURATION_UNITS),
-    antiSnipeSec: intField(LOT_LIMITS.antiSnipeSec, 'Анти-снайп (окно)'),
-    /** Продление окончания при снайп-ставке; по умолчанию — из настроек. */
-    antiSnipeExtendSec: intField(LOT_LIMITS.antiSnipeExtendSec, 'Анти-снайп (продление)').nullish(),
-    noBidTimeoutSec: intField(LOT_LIMITS.noBidTimeoutSec, 'Тайм-аут без ставок').nullish(),
-  })
-  .superRefine((input, ctx) => {
-    const sec = lotDurationSec(input.durationValue, input.durationUnit);
-    const bounds =
-      input.timerKind === 'FIRST_BID' ? LOT_LIMITS.liveDurationSec : LOT_LIMITS.longDurationSec;
-    if (sec < bounds.min || sec > bounds.max) {
-      const label = input.timerKind === 'FIRST_BID' ? 'живой раздачи' : 'длинного лота';
-      ctx.addIssue({
-        code: 'custom',
-        path: ['durationValue'],
-        message: `Длительность ${label}: от ${bounds.min} до ${bounds.max} сек`,
-      });
-    }
-    if (input.timerKind === 'FIRST_BID' && input.noBidTimeoutSec == null) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['noBidTimeoutSec'],
-        message: 'Для живой раздачи укажите тайм-аут без ставок',
-      });
-    }
-  });
+const lotParamsObject = z.object({
+  startPrice: intField(LOT_LIMITS.startPrice, 'Стартовая цена'),
+  step: intField(LOT_LIMITS.step, 'Шаг ставки'),
+  timerKind: z.enum(LOT_TIMER_KINDS),
+  durationValue: z
+    .number({ invalid_type_error: 'Длительность — число' })
+    .positive('Длительность больше нуля'),
+  durationUnit: z.enum(LOT_DURATION_UNITS),
+  antiSnipeSec: intField(LOT_LIMITS.antiSnipeSec, 'Анти-снайп (окно)'),
+  /** Продление окончания при снайп-ставке; по умолчанию — из настроек. */
+  antiSnipeExtendSec: intField(LOT_LIMITS.antiSnipeExtendSec, 'Анти-снайп (продление)').nullish(),
+  noBidTimeoutSec: intField(LOT_LIMITS.noBidTimeoutSec, 'Тайм-аут без ставок').nullish(),
+});
+
+const refineLotParams = (
+  input: z.infer<typeof lotParamsObject>,
+  ctx: z.RefinementCtx,
+): void => {
+  const sec = lotDurationSec(input.durationValue, input.durationUnit);
+  const bounds =
+    input.timerKind === 'FIRST_BID' ? LOT_LIMITS.liveDurationSec : LOT_LIMITS.longDurationSec;
+  if (sec < bounds.min || sec > bounds.max) {
+    const label = input.timerKind === 'FIRST_BID' ? 'живой раздачи' : 'длинного лота';
+    ctx.addIssue({
+      code: 'custom',
+      path: ['durationValue'],
+      message: `Длительность ${label}: от ${bounds.min} до ${bounds.max} сек`,
+    });
+  }
+  if (input.timerKind === 'FIRST_BID' && input.noBidTimeoutSec == null) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['noBidTimeoutSec'],
+      message: 'Для живой раздачи укажите тайм-аут без ставок',
+    });
+  }
+};
+
+export const createLotSchema = lotParamsObject.superRefine(refineLotParams);
 export type CreateLotInput = z.infer<typeof createLotSchema>;
+
+/**
+ * Лот вне ивента — «хранилище гильдии» (#137): предмет выбирается явно
+ * в той же форме, параметры и границы — как у лота по дропу (план 2.4).
+ */
+export const createStandaloneLotSchema = lotParamsObject
+  .extend({ itemId: z.string().min(1, 'Выберите предмет') })
+  .superRefine(refineLotParams);
+export type CreateStandaloneLotInput = z.infer<typeof createStandaloneLotSchema>;
 
 /** Фиксация дропа: предмет из справочника. */
 export const createDropSchema = z.object({
