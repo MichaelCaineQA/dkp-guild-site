@@ -232,7 +232,7 @@ function LootRow({ row }: { row: LootLogRow }) {
           {row.winnerName}
         </a>
       </Table.Td>
-      <Table.Td>{row.eventName}</Table.Td>
+      <Table.Td>{row.eventName ?? <Muted>Хранилище гильдии</Muted>}</Table.Td>
       <Table.Td className="tabular-nums font-semibold">
         {row.finalPrice}
         {row.markupPct > 0 && (

@@ -10,17 +10,15 @@ import {
   createDropSchema,
   createLotSchema,
   lotDurationSec,
-  parseSettingValue,
-  SETTING_DEFAULTS,
   suggestLotDefaults,
   type AuctionLotRow,
-  type AuctionSettingValues,
   type ItemTargetRole,
   type LotDefaults,
   type LootDropRow,
   type LotStatus,
 } from '@dkp/shared';
 import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction-events';
+import { readAuctionSettings } from '../settings/auction-settings';
 import type { EventsActor } from '../events/events.service';
 import type { AuditWriter } from '../members/members.service';
 
@@ -113,19 +111,6 @@ export interface LootDb {
   auditLog: AuditWriter;
 }
 
-const AUCTION_SETTING_KEYS = [
-  'auction.step',
-  'auction.liveDurationSec',
-  'auction.longDurationDays',
-  'auction.antiSnipeLiveSec',
-  'auction.antiSnipeExtendLiveSec',
-  'auction.antiSnipeLongSec',
-  'auction.antiSnipeExtendLongSec',
-  'auction.noBidTimeoutSec',
-  'auction.foreignClassMarkupPct',
-  'auction.preferredItemDiscountPct',
-] as const;
-
 /**
  * Дроп и создание лота в проведении ивента (issue #93, план 2.4 и 6).
  * Права — управляющие ивента (events.conduct, план 2.6); каждое действие
@@ -165,7 +150,7 @@ export class LootService {
   ): Promise<LotDefaults> {
     await this.assertCanConduct(eventId, actor, actorRank);
     const item = await this.mustGetItem(itemId);
-    const settings = await this.readAuctionSettings();
+    const settings = await readAuctionSettings(this.db);
     return suggestLotDefaults(item, settings);
   }
 
@@ -223,7 +208,7 @@ export class LootService {
     if (!drop || drop.eventId !== eventId) throw new NotFoundException('Дроп не найден');
     if (drop.auction) throw new ConflictException('Лот по этому дропу уже создан');
 
-    const settings = await this.readAuctionSettings();
+    const settings = await readAuctionSettings(this.db);
     const durationSec = lotDurationSec(input.durationValue, input.durationUnit);
     const fromFirstBid = input.timerKind === 'FIRST_BID';
     const antiSnipeExtendSec =
@@ -297,29 +282,6 @@ export class LootService {
     const item = await this.db.item.findUnique({ where: { id: itemId } });
     if (!item) throw new NotFoundException('Предмет не найден');
     return item;
-  }
-
-  /** Настройки аукциона с дефолтами реестра для отсутствующих ключей. */
-  private async readAuctionSettings(): Promise<AuctionSettingValues> {
-    const rows = await this.db.setting.findMany({
-      where: { key: { in: [...AUCTION_SETTING_KEYS] } },
-      select: { key: true, value: true },
-    });
-    const stored = new Map(rows.map((row) => [row.key, row.value]));
-    const read = (key: (typeof AUCTION_SETTING_KEYS)[number]) =>
-      parseSettingValue(key, stored.get(key) ?? SETTING_DEFAULTS[key]);
-    return {
-      step: read('auction.step'),
-      liveDurationSec: read('auction.liveDurationSec'),
-      longDurationDays: read('auction.longDurationDays'),
-      antiSnipeLiveSec: read('auction.antiSnipeLiveSec'),
-      antiSnipeExtendLiveSec: read('auction.antiSnipeExtendLiveSec'),
-      antiSnipeLongSec: read('auction.antiSnipeLongSec'),
-      antiSnipeExtendLongSec: read('auction.antiSnipeExtendLongSec'),
-      noBidTimeoutSec: read('auction.noBidTimeoutSec'),
-      foreignClassMarkupPct: read('auction.foreignClassMarkupPct'),
-      preferredItemDiscountPct: read('auction.preferredItemDiscountPct'),
-    };
   }
 
   private toLotRow(auction: StoredAuction): AuctionLotRow {

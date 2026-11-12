@@ -8,23 +8,22 @@ import {
   createLotSchema,
   extendLotSchema,
   formatTargetRoles,
-  LOT_DURATION_UNIT_LABELS,
-  LOT_DURATION_UNITS,
-  LOT_LIMITS,
   LOT_MANAGE_LIMITS,
   LOT_STATUS_LABELS,
-  LOT_TIMER_KIND_LABELS,
-  LOT_TIMER_KINDS,
   type ItemRow,
   type LootDropRow,
   type LotDefaults,
-  type LotDurationUnit,
   type LotManageResult,
   type LotStatus,
-  type LotTimerKind,
 } from '@dkp/shared';
 import { api } from '../lib/api';
 import { createRequestId } from '../lib/request-id';
+import {
+  LotParamsFields,
+  lotParamsFromDefaults,
+  lotParamsPayload,
+  type LotParamsState,
+} from './lot-params-fields';
 import {
   Badge,
   Button,
@@ -40,16 +39,9 @@ import {
   Table,
 } from './ui';
 
-interface LotFormState {
+interface LotFormState extends LotParamsState {
   drop: LootDropRow;
   defaults: LotDefaults;
-  startPrice: string;
-  step: string;
-  timerKind: LotTimerKind;
-  durationValue: string;
-  durationUnit: LotDurationUnit;
-  antiSnipeSec: string;
-  noBidTimeoutSec: string;
 }
 
 /** Ручное действие с лотом (issue #96): вид и лот, с которым работаем. */
@@ -154,54 +146,15 @@ export function LootPanel({
     setFormError(null);
     try {
       const defaults = await api<LotDefaults>(`/events/${eventId}/loot/defaults/${drop.itemId}`);
-      setForm({
-        drop,
-        defaults,
-        startPrice: String(defaults.startPrice),
-        step: String(defaults.step),
-        timerKind: 'FIRST_BID',
-        durationValue: String(defaults.live.durationValue),
-        durationUnit: defaults.live.durationUnit,
-        antiSnipeSec: String(defaults.live.antiSnipeSec),
-        noBidTimeoutSec: String(defaults.live.noBidTimeoutSec),
-      });
+      setForm({ drop, defaults, ...lotParamsFromDefaults('FIRST_BID', defaults) });
     } catch (err) {
       setError(errorMessage(err, 'Не удалось загрузить параметры лота'));
     }
   };
 
-  const switchKind = (form: LotFormState, timerKind: LotTimerKind): LotFormState => {
-    if (timerKind === 'FIRST_BID') {
-      return {
-        ...form,
-        timerKind,
-        durationValue: String(form.defaults.live.durationValue),
-        durationUnit: 'MINUTES',
-        antiSnipeSec: String(form.defaults.live.antiSnipeSec),
-        noBidTimeoutSec: String(form.defaults.live.noBidTimeoutSec),
-      };
-    }
-    return {
-      ...form,
-      timerKind,
-      durationValue: String(form.defaults.long.durationValue),
-      durationUnit: 'DAYS',
-      antiSnipeSec: String(form.defaults.long.antiSnipeSec),
-    };
-  };
-
   const createLot = async () => {
     if (!form) return;
-    const payload = {
-      startPrice: Number(form.startPrice),
-      step: Number(form.step),
-      timerKind: form.timerKind,
-      durationValue: Number(form.durationValue),
-      durationUnit: form.durationUnit,
-      antiSnipeSec: Number(form.antiSnipeSec),
-      noBidTimeoutSec: form.timerKind === 'FIRST_BID' ? Number(form.noBidTimeoutSec) : undefined,
-    };
-    const parsed = createLotSchema.safeParse(payload);
+    const parsed = createLotSchema.safeParse(lotParamsPayload(form));
     if (!parsed.success) {
       setFormError(parsed.error.issues[0]?.message ?? 'Проверьте параметры лота');
       return;
@@ -427,86 +380,11 @@ export function LootPanel({
           wide
         >
           <div className="flex flex-col gap-3">
-            <Field label="Тип таймера">
-              <Select
-                value={form.timerKind}
-                onChange={(e) => setForm(switchKind(form, e.target.value as LotTimerKind))}
-              >
-                {LOT_TIMER_KINDS.map((kind) => (
-                  <option key={kind} value={kind}>
-                    {LOT_TIMER_KIND_LABELS[kind]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Стартовая цена">
-              <Input
-                type="number"
-                min={LOT_LIMITS.startPrice.min}
-                max={LOT_LIMITS.startPrice.max}
-                step={1}
-                value={form.startPrice}
-                onChange={(e) => setForm({ ...form, startPrice: e.target.value })}
-              />
-            </Field>
-            <Field label="Минимальный шаг ставки">
-              <Input
-                type="number"
-                min={LOT_LIMITS.step.min}
-                max={LOT_LIMITS.step.max}
-                step={1}
-                value={form.step}
-                onChange={(e) => setForm({ ...form, step: e.target.value })}
-              />
-            </Field>
-            <Field label="Длительность">
-              <Input
-                type="number"
-                min={0}
-                step={form.durationUnit === 'MINUTES' ? 0.5 : 1}
-                value={form.durationValue}
-                onChange={(e) => setForm({ ...form, durationValue: e.target.value })}
-              />
-              <Select
-                value={form.durationUnit}
-                onChange={(e) =>
-                  setForm({ ...form, durationUnit: e.target.value as LotDurationUnit })
-                }
-                aria-label="Единица длительности"
-              >
-                {LOT_DURATION_UNITS.map((unit) => (
-                  <option key={unit} value={unit}>
-                    {LOT_DURATION_UNIT_LABELS[unit]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Анти-снайп, сек (окно и продление)">
-              <Input
-                type="number"
-                min={LOT_LIMITS.antiSnipeSec.min}
-                max={LOT_LIMITS.antiSnipeSec.max}
-                step={1}
-                value={form.antiSnipeSec}
-                onChange={(e) => setForm({ ...form, antiSnipeSec: e.target.value })}
-              />
-            </Field>
-            {form.timerKind === 'FIRST_BID' && (
-              <Field label="Тайм-аут без ставок, сек">
-                <Input
-                  type="number"
-                  min={LOT_LIMITS.noBidTimeoutSec.min}
-                  max={LOT_LIMITS.noBidTimeoutSec.max}
-                  step={1}
-                  value={form.noBidTimeoutSec}
-                  onChange={(e) => setForm({ ...form, noBidTimeoutSec: e.target.value })}
-                />
-              </Field>
-            )}
-            <Muted>
-              Наценка «чужим» классам по настройкам гильдии: {form.defaults.markupPct}% —
-              зафиксируется на лоте при создании.
-            </Muted>
+            <LotParamsFields
+              state={form}
+              defaults={form.defaults}
+              onChange={(next) => setForm({ ...form, ...next })}
+            />
             {formError && <ErrorText>{formError}</ErrorText>}
             <div className="mt-2 flex justify-end gap-2">
               <Button disabled={busy} onClick={() => setForm(null)}>

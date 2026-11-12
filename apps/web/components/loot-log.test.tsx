@@ -60,6 +60,21 @@ it('показывает выдачи: предмет, получатель, с�
   );
 });
 
+it('выдача лота вне ивента помечается «Хранилище гильдии» (#137)', async () => {
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === '/members') return members;
+    if (path === '/events') return events;
+    if (path === '/items') return items;
+    return {
+      entries: [row({ eventId: null, eventName: null, eventStartsAt: null })],
+      total: 1,
+    };
+  });
+  render(<LootLog />);
+  expect(await screen.findByText('Хранилище гильдии')).toBeDefined();
+  expect(screen.queryByRole('cell', { name: 'Осада' })).toBeNull();
+});
+
 it('фильтр по игроку уходит в запрос, сброс возвращает все', async () => {
   render(<LootLog />);
   await screen.findByRole('cell', { name: /Клинок зари/ });

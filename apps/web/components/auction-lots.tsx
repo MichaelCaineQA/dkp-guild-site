@@ -15,6 +15,7 @@ import {
 } from '@dkp/shared';
 import { api } from '../lib/api';
 import { useAuctionLot } from '../lib/use-auction-lot';
+import { CreateLotDialog } from './create-lot-dialog';
 import { Badge, Button, Card, ErrorText, Input, Modal, Muted, SectionTitle, Table } from './ui';
 
 type StatusTab = AuctionListStatus;
@@ -65,19 +66,24 @@ function errorMessage(error: unknown, fallback: string): string {
 /**
  * Лоты аукциона (issue #98, план 2.4/6 п. 10): вкладки открытых,
  * завершённых и отменённых лотов; карточка лота со ставками, таймером
- * и формой ставки обновляется в реальном времени (#97).
+ * и формой ставки обновляется в реальном времени (#97). Глава/Админ
+ * создаёт здесь лот вне ивента — «хранилище гильдии» (#137).
  */
 export function AuctionLots({
   viewerMemberId,
   viewerRole,
+  canCreateLot = false,
 }: {
   viewerMemberId: string | null;
   viewerRole: CombatRole | null;
+  /** Глава/Админ: кнопка «Создать лот» — лот без ивента (#137). */
+  canCreateLot?: boolean;
 }) {
   const [status, setStatus] = useState<StatusTab>('OPEN');
   const [rows, setRows] = useState<AuctionListRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<AuctionListRow | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(async (tab: StatusTab) => {
     try {
@@ -105,12 +111,19 @@ export function AuctionLots({
     <Card>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <SectionTitle>Лоты</SectionTitle>
-        <div className="flex gap-2" role="tablist" aria-label="Состояния лотов">
-          {STATUS_TABS.map(([key, label]) => (
-            <Button key={key} onClick={() => setStatus(key)} aria-pressed={status === key}>
-              {label}
+        <div className="flex flex-wrap items-center gap-2">
+          {canCreateLot && (
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              Создать лот
             </Button>
-          ))}
+          )}
+          <div className="flex gap-2" role="tablist" aria-label="Состояния лотов">
+            {STATUS_TABS.map(([key, label]) => (
+              <Button key={key} onClick={() => setStatus(key)} aria-pressed={status === key}>
+                {label}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -141,6 +154,13 @@ export function AuctionLots({
           viewerMemberId={viewerMemberId}
           viewerRole={viewerRole}
           onClose={() => setSelected(null)}
+        />
+      )}
+
+      {creating && (
+        <CreateLotDialog
+          onClose={() => setCreating(false)}
+          onCreated={() => void load(status)}
         />
       )}
     </Card>

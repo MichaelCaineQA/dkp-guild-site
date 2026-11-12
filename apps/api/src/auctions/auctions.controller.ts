@@ -1,4 +1,14 @@
-import { BadRequestException, Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AUCTION_LIST_STATUSES, type AuctionListStatus } from '@dkp/shared';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard';
 import { PermissionsGuard, RequirePermission } from '../permissions/permissions.guard';
@@ -7,7 +17,8 @@ import { AuctionsService } from './auctions.service';
 /**
  * Список лотов экрана аукциона (issue #98, план 6 п. 10): открытые,
  * завершённые и отменённые. Ставки видны всем членам гильдии (план 6);
- * свои действия с лотом — проведение ивента (loot, #96).
+ * свои действия с лотом — проведение ивента (loot, #96). Лот вне ивента
+ * «хранилище гильдии» создаёт Глава/Админ прямо отсюда (#137, план 2.4).
  */
 @Controller('auctions')
 @UseGuards(AuthGuard, PermissionsGuard)
@@ -38,5 +49,25 @@ export class AuctionsController {
   @RequirePermission('members.view_roster')
   lootLog(@Query() query: Record<string, string>): ReturnType<AuctionsService['lootLog']> {
     return this.auctions.lootLog(query);
+  }
+
+  /** Начальные значения лота вне ивента по предмету (#137). */
+  @Get('lot-defaults/:itemId')
+  @RequirePermission('auctions.create')
+  lotDefaults(
+    @Param('itemId') itemId: string,
+  ): ReturnType<AuctionsService['defaultsForItem']> {
+    return this.auctions.defaultsForItem(itemId);
+  }
+
+  /** Создание лота вне ивента — «хранилище гильдии» (#137, план 2.4). */
+  @Post()
+  @RequirePermission('auctions.create')
+  createLot(
+    @Body() body: unknown,
+    @Req() req: AuthedRequest,
+  ): ReturnType<AuctionsService['createLot']> {
+    const user = req.session!.user!;
+    return this.auctions.createLot(body, { memberId: user.memberId, isAdmin: user.isAdmin });
   }
 }

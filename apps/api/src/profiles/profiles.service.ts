@@ -129,7 +129,8 @@ interface StoredProfileAward {
   auction: {
     id: string;
     lootDrop: {
-      event: { id: string; name: string; startsAt: Date };
+      /** null — лот вне ивента, «хранилище гильдии» (#137). */
+      event: { id: string; name: string; startsAt: Date } | null;
       item: { name: string; rarity: string | null };
     };
   };
@@ -214,9 +215,9 @@ export class ProfilesService {
       finalPrice: award.finalPrice,
       markupPct: award.markupPct,
       discountPct: award.discountPct,
-      eventId: drop.event.id,
-      eventName: drop.event.name,
-      eventStartsAt: drop.event.startsAt.toISOString(),
+      eventId: drop.event?.id ?? null,
+      eventName: drop.event?.name ?? null,
+      eventStartsAt: drop.event?.startsAt.toISOString() ?? null,
       createdAt: award.createdAt.toISOString(),
     };
   }

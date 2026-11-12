@@ -59,7 +59,7 @@ interface StoredAuction {
   firstBidAt: Date | null;
   endsAt: Date | null;
   createdAt: Date;
-  lootDrop: { id: string; eventId: string; item: { name: string } };
+  lootDrop: { id: string; eventId: string | null; item: { name: string } };
   bids: StoredBid[];
   award: StoredAward | null;
 }
@@ -480,13 +480,20 @@ export class AuctionManageService {
     return auction;
   }
 
-  /** Продление/отмена — управляющим ивента лота (план 2.6 и 6, п. 8). */
+  /**
+   * Продление/отмена — управляющим ивента лота (план 2.6 и 6, п. 8).
+   * Лот вне ивента (#137): ивента и РЛ нет — управляют Глава/Админ.
+   */
   private async assertCanConduct(
     tx: ManageTx,
     auction: StoredAuction,
     actor: ManageActor,
     action: string,
   ) {
+    if (auction.lootDrop.eventId === null) {
+      this.assertCanDecide(actor, action);
+      return;
+    }
     const event = await tx.event.findUnique({
       where: { id: auction.lootDrop.eventId },
     });

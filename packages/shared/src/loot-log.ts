@@ -39,9 +39,10 @@ export interface LootLogRow {
   markupPct: number;
   /** Применённая скидка за предпочитаемый предмет, % (0 — не предпочитался). */
   discountPct: number;
-  eventId: string;
-  eventName: string;
-  eventStartsAt: string;
+  /** Ивент лота; null — лот вне ивента, «хранилище гильдии» (#137). */
+  eventId: string | null;
+  eventName: string | null;
+  eventStartsAt: string | null;
   createdAt: string;
 }
 
@@ -55,9 +56,10 @@ export interface ProfileLootRow {
   markupPct: number;
   /** Применённая скидка за предпочитаемый предмет, % (0 — не предпочитался). */
   discountPct: number;
-  eventId: string;
-  eventName: string;
-  eventStartsAt: string;
+  /** Ивент лота; null — лот вне ивента, «хранилище гильдии» (#137). */
+  eventId: string | null;
+  eventName: string | null;
+  eventStartsAt: string | null;
   createdAt: string;
 }
 

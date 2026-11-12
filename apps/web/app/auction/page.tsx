@@ -79,6 +79,8 @@ export default function AuctionPage() {
   const [viewerRole, setViewerRole] = useState<CombatRole | null>(null);
 
   const canManage = user ? can(user, 'items.manage') : false;
+  // Лот вне ивента «хранилище гильдии» создаёт Глава/Админ (#137)
+  const canCreateLot = user ? can(user, 'auctions.create') : false;
 
   // Глубокая ссылка из профиля: ?loot-member=<id> сразу открывает лут-лог
   useEffect(() => {
@@ -228,7 +230,11 @@ export default function AuctionPage() {
       </div>
 
       {tab === 'lots' && (
-        <AuctionLots viewerMemberId={user.memberId} viewerRole={viewerRole} />
+        <AuctionLots
+          viewerMemberId={user.memberId}
+          viewerRole={viewerRole}
+          canCreateLot={canCreateLot}
+        />
       )}
 
       {tab === 'log' && <LootLog />}

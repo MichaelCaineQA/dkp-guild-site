@@ -35,7 +35,7 @@ interface AuctionSeed {
   createdAt?: Date;
   eventName?: string;
   itemName?: string;
-  eventId?: string;
+  eventId?: string | null;
 }
 
 const LOT: AuctionSeed = {
@@ -116,7 +116,7 @@ function makeDb(options: {
           ...found,
           lootDrop: {
             id: 'd-1',
-            eventId: found.eventId ?? event.id,
+            eventId: found.eventId === null ? null : (found.eventId ?? event.id),
             item: { name: found.itemName ?? 'Предмет' },
           },
           bids: bids
@@ -282,6 +282,43 @@ describe('AuctionManageService: отмена (issue #96, план 6, п. 8)', ()
     await expect(service(makeDb({}).db).cancel('a-1', {}, RAID_LEAD)).rejects.toThrow(
       BadRequestException,
     );
+  });
+});
+
+describe('AuctionManageService: лот вне ивента (#137)', () => {
+  it('Глава продлевает автономный лот — ивента и РЛ нет', async () => {
+    const { db, auctions, audit } = makeDb({ auctions: [{ ...LOT, eventId: null }] });
+    const result = await service(db).extend(
+      'a-1',
+      { extendSec: 300, comment: 'ещё время' },
+      LEADER,
+    );
+    expect(result.lot.status).toBe('OPEN');
+    expect((auctions[0]!.endsAt as Date).getTime()).toBe(NOW.getTime() + 3_600_000 + 300_000);
+    expect(audit[0]).toMatchObject({ action: 'AUCTION_EXTEND', actorMemberId: 'm-leader' });
+  });
+
+  it('резервный админ отменяет автономный лот без записей журнала', async () => {
+    const { db, auctions, entries, audit } = makeDb({ auctions: [{ ...LOT, eventId: null }] });
+    const result = await service(db).cancel('a-1', { comment: 'сняли с торгов' }, RESERVE_ADMIN);
+    expect(result.lot.status).toBe('CANCELLED');
+    expect(auctions[0]!.status).toBe('CANCELLED');
+    expect(entries).toHaveLength(0);
+    expect(audit[0]).toMatchObject({ action: 'AUCTION_CANCEL' });
+  });
+
+  it('РЛ ивента и рядовой автономным лотом не управляют — 403', async () => {
+    for (const actor of [RAID_LEAD, OFFICER]) {
+      const { db, auctions, audit } = makeDb({ auctions: [{ ...LOT, eventId: null }] });
+      await expect(
+        service(db).extend('a-1', { extendSec: 300, comment: 'причина' }, actor),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(service(db).cancel('a-1', { comment: 'причина' }, actor)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(auctions[0]!.status).toBe('OPEN');
+      expect(audit).toHaveLength(0);
+    }
   });
 });
 
