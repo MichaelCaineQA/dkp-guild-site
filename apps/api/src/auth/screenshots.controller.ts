@@ -3,6 +3,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   Res,
   UploadedFile,
@@ -32,8 +33,10 @@ export class ScreenshotsController {
     @Param('id') id: string,
     @Req() req: AuthedRequest,
     @Res({ passthrough: true }) res: Response,
+    @Query('kpId') kpId?: string,
+    @Query('packId') packId?: string,
   ) {
-    const file = await this.screenshots.download(id, req.session!.user!);
+    const file = await this.screenshots.download(id, req.session!.user!, kpId, packId);
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cross-Origin-Resource-Policy', 'same-site');

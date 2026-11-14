@@ -32,6 +32,36 @@ const c = (
 
 /** Ключи привязаны к методам контроллеров; пути и HTTP-статусы сканирует Nest. */
 export const contracts: Record<string, Contract> = {
+  Org_roster: c(
+    'Структура и состав групп',
+    object({
+      groups: array(
+        object({
+          id: str,
+          name: str,
+          leaderId: { ...str, nullable: true },
+          packs: array(
+            object({ id: str, name: str, kpId: str, leaderId: { ...str, nullable: true } }),
+          ),
+        }),
+      ),
+      members: array(
+        object(
+          {
+            id: str,
+            nickname: str,
+            pack: { type: 'object', nullable: true, additionalProperties: true },
+            gearScore: { type: 'number', nullable: true },
+            screenshotIds: array(str),
+          },
+          ['id', 'nickname', 'pack'],
+        ),
+      ),
+    }),
+    {
+      description: 'GS доступен по правам выбранной вкладки.',
+    },
+  ),
   Org_createKp: c('Создать КП', 'OrgKp', {
     body: 'OrgCreateKp',
     access: leader,
@@ -228,7 +258,7 @@ export const contracts: Record<string, Contract> = {
     { type: 'string', format: 'binary' },
     {
       responseTypes: ['image/png', 'image/jpeg', 'image/webp'],
-      access: 'Владелец файла, Глава или Админ.',
+      access: 'Владелец файла, Глава, Админ или лидер группы в контексте состава.',
       errors: [404],
       description:
         'Для остальных — 404. Cache-Control: private, no-store. Прямые ссылки проверяют те же права.',

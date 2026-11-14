@@ -72,12 +72,18 @@ export function RosterTabs({
   requests?: boolean;
   /** Вкладка «Заблокированные» — только Главе/Админу (issue #149). */
   blocked?: boolean;
-  current: 'members' | 'requests' | 'blocked';
+  current: 'members' | 'kp' | 'pack' | 'requests' | 'blocked';
 }) {
   return (
-    <nav aria-label="Вкладки состава" className="mb-4 flex gap-4">
+    <nav aria-label="Вкладки состава" className="mb-4 flex flex-wrap gap-4">
       <TextLink href="/roster" aria-current={current === 'members' ? 'page' : undefined}>
         Участники
+      </TextLink>
+      <TextLink href="/roster/kp" aria-current={current === 'kp' ? 'page' : undefined}>
+        КП
+      </TextLink>
+      <TextLink href="/roster/pack" aria-current={current === 'pack' ? 'page' : undefined}>
+        Пак
       </TextLink>
       {requests && (
         <TextLink href="/link-requests" aria-current={current === 'requests' ? 'page' : undefined}>

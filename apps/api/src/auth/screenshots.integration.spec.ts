@@ -21,6 +21,14 @@ const metadata = {
 const audit = jest.fn(async () => ({}));
 const db = {
   user: { findUnique: jest.fn(async () => ({ discordId: 'discord' })) },
+  member: {
+    findFirst: jest.fn(
+      async (): Promise<{
+        pack: { leaderId: string | null; kp: { leaderId: string | null } };
+      } | null> => null,
+    ),
+    findUnique: jest.fn(async () => ({ blockedAt: null })),
+  },
   screenshot: metadata,
   $transaction: async (work: (tx: unknown) => Promise<unknown>) =>
     work({ screenshot: metadata, auditLog: { create: audit } }),
@@ -61,7 +69,14 @@ describe('Приватные скриншоты через HTTP', () => {
       await rm(directory, { recursive: true, force: true });
   });
   beforeEach(() => {
-    actor = { userId: 'owner', username: 'Новый', rank: null, memberId: null, isAdmin: false, blocked: false };
+    actor = {
+      userId: 'owner',
+      username: 'Новый',
+      rank: null,
+      memberId: null,
+      isAdmin: false,
+      blocked: false,
+    };
     jest.clearAllMocks();
   });
   const upload = (data: Buffer = png, type = 'image/png') => {
@@ -92,13 +107,21 @@ describe('Приватные скриншоты через HTTP', () => {
         username: 'Другой',
         rank,
         memberId: rank ? 'other-member' : null,
-        isAdmin: false, blocked: false,
+        isAdmin: false,
+        blocked: false,
       };
       expect((await fetch(`${url}/screenshots/${id}`)).status).toBe(404);
     }
     actor!.rank = 'GUILD_LEADER';
     expect((await fetch(`${url}/screenshots/${id}`)).status).toBe(200);
-    actor = { userId: 'admin:a', username: 'a', rank: null, memberId: null, isAdmin: true, blocked: false };
+    actor = {
+      userId: 'admin:a',
+      username: 'a',
+      rank: null,
+      memberId: null,
+      isAdmin: true,
+      blocked: false,
+    };
     expect((await fetch(`${url}/screenshots/${id}`)).status).toBe(200);
     expect(audit).toHaveBeenCalledTimes(1);
   });
@@ -110,6 +133,24 @@ describe('Приватные скриншоты через HTTP', () => {
     png.copy(tooBig);
     expect((await upload(tooBig)).status).toBe(413);
     expect(metadata.create).toHaveBeenCalledTimes(1);
+  });
+  it('лидер пака открывает скриншот в выбранной группе, без контекста доступ закрыт', async () => {
+    const { id } = (await (await upload()).json()) as { id: string };
+    actor = {
+      userId: 'leader',
+      username: 'Лидер',
+      rank: 'MEMBER',
+      memberId: 'leader-member',
+      isAdmin: false,
+      blocked: false,
+    };
+    db.member.findFirst.mockResolvedValue({
+      pack: { leaderId: 'leader-member', kp: { leaderId: null } },
+    });
+    expect((await fetch(`${url}/screenshots/${id}`)).status).toBe(404);
+    expect((await fetch(`${url}/screenshots/${id}?packId=own`)).status).toBe(200);
+    db.member.findFirst.mockResolvedValue(null);
+    expect((await fetch(`${url}/screenshots/${id}?packId=other`)).status).toBe(404);
   });
   it('не доверяет расширению и MIME; SVG и пустой файл отклоняются', async () => {
     for (const [data, type] of [
