@@ -32,6 +32,36 @@ const c = (
 
 /** Ключи привязаны к методам контроллеров; пути и HTTP-статусы сканирует Nest. */
 export const contracts: Record<string, Contract> = {
+  Org_createKp: c('Создать КП', 'OrgKp', {
+    body: 'OrgCreateKp',
+    access: leader,
+    errors: [400, 403, 404, 409],
+  }),
+  Org_createPack: c('Создать пак', 'OrgPack', {
+    body: 'OrgCreatePack',
+    access: 'Глава, администратор или лидер выбранной КП.',
+    errors: [400, 403, 404, 409],
+  }),
+  Org_moveMember: c('Перевести участника', 'Ok', {
+    body: 'OrgMoveMember',
+    access: leader,
+    errors: [400, 403, 404, 409],
+  }),
+  Org_movePack: c('Перевести пак', 'Ok', {
+    body: 'OrgMovePack',
+    access: leader,
+    errors: [400, 403, 404, 409],
+  }),
+  Org_setKpLeader: c('Назначить лидера КП', 'Ok', {
+    body: 'OrgLeader',
+    access: leader,
+    errors: [400, 403, 404, 409],
+  }),
+  Org_setPackLeader: c('Назначить лидера пака', 'Ok', {
+    body: 'OrgLeader',
+    access: 'Глава, администратор или лидер КП пака.',
+    errors: [400, 403, 404, 409],
+  }),
   Participation_roster: c('Получить состав события', list('EventRosterMember'), {
     errors: [404],
     description: 'Приглашённые по области события и их участие; GS доступен только Главе и Админу.',
@@ -527,6 +557,20 @@ export const contracts: Record<string, Contract> = {
 };
 
 export const extraSchemas = {
+  OrgKp: object({
+    id: str,
+    name: str,
+    guildId: str,
+    leaderId: { ...str, nullable: true },
+    createdAt: { type: 'string', format: 'date-time' },
+  }),
+  OrgPack: object({
+    id: str,
+    name: str,
+    kpId: str,
+    leaderId: { ...str, nullable: true },
+    createdAt: { type: 'string', format: 'date-time' },
+  }),
   GuildSettingsInput: object({ name: str, file: { type: 'string', format: 'binary' } }, ['name']),
   AbsencesQuery: object(
     {
