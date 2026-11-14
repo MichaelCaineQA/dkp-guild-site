@@ -65,11 +65,14 @@ export function TextLink({ className = '', ...props }: AnchorHTMLAttributes<HTML
   return <a className={`text-accent underline ${className}`} {...props} />;
 }
 export function RosterTabs({
-  requests,
+  requests = false,
+  blocked = false,
   current,
 }: {
-  requests: boolean;
-  current: 'members' | 'requests';
+  requests?: boolean;
+  /** Вкладка «Заблокированные» — только Главе/Админу (issue #149). */
+  blocked?: boolean;
+  current: 'members' | 'requests' | 'blocked';
 }) {
   return (
     <nav aria-label="Вкладки состава" className="mb-4 flex gap-4">
@@ -79,6 +82,11 @@ export function RosterTabs({
       {requests && (
         <TextLink href="/link-requests" aria-current={current === 'requests' ? 'page' : undefined}>
           Заявки
+        </TextLink>
+      )}
+      {blocked && (
+        <TextLink href="/roster/blocked" aria-current={current === 'blocked' ? 'page' : undefined}>
+          Заблокированные
         </TextLink>
       )}
     </nav>

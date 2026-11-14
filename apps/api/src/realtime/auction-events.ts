@@ -15,6 +15,12 @@ export interface AuctionEventsPort {
   lotCreated(lot: AuctionLotRow): void;
   /** Принята ставка; endsAt — актуальное окончание (анти-снайп учтён). */
   bidPlaced(auctionId: string, bid: BidRow, endsAt: string | null): void;
+  /**
+   * Ставки лота сняты без изменения самого лота (блокировка участника,
+   * issue #149): комнате уходит свежий полный срез — история ставок
+   * заменяется целиком, ведущей становится лучшая из оставшихся.
+   */
+  bidsRemoved(auctionId: string): void;
   /** Изменение лота без закрытия: продление, ручная смена победителя. */
   lotUpdated(auctionId: string, lot: AuctionLotRow, winner: LotAwardRow | null): void;
   /**
@@ -36,6 +42,7 @@ export const AUCTION_EVENTS = Symbol('AUCTION_EVENTS');
 export const NOOP_AUCTION_EVENTS: AuctionEventsPort = {
   lotCreated: () => {},
   bidPlaced: () => {},
+  bidsRemoved: () => {},
   lotUpdated: () => {},
   lotClosed: () => {},
 };

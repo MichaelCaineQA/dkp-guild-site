@@ -61,7 +61,7 @@ describe('Приватные скриншоты через HTTP', () => {
       await rm(directory, { recursive: true, force: true });
   });
   beforeEach(() => {
-    actor = { userId: 'owner', username: 'Новый', rank: null, memberId: null, isAdmin: false };
+    actor = { userId: 'owner', username: 'Новый', rank: null, memberId: null, isAdmin: false, blocked: false };
     jest.clearAllMocks();
   });
   const upload = (data: Buffer = png, type = 'image/png') => {
@@ -92,13 +92,13 @@ describe('Приватные скриншоты через HTTP', () => {
         username: 'Другой',
         rank,
         memberId: rank ? 'other-member' : null,
-        isAdmin: false,
+        isAdmin: false, blocked: false,
       };
       expect((await fetch(`${url}/screenshots/${id}`)).status).toBe(404);
     }
     actor!.rank = 'GUILD_LEADER';
     expect((await fetch(`${url}/screenshots/${id}`)).status).toBe(200);
-    actor = { userId: 'admin:a', username: 'a', rank: null, memberId: null, isAdmin: true };
+    actor = { userId: 'admin:a', username: 'a', rank: null, memberId: null, isAdmin: true, blocked: false };
     expect((await fetch(`${url}/screenshots/${id}`)).status).toBe(200);
     expect(audit).toHaveBeenCalledTimes(1);
   });

@@ -12,6 +12,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   LINK_REQUEST_REJECT: 'Привязка отклонена',
   MEMBER_CREATE: 'Добавление участника',
   MEMBER_UPDATE: 'Изменение участника',
+  MEMBER_BLOCK: 'Блокировка участника',
+  MEMBER_UNBLOCK: 'Разблокировка участника',
   ROLE_CHANGE: 'Смена ранга',
   EVENT_CREATE: 'Создание ивента',
   EVENT_UPDATE: 'Изменение ивента',

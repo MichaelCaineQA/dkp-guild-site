@@ -76,7 +76,7 @@ describe('SettingsPage', () => {
       username: 'test-leader',
       memberId: 'm1',
       rank: 'GUILD_LEADER',
-      isAdmin: false,
+      isAdmin: false, blocked: false,
     });
 
     render(<SettingsPage />);
@@ -101,7 +101,7 @@ describe('SettingsPage', () => {
       username: 'test-officer',
       memberId: 'm2',
       rank: 'OFFICER',
-      isAdmin: false,
+      isAdmin: false, blocked: false,
     });
     render(<SettingsPage />);
     expect(await screen.findByText('Раздел доступен Главе и Админу.')).toBeDefined();
@@ -114,7 +114,7 @@ describe('SettingsPage', () => {
       username: 'test-member',
       memberId: 'm3',
       rank: 'MEMBER',
-      isAdmin: false,
+      isAdmin: false, blocked: false,
     });
 
     render(<SettingsPage />);
@@ -128,7 +128,7 @@ describe('SettingsPage', () => {
       username: 'Глава',
       memberId: 'head',
       rank: 'GUILD_LEADER',
-      isAdmin: false,
+      isAdmin: false, blocked: false,
     });
     const original = vi.mocked(api).getMockImplementation()!;
     vi.mocked(api).mockImplementation(async (path, init) => {

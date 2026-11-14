@@ -1,39 +1,61 @@
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction-events';
 import type { MembersDb, Actor } from './members.service';
 import { MembersService } from './members.service';
 
 /** In-memory БД для тестов: достаточно интерфейса MembersDb. */
 function makeDb(
-  seed: Array<{ id: string; nickname: string; rank: string; combatRole: string | null }>,
+  seed: Array<{
+    id: string;
+    nickname: string;
+    rank: string;
+    combatRole: string | null;
+    blockedAt?: Date | null;
+  }>,
+  bidsSeed: Array<{ auctionId: string; memberId: string; open: boolean }> = [],
 ) {
   const members = seed.map((m) => ({
     weapons: ['STAFF', 'WAND'] as import('@dkp/shared').Weapon[],
+    blockedAt: null as Date | null,
     ...m,
     userId: null as string | null,
   }));
+  const bids = bidsSeed.map((b) => ({ ...b }));
   const audit: Array<Record<string, string | null>> = [];
   const db: MembersDb = {
     $transaction: async (work) => {
       const oldMembers = structuredClone(members);
       const oldAudit = structuredClone(audit);
+      const oldBids = structuredClone(bids);
       try {
         return await work(db);
       } catch (error) {
         members.splice(0, members.length, ...oldMembers);
         audit.splice(0, audit.length, ...oldAudit);
+        bids.splice(0, bids.length, ...oldBids);
         throw error;
       }
     },
     member: {
       findMany: async ({ where, orderBy, include }) => {
-        expect(orderBy).toEqual({ nickname: 'asc' });
         expect(include).toEqual({ user: { select: { username: true } } });
-        return members
+        const byBlocked =
+          where.blockedAt === undefined
+            ? () => true
+            : where.blockedAt === null
+              ? (m: (typeof members)[number]) => m.blockedAt == null
+              : (m: (typeof members)[number]) => m.blockedAt != null;
+        const rows = members
+          .filter(byBlocked)
           .filter((m) => (where.rank ? m.rank === where.rank : true))
           .filter((m) => (where.weapons ? m.weapons.includes(where.weapons.has) : true))
-          .filter((m) => (where.combatRole ? m.combatRole === where.combatRole : true))
-          .sort((a, b) => a.nickname.localeCompare(b.nickname))
-          .map((m) => ({ ...m, user: m.userId ? { username: m.userId } : null }));
+          .filter((m) => (where.combatRole ? m.combatRole === where.combatRole : true));
+        if ('blockedAt' in orderBy && orderBy.blockedAt === 'desc') {
+          rows.sort((a, b) => (b.blockedAt?.getTime() ?? 0) - (a.blockedAt?.getTime() ?? 0));
+        } else {
+          rows.sort((a, b) => a.nickname.localeCompare(b.nickname));
+        }
+        return rows.map((m) => ({ ...m, user: m.userId ? { username: m.userId } : null }));
       },
       // Как и Prisma, фейки возвращают копии — сервис сравнивает до/после.
       findUnique: async ({ where }) => {
@@ -48,7 +70,7 @@ function makeDb(
       },
       count: async ({ where }) => members.filter((m) => m.rank === where.rank).length,
       create: async ({ data }) => {
-        const member = { id: `m-${members.length + 1}`, userId: null, ...data };
+        const member = { id: `m-${members.length + 1}`, userId: null, blockedAt: null, ...data };
         members.push(member);
         return member;
       },
@@ -58,13 +80,28 @@ function makeDb(
         return { ...member };
       },
     },
+    bid: {
+      findMany: async ({ where }) =>
+        bids
+          .filter((b) => b.memberId === where.memberId && b.open)
+          .map((b) => ({ auctionId: b.auctionId })),
+      deleteMany: async ({ where }) => {
+        const victims = bids.filter(
+          (b) => b.memberId === where.memberId && b.open === (where.auction.status === 'OPEN'),
+        );
+        for (const victim of victims) {
+          bids.splice(bids.indexOf(victim), 1);
+        }
+        return { count: victims.length };
+      },
+    },
     auditLog: {
       create: async ({ data }) => {
         audit.push({ actorMemberId: data.actorMemberId, action: data.action, entityType: data.entityType, entityId: data.entityId, comment: data.comment ?? null });
       },
     },
   };
-  return { db, members, audit };
+  return { db, members, bids, audit };
 }
 
 const ACTOR: Actor = { memberId: 'm-actor', isAdmin: false, userId: 'u1' };
@@ -326,5 +363,112 @@ describe('Ранги ADMIN/GUILD_LEADER не назначаются (решен�
         ACTOR,
       ),
     ).rejects.toThrow(ConflictException);
+  });
+});
+
+describe('MembersService.block/unblock (issue #149)', () => {
+  const FIXED = new Date('2026-11-14T12:00:00Z');
+  /** Порт событий с записью вызовов bidsRemoved. */
+  const makeEvents = () => {
+    const removed: string[] = [];
+    const events: AuctionEventsPort = {
+      ...NOOP_AUCTION_EVENTS,
+      bidsRemoved: (auctionId) => {
+        removed.push(auctionId);
+      },
+    };
+    return { events, removed };
+  };
+
+  it('блокирует, снимает активные ставки, шлёт срез лотов и пишет аудит', async () => {
+    const { db, members, bids, audit } = makeDb(
+      [{ id: 'm-1', nickname: 'Ушёл', rank: 'MEMBER', combatRole: 'DPS' }],
+      [
+        { auctionId: 'a-1', memberId: 'm-1', open: true },
+        { auctionId: 'a-1', memberId: 'm-2', open: true },
+        { auctionId: 'a-2', memberId: 'm-1', open: true },
+        { auctionId: 'a-3', memberId: 'm-1', open: false },
+      ],
+    );
+    const { events, removed } = makeEvents();
+    const service = new MembersService(db, () => FIXED, events);
+
+    const row = await service.block('m-1', { comment: 'Покинул гильдию' }, ACTOR);
+
+    expect(row.blockedAt).toBe(FIXED.toISOString());
+    expect(members[0]!.blockedAt).toEqual(FIXED);
+    // Ставки на открытых лотах сняты, чужая и закрытый лот не тронуты
+    expect(bids).toEqual([
+      { auctionId: 'a-1', memberId: 'm-2', open: true },
+      { auctionId: 'a-3', memberId: 'm-1', open: false },
+    ]);
+    // Один вызов на каждый затронутый лот (уникальные id)
+    expect(removed).toEqual(['a-1', 'a-2']);
+    expect(audit[0]).toMatchObject({ action: 'MEMBER_BLOCK', entityId: 'm-1' });
+    expect(audit[0]!.comment).toContain('снято активных ставок: 2');
+    expect(audit[0]!.comment).toContain('Покинул гильдию');
+  });
+
+  it('без ставок — аудит без упоминания ставок, событий нет', async () => {
+    const { db, audit } = makeDb([{ id: 'm-1', nickname: 'Ушёл', rank: 'MEMBER', combatRole: null }]);
+    const { events, removed } = makeEvents();
+    const service = new MembersService(db, () => FIXED, events);
+
+    await service.block('m-1', { comment: 'Ушёл сам' }, ACTOR);
+
+    expect(audit[0]!.comment).not.toContain('ставок');
+    expect(removed).toEqual([]);
+    expect(events).toBeDefined();
+  });
+
+  it('повторная блокировка, Глава и короткий комментарий отклоняются', async () => {
+    const { db } = makeDb([
+      { id: 'm-1', nickname: 'Уже', rank: 'MEMBER', combatRole: null, blockedAt: FIXED },
+      { id: 'm-2', nickname: 'Глава', rank: 'GUILD_LEADER', combatRole: null },
+    ]);
+    const service = new MembersService(db, () => FIXED);
+
+    await expect(service.block('m-1', { comment: 'Ещё раз' }, ACTOR)).rejects.toThrow(
+      ConflictException,
+    );
+    await expect(service.block('m-2', { comment: 'Главу блок' }, ACTOR)).rejects.toThrow(
+      ConflictException,
+    );
+    await expect(
+      service.block('m-x', { comment: 'Нет такого' }, ACTOR),
+    ).rejects.toThrow(NotFoundException);
+    await expect(
+      service.block('m-1', { comment: 'ок' }, ACTOR),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('состав скрывает заблокированных, вкладка заблокированных их показывает', async () => {
+    const { db } = makeDb([
+      { id: 'm-1', nickname: 'Жив', rank: 'MEMBER', combatRole: null },
+      { id: 'm-2', nickname: 'Ушёл', rank: 'MEMBER', combatRole: null, blockedAt: FIXED },
+    ]);
+    const service = new MembersService(db);
+
+    expect((await service.roster({})).map((r) => r.id)).toEqual(['m-1']);
+    const blocked = await service.blocked();
+    expect(blocked.map((r) => r.id)).toEqual(['m-2']);
+    expect(blocked[0]).toMatchObject({ nickname: 'Ушёл', blockedAt: FIXED.toISOString() });
+  });
+
+  it('разблокировка возвращает в состав и пишет аудит; не заблокированного — 409', async () => {
+    const { db, members, audit } = makeDb([
+      { id: 'm-1', nickname: 'Вернулся', rank: 'MEMBER', combatRole: null, blockedAt: FIXED },
+    ]);
+    const service = new MembersService(db);
+
+    const row = await service.unblock('m-1', { comment: 'Вернулся в гильдию' }, ACTOR);
+
+    expect(row).toMatchObject({ id: 'm-1', nickname: 'Вернулся' });
+    expect(members[0]!.blockedAt).toBeNull();
+    expect(audit[0]).toMatchObject({ action: 'MEMBER_UNBLOCK', entityId: 'm-1' });
+    expect(audit[0]!.comment).toContain('Вернулся в гильдию');
+    await expect(service.unblock('m-1', { comment: 'Ещё раз' }, ACTOR)).rejects.toThrow(
+      ConflictException,
+    );
   });
 });

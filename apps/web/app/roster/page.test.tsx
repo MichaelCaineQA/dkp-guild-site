@@ -31,7 +31,7 @@ describe('RosterPage', () => {
       username: 'test-member',
       memberId: 'm1',
       rank: 'MEMBER',
-      isAdmin: false,
+      isAdmin: false, blocked: false,
     });
   });
 
@@ -59,7 +59,7 @@ describe('RosterPage', () => {
       username: 'test-leader',
       memberId: 'm-2',
       rank: 'GUILD_LEADER',
-      isAdmin: false,
+      isAdmin: false, blocked: false,
     });
     vi.mocked(api).mockResolvedValue([]);
 
@@ -87,7 +87,7 @@ describe('RosterPage', () => {
       username: 'Офицер',
       memberId: 'off',
       rank: 'OFFICER',
-      isAdmin: false,
+      isAdmin: false, blocked: false,
     });
     vi.mocked(api).mockResolvedValue([
       {
@@ -110,7 +110,7 @@ describe('RosterPage', () => {
       username: 'Админ',
       memberId: null,
       rank: null,
-      isAdmin: true,
+      isAdmin: true, blocked: false,
     });
     vi.mocked(api).mockImplementation(async (path) =>
       path.startsWith('/members')

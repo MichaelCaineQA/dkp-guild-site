@@ -75,10 +75,15 @@ export class AuctionGateway
     } catch {
       user = null;
     }
-    if (!user || (!user.memberId && !user.isAdmin)) {
+    if (!user || (!user.memberId && !user.isAdmin) || user.blocked) {
       // Мягкое отключение: пакет ошибки успевает уйти до закрытия; клиент
       // socket.io не переподключается после server-side disconnect.
-      client.emit('auction:error', 'Аукцион доступен членам гильдии после входа');
+      client.emit(
+        'auction:error',
+        user?.blocked
+          ? 'Гильдия закрыла свои врата'
+          : 'Аукцион доступен членам гильдии после входа',
+      );
       client.disconnect();
       return;
     }
@@ -122,6 +127,16 @@ export class AuctionGateway
       endsAt,
       serverTime: new Date().toISOString(),
     });
+  }
+
+  /** Ставки сняты (блокировка участника, issue #149): комнате — свежий срез. */
+  bidsRemoved(auctionId: string): void {
+    void this.snapshots
+      .liveState(auctionId)
+      .then((state) => {
+        if (state) this.server.to(roomOf(auctionId)).emit(AUCTION_SOCKET_EVENTS.state, state);
+      })
+      .catch(() => undefined);
   }
 
   lotUpdated(

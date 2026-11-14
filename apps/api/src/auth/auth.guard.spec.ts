@@ -1,12 +1,13 @@
-import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { PrismaService } from '../prisma/prisma.service';
-import { AuthGuard, MIN_RANK_KEY } from './auth.guard';
+import { ALLOW_BLOCKED_KEY, AuthGuard, MIN_RANK_KEY } from './auth.guard';
 import type { SessionUser } from './session.types';
 
-function makeGuard(minRank?: string): AuthGuard {
+function makeGuard(minRank?: string, allowBlocked = false): AuthGuard {
   const reflector = {
-    getAllAndOverride: (key: string) => (key === MIN_RANK_KEY ? minRank : undefined),
+    getAllAndOverride: (key: string) =>
+      key === MIN_RANK_KEY ? minRank : key === ALLOW_BLOCKED_KEY ? allowBlocked : undefined,
   } as unknown as Reflector;
   return new AuthGuard(reflector);
 }
@@ -26,7 +27,7 @@ function session(partial: Partial<SessionUser>): SessionUser {
     username: 'u',
     memberId: 'm1',
     rank: 'MEMBER',
-    isAdmin: false,
+    isAdmin: false, blocked: false,
     ...partial,
   };
 }
@@ -74,5 +75,39 @@ describe('AuthGuard', () => {
     const guard = new AuthGuard(reflector, prisma);
     await expect(guard.canActivate(makeContext(user))).rejects.toThrow(UnauthorizedException);
     expect(user.rank).toBe('MEMBER');
+  });
+
+  it('заблокированный получает 403 на любом эндпоинте (issue #149)', () => {
+    const blockedCtx = makeContext(session({ blocked: true }));
+    expect(() => makeGuard().canActivate(blockedCtx)).toThrow(ForbiddenException);
+    // Требование ранга не важно: врата закрыты раньше проверки прав
+    expect(() => makeGuard('GUILD_LEADER').canActivate(blockedCtx)).toThrow(ForbiddenException);
+  });
+
+  it('заблокированный проходит только эндпоинт с @AllowBlocked() (/auth/me)', () => {
+    expect(makeGuard(undefined, true).canActivate(makeContext(session({ blocked: true })))).toBe(
+      true,
+    );
+  });
+
+  it('админ не бывает заблокирован', () => {
+    const adminCtx = makeContext(session({ rank: null, isAdmin: true, blocked: true }));
+    expect(makeGuard('GUILD_LEADER').canActivate(adminCtx)).toBe(true);
+  });
+
+  it('перечитывает блокировку из БД: сессия ещё не знает о ней', async () => {
+    const user = session({});
+    const reflector = {
+      getAllAndOverride: (key: string) =>
+        key === MIN_RANK_KEY ? undefined : key === ALLOW_BLOCKED_KEY ? false : undefined,
+    } as unknown as Reflector;
+    const prisma = {
+      member: {
+        findUnique: async () => ({ id: 'm1', rank: 'MEMBER', blockedAt: new Date() }),
+      },
+    } as unknown as PrismaService;
+    const guard = new AuthGuard(reflector, prisma);
+    await expect(guard.canActivate(makeContext(user))).rejects.toThrow(ForbiddenException);
+    expect(user.blocked).toBe(true);
   });
 });

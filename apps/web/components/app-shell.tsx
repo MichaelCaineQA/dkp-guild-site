@@ -1,6 +1,7 @@
 'use client';
 import type { ReactNode } from 'react';
 import HomePage from './home';
+import { BlockedScreen } from './blocked-screen';
 import { useSession } from './session-context';
 import { GameTimeWidget } from './game-time-widget';
 import { NavMenu } from './nav-menu';
@@ -37,6 +38,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }, [user]);
   if (loading) return <main className="p-6">Загрузка…</main>;
+  // Заблокированный (issue #149): вместо сайта — экран «врата закрыты»,
+  // без шапки и меню; прямой URL любую страницу заменяет этим экраном.
+  if (user?.blocked) return <BlockedScreen />;
   if (!user || (!user.memberId && !user.isAdmin)) return <HomePage />;
   return (
     <ApplicationFrame

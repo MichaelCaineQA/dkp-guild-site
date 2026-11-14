@@ -321,7 +321,9 @@ export class ConductService {
   async checklist(eventId: string): Promise<EventSummaryRow[]> {
     const event = await this.mustGetEvent(eventId);
     const [members, attendance, entries, absences] = await Promise.all([
+      // Заблокированные скрыты из чек-листа ивента (issue #149).
       this.db.member.findMany({
+        where: { blockedAt: null },
         select: { id: true, nickname: true, packId: true, pack: { select: { kpId: true } } },
       }),
       this.db.attendance.findMany({ where: { eventId } }),

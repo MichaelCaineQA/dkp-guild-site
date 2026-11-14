@@ -17,7 +17,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { type SessionUser } from '@dkp/shared';
 import { AuthService } from './auth.service';
-import { AuthGuard, MinRank, type AuthedRequest } from './auth.guard';
+import { AllowBlocked, AuthGuard, MinRank, type AuthedRequest } from './auth.guard';
 import { LinkRequestService } from './link-request.service';
 import { performTestLogin } from './test-login';
 import { AuditService } from '../audit/audit.service';
@@ -64,8 +64,11 @@ export class AuthController {
     void req.session!.save(() => res.redirect(`${WEB_URL}/`));
   }
 
-  /** Текущий пользователь (ранг/привязка перечитываются из БД). */
+  /** Текущий пользователь (ранг/привязка перечитываются из БД). Доступен
+   *  и заблокированным (issue #149): клиент по флагу blocked показывает
+   *  экран «врата закрыты» вместо сайта. */
   @Get('me')
+  @AllowBlocked()
   @UseGuards(AuthGuard)
   async me(@Req() req: AuthedRequest) {
     const fresh = await this.authService.getSessionUser(req.session!.user!.userId);
@@ -101,6 +104,7 @@ export class AuthController {
       memberId: null,
       rank: null,
       isAdmin: true,
+      blocked: false,
     };
     return { ok: true };
   }

@@ -12,6 +12,7 @@ export interface TestLoginResult {
     memberId: null
     rank: null
     isAdmin: boolean
+    blocked: boolean
   }
 }
 
@@ -35,6 +36,7 @@ export function performTestLogin(
       memberId: null,
       rank: null,
       isAdmin: false,
+      blocked: false,
     },
   }
 }

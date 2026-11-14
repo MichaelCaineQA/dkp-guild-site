@@ -119,6 +119,8 @@ export class ParticipationService {
     if (!event) throw new NotFoundException('Ивент не найден');
     const [members, absences] = await Promise.all([
       this.db.member.findMany({
+        // Заблокированные скрыты из участников ивента (issue #149).
+        where: { blockedAt: null },
         select: {
           id: true,
           avatar: true,

@@ -20,7 +20,7 @@ const summary = {
 };
 const session = (rank: 'MEMBER' | 'OFFICER' | null, isAdmin = false) =>
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u', username: 'Игрок', memberId: isAdmin ? null : 'm', rank, isAdmin },
+    user: { userId: 'u', username: 'Игрок', memberId: isAdmin ? null : 'm', rank, isAdmin, blocked: false },
     loading: false,
     reload: vi.fn(),
   });

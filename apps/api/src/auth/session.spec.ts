@@ -16,7 +16,7 @@ const USER: SessionUser = {
   username: 'test-member',
   memberId: 'm-1',
   rank: 'MEMBER',
-  isAdmin: false,
+  isAdmin: false, blocked: false,
 };
 
 function reqWithCookie(cookie: string): IncomingMessage {

@@ -21,8 +21,8 @@ function mockSession(user: Record<string, unknown> | null) {
   });
 }
 
-const MEMBER = { memberId: 'm-1', rank: 'MEMBER', isAdmin: false };
-const OFFICER = { memberId: 'm-2', rank: 'OFFICER', isAdmin: false };
+const MEMBER = { memberId: 'm-1', rank: 'MEMBER', isAdmin: false, blocked: false };
+const OFFICER = { memberId: 'm-2', rank: 'OFFICER', isAdmin: false, blocked: false };
 
 const ITEMS = [
   {

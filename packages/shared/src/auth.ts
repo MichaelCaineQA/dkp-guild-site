@@ -11,6 +11,9 @@ export const sessionUserSchema = z.object({
   rank: z.enum(['GUILD_LEADER', 'ADMIN', 'OFFICER', 'MEMBER']).nullable(),
   /** true — резервный вход администратора (не Discord). */
   isAdmin: z.boolean().default(false),
+  /** true — учётка заблокирована (игрок покинул гильдию, issue #149):
+   *  вход есть, но весь сайт закрыт, кроме /auth/me и выхода. */
+  blocked: z.boolean().default(false),
 });
 export type SessionUser = z.infer<typeof sessionUserSchema>;
 

@@ -7,6 +7,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import {
+  BLOCKABLE_RANKS,
+  blockMemberSchema,
   changeRankSchema,
   createMemberSchema,
   rosterQuerySchema,
@@ -19,6 +21,7 @@ import {
   type UpdateMemberInput,
 } from '@dkp/shared';
 import { serializable } from '../prisma/serializable';
+import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction-events';
 
 /** Строка состава для UI. */
 export interface RosterRow {
@@ -32,10 +35,16 @@ export interface RosterRow {
   discord: string | null;
 }
 
+/** Строка вкладки «Заблокированные» (issue #149). */
+export interface BlockedMemberRow extends RosterRow {
+  blockedAt: string;
+}
+
 export interface MemberRow {
   avatar?: string | null;
   avatarColor?: string | null;
   weapons?: Weapon[];
+  blockedAt?: Date | null;
   id: string;
   nickname: string;
   rank: string;
@@ -64,13 +73,19 @@ export interface MembersDb {
   ): Promise<T>;
   member: {
     findMany(args: {
-      where: { rank?: string; combatRole?: string; weapons?: { has: Weapon } };
-      orderBy: { nickname: 'asc' };
+      where: {
+        rank?: string;
+        combatRole?: string;
+        weapons?: { has: Weapon };
+        blockedAt?: Date | null | { not: null };
+      };
+      orderBy: { nickname: 'asc' } | { blockedAt: 'desc' };
       include: { user: { select: { username: true } } };
     }): Promise<
       Array<{
         avatar?: string | null;
         avatarColor?: string | null;
+        blockedAt?: Date | null;
         id: string;
         nickname: string;
         rank: string;
@@ -87,8 +102,23 @@ export interface MembersDb {
     }): Promise<MemberRow>;
     update(args: {
       where: { id: string };
-      data: { nickname?: string; combatRole?: string | null; rank?: string; weapons?: Weapon[] };
+      data: {
+        nickname?: string;
+        combatRole?: string | null;
+        rank?: string;
+        weapons?: Weapon[];
+        blockedAt?: Date | null;
+      };
     }): Promise<MemberRow>;
+  };
+  bid: {
+    findMany(args: {
+      where: { memberId: string; auction: { status: string } };
+      select: { auctionId: true };
+    }): Promise<Array<{ auctionId: string }>>;
+    deleteMany(args: {
+      where: { memberId: string; auction: { status: string } };
+    }): Promise<{ count: number }>;
   };
   auditLog: AuditWriter;
 }
@@ -106,14 +136,24 @@ export interface Actor {
  */
 @Injectable()
 export class MembersService {
-  constructor(private readonly db: MembersDb) {}
+  constructor(
+    private readonly db: MembersDb,
+    private readonly now: () => Date = () => new Date(),
+    private readonly events: AuctionEventsPort = NOOP_AUCTION_EVENTS,
+  ) {}
 
-  /** Состав с фильтрами по рангу и роли в бою — всем членам гильдии. */
+  /** Состав с фильтрами по рангу и роли в бою — всем членам гильдии.
+   *  Заблокированные скрыты (issue #149) — они на отдельной вкладке. */
   async roster(query: unknown): Promise<RosterRow[]> {
     const parsed = rosterQuerySchema.safeParse(query);
     if (!parsed.success) throw new BadRequestException('Некорректные фильтры состава');
     const filters: RosterQuery = parsed.data;
-    const where: { rank?: string; combatRole?: string; weapons?: { has: Weapon } } = {};
+    const where: {
+      rank?: string;
+      combatRole?: string;
+      weapons?: { has: Weapon };
+      blockedAt?: null;
+    } = { blockedAt: null };
     if (filters.weapon) where.weapons = { has: filters.weapon };
     if (filters.rank) {
       where.rank = filters.rank;
@@ -291,6 +331,144 @@ export class MembersService {
       `Ранг «${member.rank}» → «${updated.rank}». ${input.comment}`,
     );
     return updated;
+  }
+
+  /**
+   * Вкладка «Заблокированные» (issue #149, members.manage): покинувшие
+   * гильдию с сохранёнными данными. Сортировка — свежие блокировки сверху.
+   */
+  async blocked(): Promise<BlockedMemberRow[]> {
+    const members = await this.db.member.findMany({
+      where: { blockedAt: { not: null } },
+      orderBy: { blockedAt: 'desc' },
+      include: { user: { select: { username: true } } },
+    });
+    return members.map((m) => ({
+      id: m.id,
+      avatar: m.avatar ?? null,
+      avatarColor: m.avatarColor ?? null,
+      nickname: m.nickname,
+      rank: m.rank,
+      combatRole: m.combatRole,
+      weapons: m.weapons ?? [],
+      discord: m.user?.username ?? null,
+      blockedAt: (m.blockedAt ?? new Date(0)).toISOString(),
+    }));
+  }
+
+  /**
+   * Блокировка учётки покинувшего гильдию (issue #149, members.manage):
+   * комментарий обязателен, действие уходит в аудит. Активные ставки
+   * на открытых лотах удаляются той же сериализуемой транзакцией — заморозка
+   * уходит вместе со ставками, ведущей становится лучшая из оставшихся.
+   * Данные (ДКП, класс, роль, лут) сохраняются на случай возвращения.
+   */
+  async block(id: string, body: unknown, actor: Actor): Promise<BlockedMemberRow> {
+    const parsed = blockMemberSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException('Укажите причину блокировки (3–500 символов)');
+    }
+    const blockedAt = this.now();
+    const result = await serializable(
+      this.db,
+      async (tx) => {
+        const member = await tx.member.findUnique({ where: { id } });
+        if (!member) throw new NotFoundException('Член гильдии не найден');
+        if (member.blockedAt) throw new ConflictException('Участник уже заблокирован');
+        if (!BLOCKABLE_RANKS.has(member.rank)) {
+          throw new ConflictException('Главу и админа блокировать нельзя');
+        }
+        const activeBids = await tx.bid.findMany({
+          where: { memberId: id, auction: { status: 'OPEN' } },
+          select: { auctionId: true },
+        });
+        if (activeBids.length > 0) {
+          await tx.bid.deleteMany({
+            where: { memberId: id, auction: { status: 'OPEN' } },
+          });
+        }
+        const updated = await tx.member.update({
+          where: { id },
+          data: { blockedAt },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorMemberId: actor.memberId,
+            actorIsAdmin: actor.isAdmin,
+            action: 'MEMBER_BLOCK',
+            entityType: 'Member',
+            entityId: id,
+            comment:
+              `Участник «${member.nickname}» заблокирован` +
+              (activeBids.length > 0 ? `, снято активных ставок: ${activeBids.length}` : '') +
+              `. ${parsed.data.comment}`,
+          },
+        });
+        return { member: updated, affectedAuctionIds: [...new Set(activeBids.map((b) => b.auctionId))] };
+      },
+      true,
+    );
+    // Realtime — строго после фиксации в БД (issue #97): комнатам затронутых
+    // лотов уходит свежий срез без ставок заблокированного.
+    for (const auctionId of result.affectedAuctionIds) {
+      this.events.bidsRemoved(auctionId);
+    }
+    return {
+      id: result.member.id,
+      avatar: result.member.avatar ?? null,
+      avatarColor: result.member.avatarColor ?? null,
+      nickname: result.member.nickname,
+      rank: result.member.rank,
+      combatRole: result.member.combatRole,
+      weapons: result.member.weapons ?? [],
+      discord: null,
+      blockedAt: blockedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Разблокировка (issue #149, members.manage): человек вернулся в гильдию —
+   * доступ возвращается, ранг и история не менялись.
+   */
+  async unblock(id: string, body: unknown, actor: Actor): Promise<RosterRow> {
+    const parsed = blockMemberSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException('Укажите причину разблокировки (3–500 символов)');
+    }
+    const member = await serializable(
+      this.db,
+      async (tx) => {
+        const existing = await tx.member.findUnique({ where: { id } });
+        if (!existing) throw new NotFoundException('Член гильдии не найден');
+        if (!existing.blockedAt) throw new ConflictException('Участник не заблокирован');
+        const updated = await tx.member.update({
+          where: { id },
+          data: { blockedAt: null },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorMemberId: actor.memberId,
+            actorIsAdmin: actor.isAdmin,
+            action: 'MEMBER_UNBLOCK',
+            entityType: 'Member',
+            entityId: id,
+            comment: `Участник «${existing.nickname}» разблокирован. ${parsed.data.comment}`,
+          },
+        });
+        return updated;
+      },
+      true,
+    );
+    return {
+      id: member.id,
+      avatar: member.avatar ?? null,
+      avatarColor: member.avatarColor ?? null,
+      nickname: member.nickname,
+      rank: member.rank,
+      combatRole: member.combatRole,
+      weapons: member.weapons ?? [],
+      discord: null,
+    };
   }
 
   private async mustExist(id: string): Promise<MemberRow> {

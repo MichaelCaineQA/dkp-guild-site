@@ -129,7 +129,7 @@ describe('правила через HTTP', () => {
       username: 'Глава',
       memberId: 'm1',
       rank: 'GUILD_LEADER',
-      isAdmin: false,
+      isAdmin: false, blocked: false,
     };
   });
   const update = (body: unknown) =>
@@ -149,7 +149,7 @@ describe('правила через HTTP', () => {
   it('аноним — 401, непривязанный — 403; рядовой читает, но не правит', async () => {
     actor = undefined;
     expect((await fetch(`${url}/rules/guild-rules`)).status).toBe(401);
-    actor = { userId: 'u2', username: 'Новый', memberId: null, rank: null, isAdmin: false };
+    actor = { userId: 'u2', username: 'Новый', memberId: null, rank: null, isAdmin: false, blocked: false };
     expect((await fetch(`${url}/rules/guild-rules`)).status).toBe(403);
     actor.memberId = 'm2';
     actor.rank = 'MEMBER';
@@ -200,7 +200,7 @@ describe('правила через HTTP', () => {
   });
 
   it('резервный админ публикует без Member, личность остаётся в аудите', async () => {
-    actor = { userId: 'admin:admin', username: 'admin', memberId: null, rank: null, isAdmin: true };
+    actor = { userId: 'admin:admin', username: 'admin', memberId: null, rank: null, isAdmin: true, blocked: false };
     expect((await update(body)).status).toBe(200);
     expect(audit[0]).toMatchObject({
       actorMemberId: null,

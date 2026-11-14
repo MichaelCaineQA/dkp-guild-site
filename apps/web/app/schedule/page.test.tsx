@@ -109,7 +109,7 @@ describe('SchedulePage', () => {
       username: 'test-member',
       memberId: 'm3',
       rank: 'MEMBER',
-      isAdmin: false,
+      isAdmin: false, blocked: false,
     });
 
     render(<SchedulePage />);
@@ -132,7 +132,7 @@ describe('SchedulePage', () => {
       username: 'test-officer',
       memberId: 'm2',
       rank: 'OFFICER',
-      isAdmin: false,
+      isAdmin: false, blocked: false,
     });
 
     render(<SchedulePage />);

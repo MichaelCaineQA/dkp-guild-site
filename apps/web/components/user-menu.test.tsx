@@ -12,7 +12,7 @@ const replace = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u', username: 'discord-login', memberId: 'm', rank: 'MEMBER', isAdmin: false },
+    user: { userId: 'u', username: 'discord-login', memberId: 'm', rank: 'MEMBER', isAdmin: false, blocked: false },
     loading: false,
     reload,
   });
@@ -81,7 +81,7 @@ it('событие начисления ДКП обновляет сумму', a
 });
 it('резервный Админ без Member не запрашивает игровой баланс', () => {
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'admin:a', username: 'a', memberId: null, rank: null, isAdmin: true },
+    user: { userId: 'admin:a', username: 'a', memberId: null, rank: null, isAdmin: true, blocked: false },
     loading: false,
     reload,
   });

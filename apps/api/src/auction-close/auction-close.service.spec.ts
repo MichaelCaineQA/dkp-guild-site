@@ -241,7 +241,7 @@ describe('AuctionCloseService: событие realtime (issue #97)', () => {
   it('закрытие отправляет lotClosed с победителем, повторный проход молчит', async () => {
     const events: AuctionEventsPort = {
       lotCreated: jest.fn(),
-      bidPlaced: jest.fn(),
+      bidPlaced: jest.fn(), bidsRemoved: jest.fn(),
       lotUpdated: jest.fn(),
       lotClosed: jest.fn(),
     };

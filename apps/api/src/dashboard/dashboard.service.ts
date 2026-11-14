@@ -131,6 +131,8 @@ export class DashboardService {
         name: true,
         leaderId: true,
         members: {
+          // Заблокированные скрыты из «Моей команды» (issue #149).
+          where: { blockedAt: null },
           select: {
             id: true,
             avatar: true,

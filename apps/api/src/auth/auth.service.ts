@@ -7,17 +7,17 @@ export interface AuthDb {
     count(): Promise<number>;
     findFirst(args: {
       where: { username: string };
-      include: { member: { select: { id: true; rank: true } } };
+      include: { member: { select: { id: true; rank: true; blockedAt: true } } };
     }): Promise<UserRow | null>;
     findUnique(args: {
       where: { id: string };
-      include: { member: { select: { id: true; rank: true } } };
+      include: { member: { select: { id: true; rank: true; blockedAt: true } } };
     }): Promise<UserRow | null>;
     upsert(args: {
       where: { discordId: string };
       create: { discordId: string; username: string };
       update: { username: string };
-      include: { member: { select: { id: true; rank: true } } };
+      include: { member: { select: { id: true; rank: true; blockedAt: true } } };
     }): Promise<UserRow>;
   };
   member: {
@@ -31,7 +31,7 @@ export interface UserRow {
   id: string;
   username: string;
   discordId: string | null;
-  member: { id: string; rank: string } | null;
+  member: { id: string; rank: string; blockedAt: Date | null } | null;
 }
 
 export interface DiscordProfile {
@@ -62,7 +62,7 @@ export class AuthService {
       where: { discordId: profile.discordId },
       create: { discordId: profile.discordId, username: profile.username },
       update: { username: profile.username },
-      include: { member: { select: { id: true, rank: true } } },
+      include: { member: { select: { id: true, rank: true, blockedAt: true } } },
     });
 
     return this.toSessionUser(user);
@@ -78,6 +78,7 @@ export class AuthService {
         memberId: null,
         rank: null,
         isAdmin: true,
+        blocked: false,
       };
     }
     // Тестовые пользователи e2e (issue #20): User в БД создаёт db:seed:test,
@@ -87,10 +88,10 @@ export class AuthService {
       const username = userId.slice('test:'.length);
       const user = await this.db.user.findFirst({
         where: { username },
-        include: { member: { select: { id: true, rank: true } } },
+        include: { member: { select: { id: true, rank: true, blockedAt: true } } },
       });
       if (!user) {
-        return { userId, username, memberId: null, rank: null, isAdmin: false };
+        return { userId, username, memberId: null, rank: null, isAdmin: false, blocked: false };
       }
       return {
         userId: user.id,
@@ -98,11 +99,12 @@ export class AuthService {
         memberId: user.member?.id ?? null,
         rank: (user.member?.rank as SessionUser['rank']) ?? null,
         isAdmin: false,
+        blocked: user.member?.blockedAt != null,
       };
     }
     const user = await this.db.user.findUnique({
       where: { id: userId },
-      include: { member: { select: { id: true, rank: true } } },
+      include: { member: { select: { id: true, rank: true, blockedAt: true } } },
     });
     return user ? this.toSessionUser(user) : null;
   }
@@ -128,6 +130,8 @@ export class AuthService {
       // Отсутствие Discord ID (например, у seed:test) не даёт прав админа.
       // Резервный админ обрабатывается отдельно по сессии admin: выше.
       isAdmin: false,
+      // Заблокированная учётка (issue #149): сайт закрыт, кроме /auth/me.
+      blocked: user.member?.blockedAt != null,
     };
   }
 }

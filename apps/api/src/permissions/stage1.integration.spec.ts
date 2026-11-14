@@ -86,7 +86,7 @@ describe('PLAN 1.1: права через реальные HTTP-маршруты
       username: 'Офицер',
       memberId: 'officer',
       rank: 'OFFICER',
-      isAdmin: false,
+      isAdmin: false, blocked: false,
     };
     event = {
       id: 'e1',
@@ -120,7 +120,7 @@ describe('PLAN 1.1: права через реальные HTTP-маршруты
     expect(record).not.toHaveBeenCalled();
   });
   it('резервный Админ без Member может читать и подтверждать заявки', async () => {
-    actor = { userId: 'admin:a', username: 'a', rank: null, memberId: null, isAdmin: true };
+    actor = { userId: 'admin:a', username: 'a', rank: null, memberId: null, isAdmin: true, blocked: false };
     expect((await request('/auth/link-requests', 'GET')).status).toBe(200);
     expect((await request('/auth/link-requests/r1/approve')).status).toBe(201);
     expect(approve).toHaveBeenCalledWith('r1', null);
