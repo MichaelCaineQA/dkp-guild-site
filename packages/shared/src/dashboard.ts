@@ -66,6 +66,7 @@ export interface DashboardTeamMember {
   weapons: Weapon[];
   leader: boolean;
   gearScore?: number | null;
+  gearScoreStale?: boolean;
 }
 
 /** Виджет «Мой аукцион» (план 2.8, экран #98): предмет из лота с ближайшим

@@ -162,8 +162,9 @@ export const schemas: Record<string, SchemaObject> = {
     kpId: nullable(str),
     kpName: nullable(str),
     gearScore: nullable({ type: 'number' }),
+    gearScoreStale: { type: 'boolean' },
     attending: { type: 'boolean' },
-  }),
+  }, ['id', 'avatar', 'avatarColor', 'nickname', 'rank', 'weapons', 'combatRole', 'packId', 'packName', 'kpId', 'kpName', 'gearScore', 'attending']),
   Participation: object({
     invited: { type: 'boolean' },
     attending: { type: 'boolean' },
@@ -183,6 +184,7 @@ export const schemas: Record<string, SchemaObject> = {
       weapons,
       leader: { type: 'boolean' },
       gearScore: nullable(num),
+      gearScoreStale: { type: 'boolean' },
     },
     ['id', 'nickname', 'rank', 'combatRole', 'weapons', 'leader'],
   ),
@@ -550,6 +552,7 @@ export const schemas: Record<string, SchemaObject> = {
             value: num,
             screenshotIds: array({ type: 'string', format: 'uuid' }),
             createdAt: date,
+            stale: { type: 'boolean' },
           }),
         ),
         description:

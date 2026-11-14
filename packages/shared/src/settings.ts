@@ -139,6 +139,12 @@ export const SETTINGS_REGISTRY = {
   ...CHECKIN_SETTINGS,
   ...ABSENCE_SETTINGS,
   ...AUCTION_SETTINGS,
+  'profile.gearScoreStaleDays': {
+    schema: z.number().int().min(1).safe(),
+    label: 'Порог устаревания GS',
+    unit: 'дн',
+    plan: '2.5 (решение 19)',
+  },
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS_REGISTRY;
@@ -156,6 +162,7 @@ export const SETTING_DEFAULTS: Record<SettingKey, number> = Object.fromEntries(
           'checkin.startSharePct': 50,
           'checkin.endSharePct': 50,
           'absence.deadlineBeforeStartSec': 180,
+          'profile.gearScoreStaleDays': 14,
           'auction.step': 1,
           'auction.liveDurationSec': 60,
           'auction.longDurationDays': 2,

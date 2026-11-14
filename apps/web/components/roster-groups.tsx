@@ -1,4 +1,5 @@
 'use client';
+import { GearScoreStale } from './ui/gear-score-stale';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { COMBAT_ROLE_LABELS, RANK_LABELS, formatWeapons, type SessionUser } from '@dkp/shared';
@@ -23,6 +24,7 @@ type Member = {
     kp: { id: string; name: string; leaderId: string | null };
   } | null;
   gearScore?: number | null;
+  gearScoreStale?: boolean;
   screenshotIds?: string[];
 };
 type RosterResponse = { groups: Group[]; members: Member[] };
@@ -324,6 +326,7 @@ export function RosterGroups({ user, mode }: { user: SessionUser; mode: 'kp' | '
                         href={`/profiles/${encodeURIComponent(member.id)}`}
                       >
                         {member.nickname}
+                        <GearScoreStale stale={member.gearScoreStale} />
                         {member.id === member.pack?.kp.leaderId && (
                           <span className="ml-1 text-amber-500" aria-label="Лидер КП">
                             👑

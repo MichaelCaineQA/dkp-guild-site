@@ -12,7 +12,9 @@ import {
   orgMoveMemberSchema,
   orgMovePackSchema,
   orgLeaderSchema,
+  isGearScoreStale,
 } from '@dkp/shared';
+import { gearScoreStaleDays } from '../settings/gear-score-settings';
 import { PrismaService } from '../prisma/prisma.service';
 import { serializable } from '../prisma/serializable';
 import type { SessionUser } from '../auth/session.types';
@@ -72,24 +74,27 @@ export class OrgService {
           where: { NOT: { screenshotIds: { isEmpty: true } } },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take: 1,
-          select: { value: true, screenshotIds: true },
+          select: { value: true, screenshotIds: true, createdAt: true },
         },
       },
     });
     const privileged = actor.isAdmin || viewer?.rank === 'GUILD_LEADER';
+    const staleDays = await gearScoreStaleDays(this.db);
+    const now = new Date();
     return {
       groups,
       members: members.map(({ gsRecords, pack, ...member }) => {
         const groupAccess =
           !!(kpId || packId) &&
           !!actor.memberId &&
-          (pack?.kp.leaderId === actor.memberId || pack?.leaderId === actor.memberId);
+          (pack?.kp.leaderId === actor.memberId || (!!packId && pack?.leaderId === actor.memberId));
         return {
           ...member,
           pack,
           ...(privileged || groupAccess
             ? {
                 gearScore: gsRecords[0]?.value ?? null,
+                gearScoreStale: isGearScoreStale(gsRecords, staleDays, now),
                 screenshotIds: gsRecords[0]?.screenshotIds ?? [],
               }
             : {}),

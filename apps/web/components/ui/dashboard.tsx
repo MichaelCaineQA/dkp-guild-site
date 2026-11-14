@@ -72,6 +72,7 @@ export function TeamMemberLink({ member }: { member: DashboardTeamMember }) {
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-2 font-medium">
           <span className="break-all">{member.nickname}</span>
+          <GearScoreStale stale={member.gearScoreStale} />
           {member.leader && (
             <span title="Лидер пака" aria-label="Лидер пака" className="text-slate-300">
               ♛
@@ -119,3 +120,4 @@ export function AuditPreview({ entries }: { entries: AuditRow[] }) {
     </>
   );
 }
+import { GearScoreStale } from './gear-score-stale';

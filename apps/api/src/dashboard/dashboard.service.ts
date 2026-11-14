@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import {
   canViewGuildGearScore,
+  isGearScoreStale,
   can,
   computeBalance,
   frozenAmount,
@@ -15,9 +16,10 @@ import {
 import type { PrismaClient } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { AuctionsService } from '../auctions/auctions.service';
+import { gearScoreStaleDays } from '../settings/gear-score-settings';
 export type DashboardDb = Pick<
   PrismaClient,
-  'event' | 'member' | 'pack' | 'gearScoreRecord' | 'guild' | 'auction' | 'dkpEntry'
+  'event' | 'member' | 'pack' | 'gearScoreRecord' | 'guild' | 'auction' | 'dkpEntry' | 'setting'
 >;
 @Injectable()
 export class DashboardService {
@@ -94,7 +96,7 @@ export class DashboardService {
           pack: { select: { name: true } },
         },
       }),
-      this.team(actor),
+      this.team(actor, now),
       actor.memberId || can(actor, 'audit.view')
         ? this.audit.list({ limit: 10 }, actor)
         : Promise.resolve(null),
@@ -126,7 +128,7 @@ export class DashboardService {
       gameTime: guild ? { ...guild, gameTimeAnchor: guild.gameTimeAnchor.toISOString() } : null,
     };
   }
-  private async team(actor: PermissionActor): Promise<DashboardData['team']> {
+  private async team(actor: PermissionActor, now: Date): Promise<DashboardData['team']> {
     if (!actor.memberId) return null;
     const self = await this.db.member.findUnique({
       where: { id: actor.memberId },
@@ -159,6 +161,7 @@ export class DashboardService {
     if (!pack) return null;
     // В общем виджете ни собственный профиль, ни лидерство не расширяет видимость GS.
     const privileged = canViewGuildGearScore(actor);
+    const staleDays = privileged ? await gearScoreStaleDays(this.db) : 0;
     const scores = privileged
       ? await this.db.gearScoreRecord.findMany({
           where: {
@@ -167,10 +170,10 @@ export class DashboardService {
           },
           distinct: ['memberId'],
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-          select: { memberId: true, value: true },
+          select: { memberId: true, value: true, createdAt: true, screenshotIds: true },
         })
       : [];
-    const score = new Map(scores.map((row) => [row.memberId, row.value]));
+    const score = new Map(scores.map((row) => [row.memberId, row]));
     return {
       id: pack.id,
       name: pack.name,
@@ -183,7 +186,16 @@ export class DashboardService {
         weapons: m.weapons,
         combatRole: m.combatRole,
         leader: m.id === pack.leaderId,
-        ...(privileged ? { gearScore: score.get(m.id) ?? null } : {}),
+        ...(privileged
+          ? {
+              gearScore: score.get(m.id)?.value ?? null,
+              gearScoreStale: isGearScoreStale(
+                score.has(m.id) ? [score.get(m.id)!] : [],
+                staleDays,
+                now,
+              ),
+            }
+          : {}),
       })),
     };
   }

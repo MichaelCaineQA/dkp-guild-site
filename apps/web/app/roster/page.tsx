@@ -1,4 +1,5 @@
 'use client';
+import { GearScoreStale } from '../../components/ui/gear-score-stale';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -55,6 +56,7 @@ type OrgGroup = {
 type OrgMember = {
   id: string;
   gearScore?: number | null;
+  gearScoreStale?: boolean;
   pack: { id: string; name: string; kp: { id: string; name: string } } | null;
 };
 
@@ -316,7 +318,17 @@ export default function RosterPage() {
               ))}
             </Select>
           </Field>
-          <label><input type="checkbox" checked={availableNow} onChange={(event) => { setAvailableNow(event.target.checked); setPageOffset(0); }} /> Свободен сейчас</label>
+          <label>
+            <input
+              type="checkbox"
+              checked={availableNow}
+              onChange={(event) => {
+                setAvailableNow(event.target.checked);
+                setPageOffset(0);
+              }}
+            />{' '}
+            Свободен сейчас
+          </label>
           <Muted>Всего: {sortedRows.length}</Muted>
         </div>
       </details>
@@ -379,6 +391,9 @@ export default function RosterPage() {
                     onClick={(event) => event.stopPropagation()}
                   >
                     {row.nickname}
+                    <GearScoreStale
+                      stale={orgMembers.find((item) => item.id === row.id)?.gearScoreStale}
+                    />
                   </a>
                 </Table.Td>
                 <Table.Td>{RANK_LABELS[row.rank]}</Table.Td>
