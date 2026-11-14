@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import {
   can,
+  isEventInvitee,
+  type EventScopeInput,
   checkInShareAmount,
   checkInWindowState,
   phaseWindowBounds,
@@ -64,20 +66,31 @@ export interface RaidLeadCheckInView {
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
 export interface CheckInDb {
+  member: {
+    findUnique(args: { where: { id: string }; include: { pack: true } }): Promise<{
+      id: string;
+      packId: string | null;
+      blockedAt: Date | null;
+      pack: { kpId: string } | null;
+    } | null>;
+  };
   $transaction<T>(
     work: (tx: Omit<CheckInDb, '$transaction'>) => Promise<T>,
     options: { isolationLevel: 'Serializable' },
   ): Promise<T>;
   event: {
-    findUnique(args: { where: { id: string } }): Promise<{
-      id: string;
-      status: string;
-      startsAt: Date;
-      endsAt: Date;
-      dkpReward: number;
-      raidLeadId: string;
-      creatorId?: string | null;
-    } | null>;
+    findUnique(args: { where: { id: string } }): Promise<
+      | (EventScopeInput & {
+          id: string;
+          status: string;
+          startsAt: Date;
+          endsAt: Date;
+          dkpReward: number;
+          raidLeadId: string;
+          creatorId?: string | null;
+        })
+      | null
+    >;
   };
   checkInCode: {
     findUnique(args: {
@@ -200,6 +213,7 @@ export class CheckInService {
   ): Promise<PlayerCheckInView> {
     if (!memberId) throw new ForbiddenException('Для отметки нужен профиль игрока');
     const event = await this.mustGetEvent(eventId);
+    await this.assertInvited(event, memberId);
     if (event.status === 'CANCELLED' || event.status === 'FINISHED')
       throw new ConflictException('Чек-ин недоступен');
     const now = this.clock();
@@ -293,6 +307,7 @@ export class CheckInService {
     if (!parsed.success) throw new BadRequestException('Некорректный код');
     const input: SubmitCheckInInput = parsed.data;
     const event = await this.mustGetEvent(eventId);
+    await this.assertInvited(event, memberId);
     if (event.status === 'CANCELLED' || event.status === 'FINISHED') {
       throw new ConflictException('Ивент отменён или завершён — чек-ин недоступен');
     }
@@ -362,6 +377,19 @@ export class CheckInService {
   }
 
   /** Расшифровка кода для показа РЛ; пусто/битое — null. */
+  private async assertInvited(event: EventScopeInput, memberId: string) {
+    const member = await this.db.member.findUnique({
+      where: { id: memberId },
+      include: { pack: true },
+    });
+    if (
+      !member ||
+      member.blockedAt ||
+      !isEventInvitee(event, { ...member, kpId: member.pack?.kpId ?? null })
+    )
+      throw new ForbiddenException('Вы не приглашены на этот ивент');
+  }
+
   private reveal(stored: StoredCode): string | null {
     if (!stored.codeEnc) {
       return null;

@@ -362,7 +362,10 @@ export class ConductService {
     const parsed = setAttendanceSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException('Проверьте поля и обязательный комментарий');
     const input: SetAttendanceInput = parsed.data;
-    if (!verifiedEvent) await this.assertCanConduct(eventId, actor, actorRank);
+    if (!verifiedEvent) {
+      const event = await this.assertCanConduct(eventId, actor, actorRank);
+      await this.assertInvited(event, input.memberId);
+    }
 
     await this.db.attendance.upsert({
       where: { eventId_memberId: { eventId, memberId: input.memberId } },
@@ -404,6 +407,7 @@ export class ConductService {
     if (!parsed.success) throw new BadRequestException('Проверьте поля и обязательный комментарий');
     const input: ManualCheckInInput = parsed.data;
     const event = verifiedEvent ?? (await this.assertCanConduct(eventId, actor, actorRank));
+    if (!verifiedEvent) await this.assertInvited(event, input.memberId);
 
     const existing = await this.db.attendance.findUnique({
       where: { eventId_memberId: { eventId, memberId: input.memberId } },
@@ -468,7 +472,10 @@ export class ConductService {
     const parsed = manualDkpSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException('Проверьте поля и обязательный комментарий');
     const input: ManualDkpInput = parsed.data;
-    if (!verifiedEvent) await this.assertCanConduct(eventId, actor, actorRank);
+    if (!verifiedEvent) {
+      const event = await this.assertCanConduct(eventId, actor, actorRank);
+      await this.assertInvited(event, input.memberId);
+    }
 
     const created = await this.db.dkpEntry.create({
       data: {
@@ -487,6 +494,22 @@ export class ConductService {
       `${input.type} ${input.amount > 0 ? '+' : ''}${input.amount} ДКП. ${input.comment}`,
     );
     return created;
+  }
+
+  private async assertInvited(event: ConductEvent, memberId: string) {
+    const members = await this.db.member.findMany({
+      where: { id: memberId, blockedAt: null },
+      include: { pack: true },
+    });
+    const member = members.find((m) => m.id === memberId);
+    if (
+      !member ||
+      !isEventInvitee(
+        { scope: event.scope ?? 'GUILD', kpId: event.kpId ?? null, packId: event.packId ?? null },
+        { id: member.id, packId: member.packId ?? null, kpId: member.pack?.kpId ?? null },
+      )
+    )
+      throw new ForbiddenException('Участник не входит в приглашённый состав ивента');
   }
 
   private async assertCanConduct(

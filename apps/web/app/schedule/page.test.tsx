@@ -47,6 +47,10 @@ function eventFixture(overrides: Record<string, unknown> = {}) {
     dkpReward: 10,
     raidLeadId: 'm-rl',
     raidLeadName: 'РЛ',
+    scope: 'GUILD',
+    kpId: null,
+    packId: null,
+    scopeName: 'Вся гильдия',
     place: null,
     notes: null,
     ...overrides,
@@ -109,7 +113,8 @@ describe('SchedulePage', () => {
       username: 'test-member',
       memberId: 'm3',
       rank: 'MEMBER',
-      isAdmin: false, blocked: false,
+      isAdmin: false,
+      blocked: false,
     });
 
     render(<SchedulePage />);
@@ -132,7 +137,8 @@ describe('SchedulePage', () => {
       username: 'test-officer',
       memberId: 'm2',
       rank: 'OFFICER',
-      isAdmin: false, blocked: false,
+      isAdmin: false,
+      blocked: false,
     });
 
     render(<SchedulePage />);

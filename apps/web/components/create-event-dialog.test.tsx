@@ -13,6 +13,13 @@ beforeEach(() => {
   vi.mocked(api).mockImplementation(async (path) => {
     if (path === '/event-types') return [{ id: 'type-1', name: 'Гильдбосс' }];
     if (path === '/members') return [{ id: 'member-1', nickname: 'Рейд-лид' }];
+    if (path === '/org/roster')
+      return {
+        groups: [
+          { id: 'kp-1', name: 'Первая КП', packs: [{ id: 'pack-1', name: 'Первый пак' }] },
+          { id: 'kp-2', name: 'Вторая КП', packs: [{ id: 'pack-2', name: 'Второй пак' }] },
+        ],
+      };
     return { created: 4 };
   });
 });
@@ -31,6 +38,25 @@ async function fillForm() {
 }
 
 describe('создание ивента', () => {
+  it('фильтрует паки по КП и передаёт выбранный состав', async () => {
+    render(<CreateEventDialog onClose={vi.fn()} onCreated={vi.fn()} />);
+    await fillForm();
+    fireEvent.change(screen.getByLabelText('Состав'), { target: { value: 'PACK' } });
+    fireEvent.change(screen.getByLabelText('КП'), { target: { value: 'kp-1' } });
+    expect(screen.queryByRole('option', { name: 'Второй пак' })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Пак'), { target: { value: 'pack-1' } });
+    fireEvent.change(screen.getByLabelText('КП'), { target: { value: 'kp-2' } });
+    expect((screen.getByLabelText('Пак') as HTMLSelectElement).value).toBe('');
+    fireEvent.change(screen.getByLabelText('Пак'), { target: { value: 'pack-2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Принять' }));
+    await waitFor(() => expect(api).toHaveBeenCalledWith('/events', expect.anything()));
+    const call = vi.mocked(api).mock.calls.find(([path]) => path === '/events')!;
+    expect(JSON.parse(call[1]!.body as string)).toMatchObject({
+      scope: 'PACK',
+      kpId: 'kp-2',
+      packId: 'pack-2',
+    });
+  });
   it('отправляет местное время в UTC и сообщает об успешном создании', async () => {
     const onCreated = vi.fn();
     render(<CreateEventDialog series={false} onClose={vi.fn()} onCreated={onCreated} />);

@@ -5,6 +5,9 @@ import { CheckInService } from './checkin.service';
 
 /** Ивент: 17:00–19:00 UTC, плата 10 ДКП, РЛ — m-rl. */
 const EVENT = {
+  scope: 'GUILD' as const,
+  kpId: null,
+  packId: null,
   id: 'e-1',
   status: 'RUNNING',
   startsAt: new Date('2026-03-03T17:00:00Z'),
@@ -33,6 +36,14 @@ function makeDb() {
   const dkp: Array<{ memberId: string; amount: number; type: string; eventId: string }> = [];
   const audit: Array<Record<string, string | null>> = [];
   const db: CheckInDb = {
+    member: {
+      findUnique: async ({ where }) => ({
+        id: where.id,
+        packId: null,
+        pack: null,
+        blockedAt: null,
+      }),
+    },
     $transaction: async (work) => {
       const previousAttendance = structuredClone([...attendance]);
       const previousCodes = structuredClone([...codes]);
@@ -84,7 +95,13 @@ function makeDb() {
     },
     auditLog: {
       create: async ({ data }) => {
-        audit.push({ actorMemberId: data.actorMemberId, action: data.action, entityType: data.entityType, entityId: data.entityId, comment: data.comment });
+        audit.push({
+          actorMemberId: data.actorMemberId,
+          action: data.action,
+          entityType: data.entityType,
+          entityId: data.entityId,
+          comment: data.comment,
+        });
       },
     },
   };

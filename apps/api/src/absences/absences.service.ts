@@ -13,6 +13,8 @@ import {
   can,
   createAbsenceSchema,
   parseSettingValue,
+  isEventInvitee,
+  type EventScopeInput,
   type CreateAbsenceInput,
 } from '@dkp/shared';
 import type { AuditWriter } from '../members/members.service';
@@ -34,6 +36,12 @@ export interface AbsenceRow {
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
 export interface AbsencesDb {
+  member: {
+    findMany(args: {
+      where: { blockedAt: null };
+      select: { id: true; packId: true; pack: { select: { kpId: true } } };
+    }): Promise<Array<{ id: string; packId: string | null; pack: { kpId: string } | null }>>;
+  };
   setting?: {
     findUnique(args: {
       where: { key: string };
@@ -99,8 +107,8 @@ export interface AbsencesDb {
   event: {
     findUnique(args: {
       where: { id: string };
-      select: { startsAt: true; endsAt: true };
-    }): Promise<{ startsAt: Date; endsAt: Date } | null>;
+      select: { startsAt: true; endsAt: true; scope?: true; kpId?: true; packId?: true };
+    }): Promise<(EventScopeInput & { startsAt: Date; endsAt: Date }) | null>;
     findMany(args: {
       where: {
         id?: string;
@@ -303,7 +311,25 @@ export class AbsencesService {
         seenBy: { select: { actorKey: true } },
       },
     });
+    let invitedIds: Set<string> | null = null;
+    if (eventId) {
+      const event = await this.db.event.findUnique({
+        where: { id: eventId },
+        select: { startsAt: true, endsAt: true, scope: true, kpId: true, packId: true },
+      });
+      if (!event) throw new NotFoundException('Ивент не найден');
+      const members = await this.db.member.findMany({
+        where: { blockedAt: null },
+        select: { id: true, packId: true, pack: { select: { kpId: true } } },
+      });
+      invitedIds = new Set(
+        members
+          .filter((m) => isEventInvitee(event, { ...m, kpId: m.pack?.kpId ?? null }))
+          .map((m) => m.id),
+      );
+    }
     return candidates
+      .filter((absence) => !invitedIds || invitedIds.has(absence.memberId))
       .filter((absence) =>
         absence.eventId
           ? absence.eventId === eventId

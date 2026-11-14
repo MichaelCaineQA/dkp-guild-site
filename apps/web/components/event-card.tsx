@@ -13,6 +13,7 @@ import { api } from '../lib/api';
 import { CheckInPanel, RaidLeadCodePanel } from './checkin-panels';
 import { AbsentMembersPanel } from './absent-members-panel';
 import { EventRoster } from './event-roster';
+import { EditEventScopeDialog } from './edit-event-scope-dialog';
 import { Badge, Button, Card, Modal } from './ui';
 const MODE_LABELS: Record<EventMode, string> = { PVE: 'PvE', PVP: 'PvP' };
 const STATUS_LABELS: Record<string, string> = {
@@ -41,6 +42,7 @@ export function EventCard({
 }) {
   const { user } = useSession();
   const [busy, setBusy] = useState(false);
+  const [editingScope, setEditingScope] = useState(false);
   const [rosterVersion, setRosterVersion] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -114,6 +116,8 @@ export function EventCard({
       )}
 
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+        <dt>Состав</dt>
+        <dd>{event.scopeName}</dd>
         <dt className="text-secondary">Плата ДКП</dt>
         <dd>{event.dkpReward} (фиксирована при создании)</dd>
         <dt className="text-secondary">Рейд-лид</dt>
@@ -185,6 +189,19 @@ export function EventCard({
             Страница проведения
           </a>
         </div>
+      )}
+      {canManage && event.status === 'PLANNED' && (
+        <Button onClick={() => setEditingScope(true)}>Изменить состав</Button>
+      )}
+      {editingScope && (
+        <EditEventScopeDialog
+          event={event}
+          onClose={() => setEditingScope(false)}
+          onChanged={() => {
+            onChanged();
+            onClose();
+          }}
+        />
       )}
       {canManage && isEventEditable(event.status) && (
         <Button disabled={busy} onClick={() => changeStatus('CANCELLED')}>

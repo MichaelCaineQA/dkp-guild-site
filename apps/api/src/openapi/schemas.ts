@@ -103,6 +103,10 @@ const roster = {
   avatarColor: nullable(enumeration(shared.AVATAR_COLORS)),
 };
 const event = {
+  scope: enumeration(['GUILD', 'KP', 'PACK']),
+  kpId: nullable(str),
+  packId: nullable(str),
+  scopeName: str,
   name: str,
   id: str,
   eventTypeId: str,
