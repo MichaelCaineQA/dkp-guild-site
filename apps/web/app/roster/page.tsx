@@ -172,7 +172,11 @@ export default function RosterPage() {
         subtitle="Все члены гильдии: ранги, роли в бою, привязка Discord"
       />
 
-      <RosterTabs requests={!!user && can(user, 'link_requests.review')} current="members" />
+      <RosterTabs
+        requests={!!user && can(user, 'link_requests.review')}
+        blocked={!!canManage}
+        current="members"
+      />
       <div className="mb-4 flex flex-wrap items-center gap-4">
         <Field label="Ранг:">
           <Select
@@ -326,6 +330,9 @@ export default function RosterPage() {
           row={selected}
           canAssignLeader={!!user?.isAdmin}
           canManage={!!canManage}
+          canBlock={
+            !!canManage && (selected.rank === 'MEMBER' || selected.rank === 'OFFICER')
+          }
           canChangeRank={
             !!user &&
             can(
@@ -344,11 +351,12 @@ export default function RosterPage() {
   );
 }
 
-/** Карточка члена: редактирование (офицер+) и смена ранга (Глава/Админ). */
+/** Карточка члена: редактирование (офицер+), смена ранга и блокировка (Глава/Админ). */
 function MemberCard({
   row,
   canAssignLeader,
   canManage,
+  canBlock,
   canChangeRank,
   onClose,
   onChanged,
@@ -356,6 +364,7 @@ function MemberCard({
   row: RosterRow;
   canAssignLeader: boolean;
   canManage: boolean;
+  canBlock: boolean;
   canChangeRank: boolean;
   onClose: () => void;
   onChanged: () => void;
@@ -365,6 +374,7 @@ function MemberCard({
   const [combatRole, setCombatRole] = useState<CombatRole | ''>(row.combatRole ?? '');
   const [newRank, setNewRank] = useState<Rank>(row.rank);
   const [comment, setComment] = useState('');
+  const [blockComment, setBlockComment] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [grantAmount, setGrantAmount] = useState('');
@@ -493,6 +503,27 @@ function MemberCard({
     }
   };
 
+  /** Блокировка покинувшего гильдию (issue #149): активные ставки снимаются. */
+  const block = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api(`/members/${row.id}/block`, {
+        method: 'POST',
+        body: JSON.stringify({ comment: blockComment.trim() }),
+      });
+      setMessage('Участник заблокирован');
+      onChanged();
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      setMessage(
+        status === 409 ? 'Уже заблокирован или блокировать нельзя' : 'Не удалось заблокировать',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Card className="mt-4">
       <h2 className="text-xl font-semibold text-primary">{row.nickname}</h2>
@@ -527,6 +558,34 @@ function MemberCard({
             </Select>
             <Button onClick={save} disabled={busy || nickname.length < 2}>
               Сохранить
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {canBlock && (
+        <div className="mt-4">
+          <h3 className="mb-2 font-semibold text-primary">Блокировка</h3>
+          <p className="mb-2 text-sm text-secondary">
+            Для покинувших гильдию: вход закроется экраном «врата», активные ставки
+            снимутся, ДКП и история сохранятся. Разблокировка — на вкладке
+            «Заблокированные».
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              value={blockComment}
+              onChange={(e) => setBlockComment(e.target.value)}
+              placeholder="Причина блокировки (обязательна, попадёт в аудит)"
+              minLength={3}
+              maxLength={500}
+              className="w-80"
+            />
+            <Button
+              variant="danger"
+              onClick={block}
+              disabled={busy || blockComment.trim().length < 3}
+            >
+              Заблокировать
             </Button>
           </div>
         </div>

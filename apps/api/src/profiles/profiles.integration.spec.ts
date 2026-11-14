@@ -194,7 +194,7 @@ describe('профили через HTTP', () => {
     await app.close();
   });
   beforeEach(() => {
-    actor = { userId: 'u1', username: 'Игрок', memberId: 'm1', rank: 'MEMBER', isAdmin: false };
+    actor = { userId: 'u1', username: 'Игрок', memberId: 'm1', rank: 'MEMBER', isAdmin: false, blocked: false };
     role = 'DPS';
     weapons = ['STAFF', 'WAND'];
     avatar = null;
@@ -216,7 +216,7 @@ describe('профили через HTTP', () => {
   it('анониму — 401, непривязанному аккаунту — 403', async () => {
     actor = undefined;
     expect((await fetch(`${url}/profiles/m1`)).status).toBe(401);
-    actor = { userId: 'u3', username: 'Новый', memberId: null, rank: null, isAdmin: false };
+    actor = { userId: 'u3', username: 'Новый', memberId: null, rank: null, isAdmin: false, blocked: false };
     expect((await fetch(`${url}/profiles/m1`)).status).toBe(403);
   });
 
@@ -285,7 +285,7 @@ describe('профили через HTTP', () => {
       'gearScore.value',
       1234,
     );
-    actor = { userId: 'admin:a', username: 'a', isAdmin: true, memberId: null, rank: null };
+    actor = { userId: 'admin:a', username: 'a', isAdmin: true, memberId: null, rank: null, blocked: false };
     expect(await (await fetch(`${url}/profiles/m2`)).json()).toHaveProperty(
       'gearScore.value',
       1234,
@@ -419,7 +419,7 @@ describe('профили через HTTP', () => {
 
   it('несуществующий профиль — 404; резервный админ может читать', async () => {
     expect((await fetch(`${url}/profiles/missing`)).status).toBe(404);
-    actor = { userId: 'admin:admin', username: 'Админ', memberId: null, rank: null, isAdmin: true };
+    actor = { userId: 'admin:admin', username: 'Админ', memberId: null, rank: null, isAdmin: true, blocked: false };
     expect((await fetch(`${url}/profiles/m1`)).status).toBe(200);
     expect(
       (await patch('m1', { weapons: ['STAFF', 'WAND'], combatRole: 'TANK', comment: 'Новая роль' }))

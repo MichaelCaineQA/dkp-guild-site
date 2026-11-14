@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   Optional,
   ServiceUnavailableException,
@@ -26,6 +27,14 @@ export const MIN_RANK_KEY = 'auth:minRank';
 
 /** Минимальный ранг для эндпоинта. Резервный админ проходит всегда. */
 export const MinRank = (rank: RankName) => SetMetadata(MIN_RANK_KEY, rank);
+
+export const ALLOW_BLOCKED_KEY = 'auth:allowBlocked';
+
+/**
+ * Разрешает эндпоинт заблокированным учёткам (issue #149): только /auth/me,
+ * чтобы клиент узнал о блокировке и показал экран «врата закрыты».
+ */
+export const AllowBlocked = () => SetMetadata(ALLOW_BLOCKED_KEY, true);
 
 /** Request с сессией (user — из SessionData) и профилем passport. */
 export type AuthedRequest = Request & { user?: unknown };
@@ -53,10 +62,14 @@ export class AuthGuard implements CanActivate {
 
     if (!user.isAdmin && this.prisma?.member?.findUnique) {
       return this.prisma.member
-        .findUnique({ where: { userId: user.userId }, select: { id: true, rank: true } })
+        .findUnique({
+          where: { userId: user.userId },
+          select: { id: true, rank: true, blockedAt: true },
+        })
         .then((member) => {
           user.memberId = member?.id ?? null;
           user.rank = member?.rank ?? null;
+          user.blocked = member?.blockedAt != null;
           return this.authorize(context, user);
         });
     }
@@ -66,6 +79,18 @@ export class AuthGuard implements CanActivate {
   }
 
   private authorize(context: ExecutionContext, user: SessionUser): boolean {
+    // Заблокированная учётка (issue #149): весь сайт закрыт, кроме явно
+    // помеченных @AllowBlocked() эндпоинтов (/auth/me) и выхода (без guard).
+    if (user.blocked && !user.isAdmin) {
+      const allowBlocked = this.reflector.getAllAndOverride<boolean | undefined>(
+        ALLOW_BLOCKED_KEY,
+        [context.getHandler(), context.getClass()],
+      );
+      if (!allowBlocked) {
+        throw new ForbiddenException('Гильдия закрыла свои врата');
+      }
+      return true;
+    }
     const minRank = this.reflector.getAllAndOverride<RankName | undefined>(MIN_RANK_KEY, [
       context.getHandler(),
       context.getClass(),

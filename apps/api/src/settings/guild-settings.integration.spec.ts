@@ -54,12 +54,12 @@ describe('Настройки гильдии через HTTP', () => {
       result.set('file', new Blob([Uint8Array.from(data)], { type: 'image/png' }), 'crest.png');
       return result;
     };
-    actor = { userId: 'off', username: 'Офицер', memberId: 'off', rank: 'OFFICER', isAdmin: false };
+    actor = { userId: 'off', username: 'Офицер', memberId: 'off', rank: 'OFFICER', isAdmin: false, blocked: false };
     expect((await fetch(`${url}/settings/guild`, { method: 'PUT', body: form() })).status).toBe(
       403,
     );
     expect(update).not.toHaveBeenCalled();
-    actor = { userId: 'admin:a', username: 'Админ', memberId: null, rank: null, isAdmin: true };
+    actor = { userId: 'admin:a', username: 'Админ', memberId: null, rank: null, isAdmin: true, blocked: false };
     expect((await fetch(`${url}/settings/guild`, { method: 'PUT', body: form() })).status).toBe(
       200,
     );

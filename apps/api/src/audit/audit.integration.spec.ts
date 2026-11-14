@@ -70,14 +70,14 @@ describe('аудит через HTTP: права, фильтры, ровно о�
   });
   beforeEach(() => {
     jest.clearAllMocks();
-    actor = { userId: 'u1', username: 'Офицер', memberId: 'm1', rank: 'OFFICER', isAdmin: false };
+    actor = { userId: 'u1', username: 'Офицер', memberId: 'm1', rank: 'OFFICER', isAdmin: false, blocked: false };
     login.mockReturnValue(true);
   });
 
   it('аноним получает 401, рядовой — только личный журнал', async () => {
     actor = undefined;
     expect((await fetch(`${url}/audit`)).status).toBe(401);
-    actor = { userId: 'u2', username: 'Игрок', memberId: 'm2', rank: 'MEMBER', isAdmin: false };
+    actor = { userId: 'u2', username: 'Игрок', memberId: 'm2', rank: 'MEMBER', isAdmin: false, blocked: false };
     expect((await fetch(`${url}/audit`)).status).toBe(200);
     expect((await fetch(`${url}/audit/actions`)).status).toBe(200);
     expect(findMany).toHaveBeenCalledWith(
@@ -137,7 +137,7 @@ describe('аудит через HTTP: права, фильтры, ровно о�
   });
 
   it('резервный админ без Member видит журнал', async () => {
-    actor = { userId: 'admin:admin', username: 'Админ', memberId: null, rank: null, isAdmin: true };
+    actor = { userId: 'admin:admin', username: 'Админ', memberId: null, rank: null, isAdmin: true, blocked: false };
     expect((await fetch(`${url}/audit`)).status).toBe(200);
   });
 

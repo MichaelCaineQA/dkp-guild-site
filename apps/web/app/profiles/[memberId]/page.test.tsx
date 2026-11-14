@@ -24,7 +24,7 @@ const profile = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u1', username: 'alister', memberId: 'm1', rank: 'MEMBER', isAdmin: false },
+    user: { userId: 'u1', username: 'alister', memberId: 'm1', rank: 'MEMBER', isAdmin: false, blocked: false },
     loading: false,
     reload: vi.fn(),
   });
@@ -59,7 +59,7 @@ it('старый профиль заполняет оружия без смен�
 
 it('непривязанному аккаунту не загружает профиль', () => {
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u2', username: 'guest', memberId: null, rank: null, isAdmin: false },
+    user: { userId: 'u2', username: 'guest', memberId: null, rank: null, isAdmin: false, blocked: false },
     loading: false,
     reload: vi.fn(),
   });
@@ -93,7 +93,7 @@ it('показывает профиль, баланс и сохраняет св
 
 it('в чужом профиле нет формы самостоятельного редактирования', async () => {
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u2', username: 'other', memberId: 'm2', rank: 'MEMBER', isAdmin: false },
+    user: { userId: 'u2', username: 'other', memberId: 'm2', rank: 'MEMBER', isAdmin: false, blocked: false },
     loading: false,
     reload: vi.fn(),
   });

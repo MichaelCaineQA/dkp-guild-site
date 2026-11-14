@@ -40,7 +40,7 @@ const CHECKLIST = [
 ];
 function session(memberId = 'm-rl', rank: 'MEMBER' | 'OFFICER' | null = 'MEMBER', isAdmin = false) {
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u', username: 'User', memberId: isAdmin ? null : memberId, rank, isAdmin },
+    user: { userId: 'u', username: 'User', memberId: isAdmin ? null : memberId, rank, isAdmin, blocked: false },
     loading: false,
     reload: vi.fn(),
   });

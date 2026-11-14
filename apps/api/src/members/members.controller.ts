@@ -16,6 +16,13 @@ export class MembersController {
     return this.members.roster(query);
   }
 
+  /** Вкладка «Заблокированные» (issue #149) — Глава/Админ. */
+  @Get('blocked')
+  @RequirePermission('members.manage')
+  blocked() {
+    return this.members.blocked();
+  }
+
   @Get(':id')
   @RequirePermission('members.view_roster')
   getOne(@Param('id') id: string) {
@@ -33,6 +40,20 @@ export class MembersController {
   @RequirePermission('members.change_rank')
   changeRank(@Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest) {
     return this.members.changeRank(id, body, toActor(req));
+  }
+
+  /** Блокировка учётки покинувшего гильдию (issue #149) — Глава/Админ. */
+  @Post(':id/block')
+  @RequirePermission('members.manage')
+  block(@Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest) {
+    return this.members.block(id, body, toActor(req));
+  }
+
+  /** Разблокировка вернувшегося (issue #149) — Глава/Админ. */
+  @Post(':id/unblock')
+  @RequirePermission('members.manage')
+  unblock(@Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest) {
+    return this.members.unblock(id, body, toActor(req));
   }
 }
 

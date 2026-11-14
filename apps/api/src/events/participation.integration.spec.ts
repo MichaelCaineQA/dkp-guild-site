@@ -80,7 +80,7 @@ describe('Своё участие через HTTP', () => {
     await app?.close();
   });
   beforeEach(() => {
-    actor = { userId: 'u', username: 'Игрок', memberId: 'self', rank: 'MEMBER', isAdmin: false };
+    actor = { userId: 'u', username: 'Игрок', memberId: 'self', rank: 'MEMBER', isAdmin: false, blocked: false };
     now = new Date(+start - 3600000);
     rows = [];
     status = 'PLANNED';
@@ -99,7 +99,7 @@ describe('Своё участие через HTTP', () => {
   it('аноним 401, непривязанный 403; резервный админ без Member не меняет участие', async () => {
     actor = undefined;
     expect((await get()).status).toBe(401);
-    actor = { userId: 'u', username: 'Новый', memberId: null, rank: null, isAdmin: false };
+    actor = { userId: 'u', username: 'Новый', memberId: null, rank: null, isAdmin: false, blocked: false };
     expect((await post({ attending: false })).status).toBe(403);
     actor.isAdmin = true;
     expect((await get()).status).toBe(403);

@@ -12,7 +12,7 @@ function session(
   isAdmin = false,
 ) {
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u', username: 'User', rank, memberId, isAdmin },
+    user: { userId: 'u', username: 'User', rank, memberId, isAdmin, blocked: false },
     loading: false,
     reload: vi.fn(),
   });

@@ -207,14 +207,14 @@ const USER_1: SessionUser = {
   username: 'warrior',
   memberId: 'm-1',
   rank: 'MEMBER',
-  isAdmin: false,
+  isAdmin: false, blocked: false,
 };
 const USER_2: SessionUser = {
   userId: 'u-2',
   username: 'healer',
   memberId: 'm-2',
   rank: 'MEMBER',
-  isAdmin: false,
+  isAdmin: false, blocked: false,
 };
 
 function connect(app: INestApplication, sid: string | null): Socket {

@@ -14,6 +14,7 @@ export interface DkpDb {
         eventId?: string;
         type?: string;
         createdAt?: { gte?: Date; lte?: Date };
+        member?: { blockedAt?: null };
       };
       orderBy: { createdAt: 'desc' };
       take?: number;
@@ -46,10 +47,11 @@ export class DkpService {
 
   constructor(private readonly db: DkpDb) {}
 
-  /** Операции с фильтрами (игрок/ивент/тип/период) и пагинацией. */
+  /** Операции с фильтрами (игрок/ивент/тип/период) и пагинацией.
+   *  Записи заблокированных скрыты (issue #149) — как и их строки балансов. */
   async list(query: unknown): Promise<{ entries: DkpEntryRow[]; total: number }> {
     const filters: DkpQuery = dkpQuerySchema.parse(query);
-    const where = this.whereOf(filters);
+    const where = { ...this.whereOf(filters), member: { blockedAt: null } };
 
     const [rows, total] = await Promise.all([
       this.db.dkpEntry.findMany({
@@ -82,10 +84,11 @@ export class DkpService {
   /**
    * Балансы всех членов (план 2.8, для страницы журнала и состава):
    * баланс = сумма журнала (computeBalance), включая ушедших в минус.
+   * Заблокированные скрыты (issue #149); их записи хранятся в журнале.
    */
   async balances(): Promise<DkpBalanceRow[]> {
     const [members, entries] = await Promise.all([
-      this.db.member.findMany(),
+      this.db.member.findMany({ where: { blockedAt: null } }),
       this.db.dkpEntry.findMany({
         where: {},
         orderBy: { createdAt: 'desc' },

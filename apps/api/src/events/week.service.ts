@@ -45,7 +45,9 @@ export class WeekService {
       },
     });
     const [members, absences, setting] = await Promise.all([
+      // Заблокированные не считаются приглашёнными (issue #149).
       this.db.member.findMany({
+        where: { blockedAt: null },
         select: { id: true, packId: true, pack: { select: { kpId: true } } },
       }),
       this.db.absence.findMany({

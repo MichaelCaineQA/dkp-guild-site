@@ -422,7 +422,7 @@ describe('BidsService (issue #94)', () => {
 describe('BidsService: события realtime (issue #97)', () => {
   const events = (): AuctionEventsPort => ({
     lotCreated: jest.fn(),
-    bidPlaced: jest.fn(),
+    bidPlaced: jest.fn(), bidsRemoved: jest.fn(),
     lotUpdated: jest.fn(),
     lotClosed: jest.fn(),
   });

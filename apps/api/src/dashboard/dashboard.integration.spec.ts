@@ -96,12 +96,12 @@ describe('Дашборд через HTTP', () => {
   });
   beforeEach(() => {
     jest.clearAllMocks();
-    actor = { userId: 'u', username: 'Игрок', memberId: 'self', rank: 'MEMBER', isAdmin: false };
+    actor = { userId: 'u', username: 'Игрок', memberId: 'self', rank: 'MEMBER', isAdmin: false, blocked: false };
   });
   it('аноним получает 401, ожидающий приёма — 403, запросов данных нет', async () => {
     actor = undefined;
     expect((await fetch(url + '/dashboard')).status).toBe(401);
-    actor = { userId: 'new', username: 'Новый', memberId: null, rank: null, isAdmin: false };
+    actor = { userId: 'new', username: 'Новый', memberId: null, rank: null, isAdmin: false, blocked: false };
     expect((await fetch(url + '/dashboard')).status).toBe(403);
     expect(events).not.toHaveBeenCalled();
     expect(member).not.toHaveBeenCalled();
@@ -138,7 +138,7 @@ describe('Дашборд через HTTP', () => {
     expect(body.team!.members[0]).not.toHaveProperty('screenshotIds');
   });
   it('резервный Админ без Member получает события/аудит и пустую команду', async () => {
-    actor = { userId: 'admin:a', username: 'a', memberId: null, rank: null, isAdmin: true };
+    actor = { userId: 'admin:a', username: 'a', memberId: null, rank: null, isAdmin: true, blocked: false };
     const body = (await (await fetch(url + '/dashboard')).json()) as DashboardData;
     expect(body.team).toBeNull();
     expect(body.audit).toHaveLength(1);
@@ -148,9 +148,9 @@ describe('Дашборд через HTTP', () => {
   it('кошелёк: без привязанного Member (включая резервного Админа) — 403', async () => {
     actor = undefined;
     expect((await fetch(url + '/dashboard/wallet')).status).toBe(401);
-    actor = { userId: 'new', username: 'Новый', memberId: null, rank: null, isAdmin: false };
+    actor = { userId: 'new', username: 'Новый', memberId: null, rank: null, isAdmin: false, blocked: false };
     expect((await fetch(url + '/dashboard/wallet')).status).toBe(403);
-    actor = { userId: 'admin:a', username: 'a', memberId: null, rank: null, isAdmin: true };
+    actor = { userId: 'admin:a', username: 'a', memberId: null, rank: null, isAdmin: true, blocked: false };
     expect((await fetch(url + '/dashboard/wallet')).status).toBe(403);
     expect(walletLots).not.toHaveBeenCalled();
     expect(walletEntries).not.toHaveBeenCalled();

@@ -209,6 +209,11 @@ export const contracts: Record<string, Contract> = {
     errors: [400],
   }),
   Members_getOne: c('Получить участника', 'RosterMember', { errors: [404] }),
+  Members_blocked: c('Вкладка «Заблокированные» состава', list('BlockedMember'), {
+    access: leader,
+    description:
+      'Покинувшие гильдию (issue #149): свежие блокировки сверху. Основной состав их не видит; данные (ДКП, класс, лут) сохранены.',
+  }),
   Members_update: c('Изменить участника', 'Member', {
     access: leader,
     body: 'UpdateMember',
@@ -220,6 +225,20 @@ export const contracts: Record<string, Contract> = {
     body: 'ChangeRank',
     errors: [404, 409],
     description: 'Назначаемый ранг — MEMBER или OFFICER. Комментарий обязателен.',
+  }),
+  Members_block: c('Заблокировать учётку покинувшего гильдию', 'BlockedMember', {
+    access: leader,
+    body: 'BlockMember',
+    errors: [400, 404, 409],
+    description:
+      'Заблокированный видит экран «Гильдия закрыла свои врата для тебя», весь остальной API для него закрыт (кроме /auth/me и выхода). Все активные ставки на открытых лотах удаляются той же транзакцией, комнатам лотов уходит свежий срез. Главу и админа блокировать нельзя; ДКП, класс, роль и выкупленные лоты сохраняются. Комментарий обязателен, действие уходит в аудит.',
+  }),
+  Members_unblock: c('Разблокировать вернувшегося участника', 'RosterMember', {
+    access: leader,
+    body: 'BlockMember',
+    errors: [400, 404, 409],
+    description:
+      'Возвращает доступ к сайту; ранг и история не менялись (issue #149). Комментарий обязателен, действие уходит в аудит.',
   }),
   Events_list: c('Получить расписание', list('Event'), { query: 'EventsQuery' }),
   Events_getOne: c('Получить ивент', 'EventDetail', { errors: [404] }),

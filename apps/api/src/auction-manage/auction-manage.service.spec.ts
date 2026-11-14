@@ -503,7 +503,7 @@ describe('AuctionManageService: события realtime (issue #97)', () => {
   it('отмена лота отправляет lotClosed(CANCELLED), продление — lotUpdated', async () => {
     const events: AuctionEventsPort = {
       lotCreated: jest.fn(),
-      bidPlaced: jest.fn(),
+      bidPlaced: jest.fn(), bidsRemoved: jest.fn(),
       lotUpdated: jest.fn(),
       lotClosed: jest.fn(),
     };

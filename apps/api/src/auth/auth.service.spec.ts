@@ -28,7 +28,7 @@ function makeDb(state: { users: UserRow[] }) {
         // как Prisma: привязанный Member виден в user.member при следующем чтении
         const user = state.users.find((u) => u.id === data.userId)!;
         const member = { id: `member-for-${data.userId}`, rank: data.rank };
-        user.member = { id: member.id, rank: member.rank };
+        user.member = { id: member.id, rank: member.rank, blockedAt: null };
         return member;
       },
     },
@@ -45,7 +45,7 @@ describe('AuthService', () => {
             id: 'test-user-id',
             username: 'test-member',
             discordId: null,
-            member: { id: 'm1', rank: 'MEMBER' },
+            member: { id: 'm1', rank: 'MEMBER', blockedAt: null },
           },
         ],
       }),
@@ -81,6 +81,37 @@ describe('AuthService', () => {
 
     expect(session.rank).toBeNull();
     expect(session.memberId).toBeNull();
+  });
+
+  it('заблокированный получает blocked=true и при входе, и при перечитывании (issue #149)', async () => {
+    const blockedAt = new Date('2026-11-14T10:00:00Z');
+    const state = {
+      users: [
+        {
+          id: 'u-blk',
+          username: 'Ушедший',
+          discordId: '333',
+          member: { id: 'm-blk', rank: 'MEMBER', blockedAt },
+        },
+        {
+          id: 'u-act',
+          username: 'Живой',
+          discordId: '444',
+          member: { id: 'm-act', rank: 'MEMBER', blockedAt: null },
+        },
+      ] as UserRow[],
+    };
+    const service = new AuthService(makeDb(state));
+
+    const login = await service.loginWithDiscord({ discordId: '333', username: 'Ушедший' });
+    expect(login.blocked).toBe(true);
+    // /auth/me перечитывает из БД — флаг не потеряется
+    const fresh = await service.getSessionUser('u-blk');
+    expect(fresh?.blocked).toBe(true);
+
+    // Активный игрок — false
+    const active = await service.getSessionUser('u-act');
+    expect(active).toMatchObject({ blocked: false, memberId: 'm-act' });
   });
 
   it('повторный вход того же пользователя обновляет ник, Member сохраняется', async () => {

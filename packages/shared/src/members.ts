@@ -32,6 +32,22 @@ export const changeRankSchema = z.object({
 });
 export type ChangeRankInput = z.infer<typeof changeRankSchema>;
 
+/**
+ * Блокировка/разблокировка учётки (issue #149): комментарий обязателен —
+ * действие ручное и уходит в AuditLog.
+ */
+export const blockMemberSchema = z.object({
+  comment: z.string().trim().min(3).max(500),
+});
+export type BlockMemberInput = z.infer<typeof blockMemberSchema>;
+
+/**
+ * Ранги, которые можно заблокировать (issue #149): Главу и админа блокировать
+ * нельзя — передача главы идёт отдельным механизмом (12.12), админ — не член
+ * гильдии. Данные заблокированного (ДКП, класс, лут) сохраняются.
+ */
+export const BLOCKABLE_RANKS: ReadonlySet<string> = new Set(['OFFICER', 'MEMBER']);
+
 /** Фильтры списка состава: ранг и роль в бою (issue #6). */
 export const rosterQuerySchema = z.object({
   weapon: z.enum(WEAPONS).optional(),

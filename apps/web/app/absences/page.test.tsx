@@ -73,7 +73,7 @@ describe('AbsencesPage', () => {
       username: 'test-member',
       memberId: 'm-3',
       rank: 'MEMBER',
-      isAdmin: false,
+      isAdmin: false, blocked: false,
     });
 
     render(<AbsencesPage />);
@@ -92,7 +92,7 @@ describe('AbsencesPage', () => {
       username: 'test-leader',
       memberId: 'm-off',
       rank: 'GUILD_LEADER',
-      isAdmin: false,
+      isAdmin: false, blocked: false,
     });
 
     render(<AbsencesPage />);
@@ -117,7 +117,7 @@ describe('AbsencesPage', () => {
       username: 'Админ',
       memberId: null,
       rank: null,
-      isAdmin: true,
+      isAdmin: true, blocked: false,
     });
     render(<AbsencesPage />);
     expect(await screen.findByText('Все заявки гильдии')).toBeDefined();
@@ -131,7 +131,7 @@ describe('AbsencesPage', () => {
       username: 'Игрок',
       memberId: 'm-3',
       rank: 'MEMBER',
-      isAdmin: false,
+      isAdmin: false, blocked: false,
     });
     vi.mocked(api).mockImplementation(async (path, init) => {
       if (path === '/absences' && init?.method === 'POST') return { id: 'new' };

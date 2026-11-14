@@ -25,6 +25,7 @@ const inputs: Record<string, unknown> = {
   CreateMember: shared.createMemberSchema,
   UpdateMember: shared.updateMemberSchema,
   ChangeRank: shared.changeRankSchema,
+  BlockMember: shared.blockMemberSchema,
   RosterQuery: shared.rosterQuerySchema,
   CreateLinkRequest: shared.createLinkRequestSchema,
   SessionUser: shared.sessionUserSchema,
@@ -425,6 +426,7 @@ export const schemas: Record<string, SchemaObject> = {
     ['id', 'nickname', 'combatRole', 'weapons', 'gearScore', 'screenshotIds', 'createdAt'],
   ),
   RosterMember: object(roster),
+  BlockedMember: object({ ...roster, blockedAt: date }),
   Member: object({
     id: str,
     nickname: str,
