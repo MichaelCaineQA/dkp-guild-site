@@ -39,7 +39,11 @@ function mockApi(opts: { fail?: boolean } = {}) {
     if (path === '/items') return ITEMS;
     if (path === '/auctions/lot-defaults/i-1') return DEFAULTS;
     if (path === '/auctions' && init?.method === 'POST') {
-      if (opts.fail) throw Object.assign(new Error('nope'), { status: 400, body: { message: 'Предмет не найден' } });
+      if (opts.fail)
+        throw Object.assign(new Error('nope'), {
+          status: 400,
+          body: { message: 'Предмет не найден' },
+        });
       posted = { path, body: JSON.parse(String(init.body)) };
       return { id: 'a-9', status: 'OPEN' };
     }
@@ -140,7 +144,25 @@ it('без предмета создать нельзя: кнопка задиз
   mockApi();
   render(<CreateLotDialog onClose={() => undefined} onCreated={() => undefined} />);
   await optionsReady();
-  expect(
-    (screen.getByRole('button', { name: 'Создать лот' }) as HTMLButtonElement).disabled,
-  ).toBe(true);
+  expect((screen.getByRole('button', { name: 'Создать лот' }) as HTMLButtonElement).disabled).toBe(
+    true,
+  );
+});
+
+it('созданный в форме предмет выбирается для нового лота', async () => {
+  mockApi();
+  vi.mocked(api).mockImplementation(async (path: string, init?: RequestInit) => {
+    if (path === '/items' && init?.method === 'POST') return ITEMS[0];
+    if (path === '/items') return [];
+    if (path === '/auctions/lot-defaults/i-1') return DEFAULTS;
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<CreateLotDialog onClose={() => undefined} onCreated={() => undefined} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Добавить новый предмет' }));
+  fireEvent.change(screen.getByLabelText('Название предмета'), {
+    target: { value: 'Клинок рассвета' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить предмет' }));
+  await formReady();
+  expect((screen.getByLabelText('Предмет из справочника') as HTMLSelectElement).value).toBe('i-1');
 });
