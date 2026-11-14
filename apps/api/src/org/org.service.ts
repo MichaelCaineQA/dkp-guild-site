@@ -199,6 +199,8 @@ export class OrgService {
     });
     const changedAt = new Date(Math.max(Date.now(), (previous?.changedAt.getTime() ?? 0) + 1));
     await tx.pack.update({ where: { id: packId }, data: { kpId } });
+    // PACK следует за паком: его КП в ивентах должна оставаться согласованной.
+    await tx.event.updateMany({ where: { scope: 'PACK', packId }, data: { kpId } });
     await tx.packMembershipHistory.create({
       data: { packId, previousKpId: pack.kpId, kpId, changedAt },
     });

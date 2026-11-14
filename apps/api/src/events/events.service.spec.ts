@@ -3,6 +3,9 @@ import type { EventsDb, EventsActor } from './events.service';
 import { EventsService } from './events.service';
 
 interface EventRecord {
+  scope: 'GUILD' | 'KP' | 'PACK';
+  kpId: string | null;
+  packId: string | null;
   id: string;
   name: string;
   eventTypeId: string;
@@ -26,6 +29,9 @@ interface DropRecord {
 
 function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
   const events: EventRecord[] = seed.map((e) => ({
+    scope: 'GUILD',
+    kpId: null,
+    packId: null,
     name: 'Сбор гильдии',
     eventTypeId: 'et-1',
     mode: 'PVE',
@@ -42,12 +48,20 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
   const drops: DropRecord[] = [];
   const audit: Array<Record<string, string | null>> = [];
   const db: EventsDb = {
+    kP: {
+      findUnique: async ({ where }) =>
+        ['kp-1', 'kp-2'].includes(where.id) ? { id: where.id, name: where.id } : null,
+    },
+    pack: {
+      findUnique: async ({ where }) =>
+        where.id === 'pack-1' ? { id: where.id, name: 'Первый пак', kpId: 'kp-1' } : null,
+    },
     $transaction: async (work) => {
       const snapshot = structuredClone(events);
       const snapshotDrops = structuredClone(drops);
       const logs = [...audit];
       try {
-        return await work({ event: db.event, lootDrop: db.lootDrop, auditLog: db.auditLog });
+        return await work(db);
       } catch (error) {
         events.splice(0, events.length, ...snapshot);
         drops.splice(0, drops.length, ...snapshotDrops);
@@ -81,6 +95,7 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
               ...found,
               eventTypeName: 'Гильдбосс',
               raidLeadName: 'РЛ',
+              scopeName: 'Вся гильдия',
               eventType: { name: 'Гильдбосс' },
               raidLead: { nickname: 'РЛ' },
             }
@@ -88,6 +103,9 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
       },
       create: async ({ data }) => {
         const created: EventRecord = {
+          scope: data.scope,
+          kpId: data.kpId,
+          packId: data.packId,
           id: `e-${events.length + 1}`,
           name: data.name,
           eventTypeId: data.eventTypeId,
@@ -162,7 +180,13 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
     },
     auditLog: {
       create: async ({ data }) => {
-        audit.push({ actorMemberId: data.actorMemberId, action: data.action, entityType: data.entityType, entityId: data.entityId, comment: data.comment ?? null });
+        audit.push({
+          actorMemberId: data.actorMemberId,
+          action: data.action,
+          entityType: data.entityType,
+          entityId: data.entityId,
+          comment: data.comment ?? null,
+        });
       },
     },
   };
@@ -185,6 +209,65 @@ function createBody(overrides: Record<string, unknown> = {}) {
 }
 
 describe('EventsService.create', () => {
+  it('сохраняет состав пака и возвращает его имя', async () => {
+    const { db } = makeDb();
+    const service = new EventsService(db);
+    const { id } = await service.create(
+      createBody({ scope: 'PACK', kpId: 'kp-1', packId: 'pack-1' }),
+      ACTOR,
+    );
+    expect(await service.getOne(id)).toMatchObject({
+      scope: 'PACK',
+      kpId: 'kp-1',
+      packId: 'pack-1',
+      scopeName: 'Первый пак',
+    });
+  });
+
+  it('отклоняет пак из другой КП без сохранения и аудита', async () => {
+    const { db, events, audit } = makeDb();
+    await expect(
+      new EventsService(db).create(
+        createBody({ scope: 'PACK', kpId: 'kp-2', packId: 'pack-1' }),
+        ACTOR,
+      ),
+    ).rejects.toThrow('Пак не принадлежит');
+    expect(events).toEqual([]);
+    expect(audit).toEqual([]);
+  });
+
+  it('редактирует состав запланированного ивента, сохраняя плату', async () => {
+    const { db } = makeDb([{ id: 'e' }]);
+    const service = new EventsService(db);
+    await service.update(
+      'e',
+      { scope: 'KP', kpId: 'kp-1', packId: null, dkpReward: 99 },
+      ACTOR,
+      'GUILD_LEADER',
+    );
+    expect(await service.getOne('e')).toMatchObject({
+      scope: 'KP',
+      kpId: 'kp-1',
+      packId: null,
+      dkpReward: 10,
+    });
+    await service.update('e', { scope: 'GUILD', kpId: null, packId: null }, ACTOR, 'GUILD_LEADER');
+    expect(await service.getOne('e')).toMatchObject({ scope: 'GUILD', kpId: null, packId: null });
+  });
+
+  it('запрещает изменение состава идущего ивента', async () => {
+    const { db } = makeDb([{ id: 'e', status: 'RUNNING' }]);
+    await expect(
+      new EventsService(db).update('e', { scope: 'KP', kpId: 'kp-1' }, ACTOR, 'GUILD_LEADER'),
+    ).rejects.toThrow('только до начала');
+  });
+
+  it('частичное изменение не допускает несовместимой пары КП/пак', async () => {
+    const { db } = makeDb([{ id: 'e', scope: 'PACK', kpId: 'kp-1', packId: 'pack-1' }]);
+    await expect(
+      new EventsService(db).update('e', { kpId: 'kp-2' }, ACTOR, 'GUILD_LEADER'),
+    ).rejects.toThrow('Пак не принадлежит');
+  });
   it('создаёт ивент и пишет аудит с платой и режимом', async () => {
     const { db, events, audit } = makeDb();
     const service = new EventsService(db);

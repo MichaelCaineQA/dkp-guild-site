@@ -32,6 +32,17 @@ function seriesInput(partial: Partial<Parameters<typeof generateSeriesEvents>[0]
 }
 
 describe('generateSeriesEvents', () => {
+  it.each([
+    { scope: 'GUILD', kpId: 'kp', packId: null },
+    { scope: 'KP', kpId: null, packId: null },
+    { scope: 'KP', kpId: 'kp', packId: 'pack' },
+    { scope: 'PACK', kpId: 'kp', packId: null },
+    { scope: 'PACK', kpId: null, packId: 'pack' },
+  ])('отклоняет неполный или несовместимый состав %j', (scope) => {
+    const input = { ...seriesInput(), ...scope };
+    expect(createEventApiSchema.safeParse(input).success).toBe(false);
+    expect(createEventSeriesSchema.safeParse(input).success).toBe(false);
+  });
   it('«вт/чт 20:00 × 4 недели» — 8 ивентов, вт и чт каждой недели', () => {
     const events = generateSeriesEvents(seriesInput());
 

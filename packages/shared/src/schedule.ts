@@ -9,7 +9,28 @@ import { getGamePhase, type GamePhase, type GamePhaseConfig } from './game-time'
  */
 
 /** Создание ивента: плата ДКП фиксируется при создании (решение 1). */
-export const createEventApiSchema = z.object({
+export const eventScopeSchema = z.object({
+  scope: z.enum(['GUILD', 'KP', 'PACK']).default('GUILD'),
+  kpId: z.string().min(1).nullable().default(null),
+  packId: z.string().min(1).nullable().default(null),
+});
+export type EventScopeInput = z.infer<typeof eventScopeSchema>;
+
+function validateEventScope(input: EventScopeInput, ctx: z.RefinementCtx) {
+  if (
+    (input.scope === 'GUILD' && (input.kpId || input.packId)) ||
+    (input.scope === 'KP' && (!input.kpId || input.packId)) ||
+    (input.scope === 'PACK' && (!input.kpId || !input.packId))
+  )
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['scope'],
+      message: 'Выберите состав и соответствующую группу',
+    });
+}
+
+const createEventBaseSchema = z.object({
+  ...eventScopeSchema.shape,
   name: z.string().trim().min(1).max(120),
   eventTypeId: z.string().min(1),
   mode: z.enum(EVENT_MODES),
@@ -20,6 +41,7 @@ export const createEventApiSchema = z.object({
   place: z.string().max(200).optional(),
   notes: z.string().max(2000).optional(),
 });
+export const createEventApiSchema = createEventBaseSchema.superRefine(validateEventScope);
 export type CreateEventApiInput = z.infer<typeof createEventApiSchema>;
 
 /**
@@ -28,6 +50,7 @@ export type CreateEventApiInput = z.infer<typeof createEventApiSchema>;
  * офицеры+ (проверяется в API через can с target.raidLeadId).
  */
 export const updateEventSchema = z.object({
+  ...eventScopeSchema.partial().shape,
   name: z.string().trim().min(1).max(120).optional(),
   eventTypeId: z.string().min(1).optional(),
   mode: z.enum(EVENT_MODES).optional(),
@@ -67,13 +90,14 @@ export type EventsQuery = z.infer<typeof eventsQuerySchema>;
  * в таймзоне гильдии не нужны: клиент шлёт готовые UTC-интервалы первого
  * ивента, серия сдвигает их на недели.
  */
-export const createEventSeriesSchema = createEventApiSchema
+export const createEventSeriesSchema = createEventBaseSchema
   .extend({
     repeat: z.enum(['DAILY', 'WEEKLY']),
     until: z.coerce.date(),
     /** Дни недели UTC. При пустом выборе еженедельно в день первого ивента. */
     weekdays: z.array(z.number().int().min(0).max(6)).max(7).default([]),
   })
+  .superRefine(validateEventScope)
   .refine((input) => input.until >= input.startsAt, {
     message: 'Дата окончания серии раньше первого ивента',
     path: ['until'],

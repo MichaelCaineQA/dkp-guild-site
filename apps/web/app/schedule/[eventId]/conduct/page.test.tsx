@@ -15,6 +15,10 @@ const EVENT = {
   dkpReward: 10,
   raidLeadId: 'm-rl',
   raidLeadName: 'РЛ',
+  scope: 'GUILD',
+  kpId: null,
+  packId: null,
+  scopeName: 'Вся гильдия',
 };
 const CHECKLIST = [
   {
@@ -40,7 +44,14 @@ const CHECKLIST = [
 ];
 function session(memberId = 'm-rl', rank: 'MEMBER' | 'OFFICER' | null = 'MEMBER', isAdmin = false) {
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u', username: 'User', memberId: isAdmin ? null : memberId, rank, isAdmin, blocked: false },
+    user: {
+      userId: 'u',
+      username: 'User',
+      memberId: isAdmin ? null : memberId,
+      rank,
+      isAdmin,
+      blocked: false,
+    },
     loading: false,
     reload: vi.fn(),
   });

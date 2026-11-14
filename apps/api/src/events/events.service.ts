@@ -18,6 +18,8 @@ import {
   eventsQuerySchema,
   generateSeriesEvents,
   updateEventSchema,
+  eventScopeSchema,
+  type EventScopeInput,
   type ChangeEventStatusInput,
   type CreateEventApiInput,
   type CreateEventSeriesInput,
@@ -28,7 +30,8 @@ import type { AuditWriter } from '../members/members.service';
 import { serializable } from '../prisma/serializable';
 
 /** Строка списка/календаря. */
-export interface EventRow {
+export interface EventRow extends EventScopeInput {
+  scopeName: string;
   name: string;
   id: string;
   eventTypeId: string;
@@ -51,6 +54,12 @@ export interface EventDetail extends EventRow {
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
 export interface EventsDb {
+  kP: { findUnique(args: { where: { id: string } }): Promise<{ id: string; name: string } | null> };
+  pack: {
+    findUnique(args: {
+      where: { id: string };
+    }): Promise<{ id: string; name: string; kpId: string } | null>;
+  };
   eventType: {
     findUnique(args: { where: { id: string } }): Promise<{ id: string; name: string } | null>;
   };
@@ -70,6 +79,9 @@ export interface EventsDb {
       include: { eventType: { select: { name: true } }; raidLead: { select: { nickname: true } } };
     }): Promise<
       Array<{
+        scope: EventScopeInput['scope'];
+        kpId: string | null;
+        packId: string | null;
         id: string;
         name: string;
         eventTypeId: string;
@@ -95,6 +107,9 @@ export interface EventsDb {
     >;
     create(args: {
       data: {
+        scope: EventScopeInput['scope'];
+        kpId: string | null;
+        packId: string | null;
         name: string;
         eventTypeId: string;
         mode: string;
@@ -137,7 +152,7 @@ export interface EventsDb {
   ): Promise<T>;
 }
 
-type EventsDbTx = Pick<EventsDb, 'event' | 'lootDrop' | 'auditLog'>;
+type EventsDbTx = Pick<EventsDb, 'event' | 'lootDrop' | 'auditLog' | 'kP' | 'pack'>;
 
 /** Действующий пользователь сессии — для прав и аудита. */
 export interface EventsActor {
@@ -184,12 +199,12 @@ export class EventsService {
         raidLead: { select: { nickname: true } },
       },
     });
-    return events.map((event) => this.toRow(event));
+    return Promise.all(events.map((event) => this.toRow(event)));
   }
 
   async getOne(id: string): Promise<EventDetail> {
     const event = await this.mustExist(id);
-    return { ...this.toRow(event), seriesId: event.seriesId };
+    return { ...(await this.toRow(event)), seriesId: event.seriesId };
   }
 
   /** Создание ивента (events.manage — офицеры+). */
@@ -204,9 +219,11 @@ export class EventsService {
     await this.mustExistMember(input.raidLeadId);
     this.assertValidRange(input.startsAt, input.endsAt);
 
-    return this.db.$transaction(async (tx) => {
+    return serializable(this.db, async (tx) => {
+      const scope = await this.validateScope(input, tx);
       const created = await tx.event.create({
         data: {
+          ...scope,
           name: input.name,
           eventTypeId: input.eventTypeId,
           mode: input.mode,
@@ -246,9 +263,11 @@ export class EventsService {
       throw new BadRequestException(error instanceof Error ? error.message : 'Некорректная серия');
     }
     const seriesId = `series-${randomUUID()}`;
-    return this.db.$transaction(async (tx) => {
+    return serializable(this.db, async (tx) => {
+      const scope = await this.validateScope(input, tx);
       const result = await tx.event.createMany({
         data: slots.map((slot) => ({
+          ...scope,
           ...slot,
           seriesId,
           name: input.name,
@@ -404,11 +423,42 @@ export class EventsService {
     const endsAt = input.endsAt ?? event.endsAt;
     this.assertValidRange(startsAt, endsAt);
 
-    await this.db.event.update({
-      where: { id },
-      data: { ...input, place: input.place ?? undefined, notes: input.notes ?? undefined },
+    await serializable(this.db, async (tx) => {
+      const current = await tx.event.findUnique({
+        where: { id },
+        include: {
+          eventType: { select: { name: true } },
+          raidLead: { select: { nickname: true } },
+        },
+      });
+      if (!current) throw new NotFoundException('Ивент не найден');
+      if (!canManageEvent({ ...actor, rank: actorRank }, current))
+        throw new ForbiddenException('Нет права на редактирование');
+      if (!isEventEditable(current.status))
+        throw new ConflictException('Ивент доступен только для просмотра');
+      const changingScope =
+        input.scope !== undefined || input.kpId !== undefined || input.packId !== undefined;
+      if (changingScope && current.status !== 'PLANNED')
+        throw new ConflictException('Состав можно менять только до начала ивента');
+      const scope = changingScope ? await this.validateScope({ ...current, ...input }, tx) : {};
+      await tx.event.update({
+        where: { id },
+        data: {
+          ...input,
+          ...scope,
+          place: input.place ?? undefined,
+          notes: input.notes ?? undefined,
+        },
+      });
+      await this.audit(
+        actor,
+        'EVENT_UPDATE',
+        id,
+        `Изменён ивент ${event.startsAt.toISOString()}` +
+          (changingScope ? `, состав ${JSON.stringify(scope)}` : ''),
+        tx.auditLog,
+      );
     });
-    await this.audit(actor, 'EVENT_UPDATE', id, `Изменён ивент ${event.startsAt.toISOString()}`);
     return { id };
   }
 
@@ -455,23 +505,35 @@ export class EventsService {
   /** Хук завершения ивента — ставится модулем отсутствий (issue #11). */
   onEventFinished?: (eventId: string, startsAt: Date, endsAt: Date) => Promise<number>;
 
-  private toRow(event: {
-    name: string;
-    id: string;
-    eventTypeId: string;
-    mode: string;
-    status: string;
-    startsAt: Date;
-    endsAt: Date;
-    dkpReward: number;
-    raidLeadId: string;
-    creatorId?: string | null;
-    place: string | null;
-    notes: string | null;
-    eventType: { name: string };
-    raidLead: { nickname: string };
-  }): EventRow {
+  private async toRow(
+    event: EventScopeInput & {
+      name: string;
+      id: string;
+      eventTypeId: string;
+      mode: string;
+      status: string;
+      startsAt: Date;
+      endsAt: Date;
+      dkpReward: number;
+      raidLeadId: string;
+      creatorId?: string | null;
+      place: string | null;
+      notes: string | null;
+      eventType: { name: string };
+      raidLead: { nickname: string };
+    },
+  ): Promise<EventRow> {
+    const scopeName =
+      event.scope === 'PACK'
+        ? ((await this.db.pack.findUnique({ where: { id: event.packId! } }))?.name ?? 'Пак')
+        : event.scope === 'KP'
+          ? ((await this.db.kP.findUnique({ where: { id: event.kpId! } }))?.name ?? 'КП')
+          : 'Вся гильдия';
     return {
+      scope: event.scope,
+      kpId: event.kpId,
+      packId: event.packId,
+      scopeName,
       id: event.id,
       name: event.name,
       eventTypeId: event.eventTypeId,
@@ -501,6 +563,25 @@ export class EventsService {
       throw new NotFoundException('Ивент не найден');
     }
     return event;
+  }
+
+  private async validateScope(value: EventScopeInput, tx: EventsDbTx): Promise<EventScopeInput> {
+    const input = eventScopeSchema.parse(value);
+    if (input.scope === 'GUILD') {
+      if (input.kpId || input.packId)
+        throw new BadRequestException('Для гильдии группы не задаются');
+    } else {
+      if (!input.kpId || !(await tx.kP.findUnique({ where: { id: input.kpId } })))
+        throw new BadRequestException('Выберите существующую КП');
+      if (input.scope === 'PACK') {
+        const pack = input.packId
+          ? await tx.pack.findUnique({ where: { id: input.packId } })
+          : null;
+        if (!pack || pack.kpId !== input.kpId)
+          throw new BadRequestException('Пак не принадлежит выбранной КП');
+      } else if (input.packId) throw new BadRequestException('Для состава КП пак не задаётся');
+    }
+    return input;
   }
 
   private async mustExistEventType(id: string) {

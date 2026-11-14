@@ -87,10 +87,17 @@ export class DashboardService {
           raidLead: { select: { nickname: true } },
           place: true,
           notes: true,
+          scope: true,
+          kpId: true,
+          packId: true,
+          kp: { select: { name: true } },
+          pack: { select: { name: true } },
         },
       }),
       this.team(actor),
-      actor.memberId || can(actor, 'audit.view') ? this.audit.list({ limit: 10 }, actor) : Promise.resolve(null),
+      actor.memberId || can(actor, 'audit.view')
+        ? this.audit.list({ limit: 10 }, actor)
+        : Promise.resolve(null),
       this.db.guild.findFirst({
         orderBy: { createdAt: 'asc' },
         select: { gameTimeAnchor: true, gameTimeDayMinutes: true, gameTimeNightMinutes: true },
@@ -102,8 +109,10 @@ export class DashboardService {
     return {
       generatedAt: now.toISOString(),
       events: selectDashboardEvents(events, now).map(
-        ({ eventType, raidLead, startsAt, endsAt, ...event }) => ({
+        ({ eventType, raidLead, startsAt, endsAt, kp, pack, ...event }) => ({
           ...event,
+          scopeName:
+            event.scope === 'PACK' ? pack!.name : event.scope === 'KP' ? kp!.name : 'Вся гильдия',
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
           eventTypeName: eventType.name,

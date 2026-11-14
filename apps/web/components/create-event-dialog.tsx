@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { createEventApiSchema, createEventSeriesSchema, generateSeriesEvents } from '@dkp/shared';
 import { api } from '../lib/api';
 import { Button, ErrorText, Field, Input, Muted, Select } from './ui';
+import { EventScopeFields, type EventScopeGroup } from './event-scope-fields';
+import type { EventScopeInput } from '@dkp/shared';
 
 const DAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
@@ -20,6 +22,8 @@ export function CreateEventDialog({
   const [types, setTypes] = useState<Array<{ id: string; name: string }>>([]);
   const [members, setMembers] = useState<Array<{ id: string; nickname: string }>>([]);
   const [loading, setLoading] = useState(true);
+  const [groups, setGroups] = useState<EventScopeGroup[]>([]);
+  const [scope, setScope] = useState<EventScopeInput>({ scope: 'GUILD', kpId: null, packId: null });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [start, setStart] = useState('');
@@ -35,11 +39,13 @@ export function CreateEventDialog({
     Promise.all([
       api<Array<{ id: string; name: string }>>('/event-types'),
       api<Array<{ id: string; nickname: string }>>('/members'),
+      api<{ groups: EventScopeGroup[] }>('/org/roster'),
     ])
-      .then(([eventTypes, roster]) => {
+      .then(([eventTypes, roster, org]) => {
         if (active) {
           setTypes(eventTypes);
           setMembers(roster);
+          setGroups(org.groups);
         }
       })
       .catch(() => {
@@ -93,6 +99,7 @@ export function CreateEventDialog({
     setError('');
     const data = new FormData(event.currentTarget);
     const input = {
+      ...scope,
       name: data.get('name'),
       eventTypeId: data.get('eventTypeId'),
       mode: data.get('mode'),
@@ -217,6 +224,7 @@ export function CreateEventDialog({
               ))}
             </Select>
           </Field>
+          <EventScopeFields value={scope} groups={groups} onChange={setScope} />
           <Field label="Место сбора">
             <Input name="place" maxLength={200} />
           </Field>

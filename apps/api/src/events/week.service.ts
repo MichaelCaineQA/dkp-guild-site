@@ -42,6 +42,8 @@ export class WeekService {
         scope: true,
         kpId: true,
         packId: true,
+        kp: { select: { name: true } },
+        pack: { select: { name: true } },
       },
     });
     const [members, absences, setting] = await Promise.all([
@@ -71,8 +73,12 @@ export class WeekService {
     );
     const now = this.clock();
     const roster = members.map((m) => ({ id: m.id, packId: m.packId, kpId: m.pack?.kpId ?? null }));
-    return events.map(({ eventType, raidLead, scope, kpId, packId, ...event }) => ({
+    return events.map(({ eventType, raidLead, scope, kpId, packId, kp, pack, ...event }) => ({
       ...event,
+      scope,
+      kpId,
+      packId,
+      scopeName: scope === 'PACK' ? pack!.name : scope === 'KP' ? kp!.name : 'Вся гильдия',
       startsAt: event.startsAt.toISOString(),
       endsAt: event.endsAt.toISOString(),
       eventTypeName: eventType.name,

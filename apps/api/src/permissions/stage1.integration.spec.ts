@@ -30,6 +30,7 @@ const ledger = jest.fn(async () => ({ id: 'dkp1' }));
 const createMember = jest.fn(async () => ({ id: 'member1' }));
 const approve = jest.fn(async () => ({ ok: true }));
 const db = {
+  member: { findMany: async () => [{ id: 'target', nickname: 'Игрок' }] },
   $transaction: async <T>(work: (tx: unknown) => Promise<T>) => work(db),
   event: { findUnique: async () => event, update, delete: remove },
   // удаление ивента проверяет дропы (#109): в моке дропов нет
@@ -86,7 +87,8 @@ describe('PLAN 1.1: права через реальные HTTP-маршруты
       username: 'Офицер',
       memberId: 'officer',
       rank: 'OFFICER',
-      isAdmin: false, blocked: false,
+      isAdmin: false,
+      blocked: false,
     };
     event = {
       id: 'e1',
@@ -120,7 +122,14 @@ describe('PLAN 1.1: права через реальные HTTP-маршруты
     expect(record).not.toHaveBeenCalled();
   });
   it('резервный Админ без Member может читать и подтверждать заявки', async () => {
-    actor = { userId: 'admin:a', username: 'a', rank: null, memberId: null, isAdmin: true, blocked: false };
+    actor = {
+      userId: 'admin:a',
+      username: 'a',
+      rank: null,
+      memberId: null,
+      isAdmin: true,
+      blocked: false,
+    };
     expect((await request('/auth/link-requests', 'GET')).status).toBe(200);
     expect((await request('/auth/link-requests/r1/approve')).status).toBe(201);
     expect(approve).toHaveBeenCalledWith('r1', null);

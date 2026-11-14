@@ -37,6 +37,10 @@ export function sortTeamMembers<
   );
 }
 export interface DashboardEvent {
+  scope: 'GUILD' | 'KP' | 'PACK';
+  kpId: string | null;
+  packId: string | null;
+  scopeName: string;
   id: string;
   name: string;
   eventTypeId: string;

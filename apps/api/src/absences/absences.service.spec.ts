@@ -31,6 +31,14 @@ function makeDb(seed: Array<Partial<AbsenceRecord> & { id: string }> = []) {
     { startsAt: new Date('2026-03-20T17:00:00Z'), status: 'PLANNED' }, // в периоде заявок
   ];
   const db: AbsencesDb = {
+    member: {
+      findMany: async () =>
+        [...new Set(absences.map((a) => a.memberId))].map((id) => ({
+          id,
+          packId: null,
+          pack: null,
+        })),
+    },
     $transaction: async (work) => {
       const oldSeen = [...seen];
       const oldAudit = structuredClone(audit);
@@ -89,7 +97,13 @@ function makeDb(seed: Array<Partial<AbsenceRecord> & { id: string }> = []) {
       },
     },
     event: {
-      findUnique: async () => null,
+      findUnique: async () => ({
+        scope: 'GUILD',
+        kpId: null,
+        packId: null,
+        startsAt: events[0].startsAt,
+        endsAt: new Date(+events[0].startsAt + 3600000),
+      }),
       findMany: async ({ where }) =>
         events.filter(
           (e) =>
@@ -296,6 +310,9 @@ describe('AbsencesService.forEvent / markExcusedForFinishedEvent', () => {
       },
     ]);
     db.event.findUnique = async () => ({
+      scope: 'GUILD',
+      kpId: null,
+      packId: null,
       startsAt: new Date('2026-03-20T17:00:00Z'),
       endsAt: new Date('2026-03-20T18:00:00Z'),
     });

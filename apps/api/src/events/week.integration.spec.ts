@@ -68,12 +68,26 @@ describe('Недельное расписание через HTTP', () => {
   });
   beforeEach(() => {
     jest.clearAllMocks();
-    actor = { userId: 'u', username: 'Игрок', memberId: 'a', rank: 'MEMBER', isAdmin: false, blocked: false };
+    actor = {
+      userId: 'u',
+      username: 'Игрок',
+      memberId: 'a',
+      rank: 'MEMBER',
+      isAdmin: false,
+      blocked: false,
+    };
   });
   it('анониму 401, ожидающему 403, данные не читаются', async () => {
     actor = undefined;
     expect((await fetch(url + '/schedule/week' + query)).status).toBe(401);
-    actor = { userId: 'new', username: 'Новый', memberId: null, rank: null, isAdmin: false, blocked: false };
+    actor = {
+      userId: 'new',
+      username: 'Новый',
+      memberId: null,
+      rank: null,
+      isAdmin: false,
+      blocked: false,
+    };
     expect((await fetch(url + '/schedule/week' + query)).status).toBe(403);
     expect(findEvents).not.toHaveBeenCalled();
   });
@@ -89,7 +103,12 @@ describe('Недельное расписание через HTTP', () => {
       eventTypeName: 'Босс',
       raidLeadName: 'Лидер',
     });
-    expect(rows[0]).not.toHaveProperty('scope');
+    expect(rows[0]).toMatchObject({
+      scope: 'GUILD',
+      kpId: null,
+      packId: null,
+      scopeName: 'Вся гильдия',
+    });
     expect(findMembers).toHaveBeenCalledWith({
       // Заблокированные не считаются приглашёнными (issue #149)
       where: { blockedAt: null },
