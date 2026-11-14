@@ -128,7 +128,11 @@ model KP {
   name String
   guildId String
   guild Guild @relation(fields: [guildId], references: [id])
+  leaderId String? @unique
+  leader Member? @relation("KPLeader", fields: [leaderId], references: [id], onDelete: SetNull)
   packs Pack[]
+  previousPackMemberships PackMembershipHistory[] @relation("PreviousKP")
+  newPackMemberships PackMembershipHistory[] @relation("NewKP")
   events Event[] @relation("EventKP")
   createdAt DateTime @default(now())
 
@@ -145,6 +149,9 @@ model Pack {
 
   /// Игрок состоит ровно в одном паке (раздел 2.7).
   members Member[] @relation("PackMembers")
+  memberHistory MemberPackHistory[] @relation("MemberHistoryPack")
+  previousMemberHistory MemberPackHistory[] @relation("PreviousMemberPack")
+  membershipHistory PackMembershipHistory[]
   events Event[] @relation("EventPack")
   createdAt DateTime @default(now())
 
@@ -224,6 +231,8 @@ model Member {
   packId String?
   pack Pack? @relation("PackMembers", fields: [packId], references: [id])
   ledPacks Pack[] @relation("PackLeader")
+  ledKP KP? @relation("KPLeader")
+  packHistory MemberPackHistory[]
 
   // РЛ — не ранг, а назначение на конкретный ивент (раздел 2.6).
   raidEvents Event[] @relation("EventRaidLead")
@@ -243,6 +252,35 @@ model Member {
   createdAt DateTime @default(now())
 
   @@index([packId])
+}
+
+/// Изменение принадлежности участника; предыдущая принадлежность сохраняет
+/// состояние до первой записи, в том числе для существующих данных.
+model MemberPackHistory {
+  id String @id @default(cuid())
+  memberId String
+  member Member @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  previousPackId String?
+  previousPack Pack? @relation("PreviousMemberPack", fields: [previousPackId], references: [id], onDelete: Restrict)
+  packId String?
+  pack Pack? @relation("MemberHistoryPack", fields: [packId], references: [id], onDelete: Restrict)
+  changedAt DateTime @default(now())
+
+  @@unique([memberId, changedAt])
+}
+
+/// Изменение КП пака, включая его состояние до первого переноса.
+model PackMembershipHistory {
+  id String @id @default(cuid())
+  packId String
+  pack Pack @relation(fields: [packId], references: [id], onDelete: Restrict)
+  previousKpId String
+  previousKp KP @relation("PreviousKP", fields: [previousKpId], references: [id], onDelete: Restrict)
+  kpId String
+  kp KP @relation("NewKP", fields: [kpId], references: [id], onDelete: Restrict)
+  changedAt DateTime @default(now())
+
+  @@unique([packId, changedAt])
 }
 
 /// Тип ивента — редактируемый справочник (гильдбосс, осада, контракты…).
