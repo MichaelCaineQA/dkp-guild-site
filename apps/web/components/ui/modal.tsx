@@ -33,7 +33,15 @@ export function Modal({
       }}
       className={`m-auto max-h-[90dvh] w-[calc(100%-2rem)] ${wide ? 'max-w-xl' : 'max-w-sm'} overflow-y-auto rounded-xl border border-line bg-surface p-6 text-primary backdrop:bg-black/60`}
     >
-      {heading && <h2 className="mb-4 text-xl font-semibold">{title}</h2>}
+      <button
+        type="button"
+        aria-label="Закрыть окно"
+        onClick={onClose}
+        className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg text-xl leading-none text-secondary hover:bg-surface-muted hover:text-primary"
+      >
+        ×
+      </button>
+      {heading && <h2 className="mb-4 pr-8 text-xl font-semibold">{title}</h2>}
       {children}
     </dialog>
   );

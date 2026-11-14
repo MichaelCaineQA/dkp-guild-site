@@ -142,9 +142,20 @@ export function CreateEventDialog({
         if (!busy) onClose();
       }}
     >
-      <h2 id="create-event-title" className="mb-4 text-xl font-semibold">
-        Создать ивент
-      </h2>
+      <div className="mb-4 flex items-start justify-between gap-2">
+        <h2 id="create-event-title" className="text-xl font-semibold">
+          Создать ивент
+        </h2>
+        <button
+          type="button"
+          aria-label="Закрыть окно"
+          disabled={busy}
+          onClick={onClose}
+          className="-mr-2 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xl leading-none text-secondary hover:bg-surface-muted hover:text-primary"
+        >
+          ×
+        </button>
+      </div>
       {loading && <p>Загрузка справочников…</p>}
       <form onSubmit={submit} className="flex flex-col gap-4">
         <fieldset disabled={busy || loading} className="flex min-w-0 flex-col gap-4">

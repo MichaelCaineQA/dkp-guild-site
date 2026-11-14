@@ -70,7 +70,7 @@ export function EventCard({
 
   const content = (
     <>
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-2 pr-8">
         <div>
           <h2 className="text-xl font-semibold">
             {event.name || event.eventTypeName}{' '}
@@ -88,9 +88,6 @@ export function EventCard({
             — {endsAt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}{' '}
           </p>
         </div>
-        <Button aria-label="Закрыть карточку" onClick={onClose}>
-          ×
-        </Button>
       </div>
 
       {segments.length > 0 && (
