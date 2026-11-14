@@ -3,6 +3,21 @@ import { COMBAT_ROLES, type CombatRole, type Rank } from './domain';
 import { weaponPairSchema, type Weapon } from './weapons';
 import type { ProfileLootRow } from './loot-log';
 import { primeTimeSlotSchema, timeZoneSchema, type PrimeTimeSlot } from './prime-time';
+
+/** Свежесть последней записи, подтверждённой скриншотом. */
+export function isGearScoreStale(
+  records: ReadonlyArray<{ createdAt: Date; screenshotIds: readonly string[] }>,
+  thresholdDays: number,
+  now: Date,
+): boolean {
+  const latest = records
+    .filter((record) => record.screenshotIds.length > 0)
+    .reduce<Date | null>(
+      (date, record) => (!date || record.createdAt > date ? record.createdAt : date),
+      null,
+    );
+  return latest !== null && now.getTime() - latest.getTime() > thresholdDays * 86_400_000;
+}
 export const AVATARS = [
   'AURORA',
   'EMBER',
@@ -92,7 +107,7 @@ export interface PlayerProfile {
   primeTime: PrimeTimeSlot[];
   avatar?: Avatar | null;
   avatarColor?: AvatarColor | null;
-  gearScore?: { value: number; screenshotIds: string[]; createdAt: string } | null;
+  gearScore?: { value: number; screenshotIds: string[]; createdAt: string; stale: boolean } | null;
   id: string;
   nickname: string;
   discord: string | null;

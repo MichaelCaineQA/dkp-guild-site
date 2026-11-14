@@ -1,4 +1,5 @@
 'use client';
+import { GearScoreStale } from './ui/gear-score-stale';
 import { useEffect, useState } from 'react';
 import {
   COMBAT_ROLE_LABELS,
@@ -24,6 +25,7 @@ type Member = {
   kpId: string | null;
   kpName: string | null;
   gearScore: number | null;
+  gearScoreStale?: boolean;
   attending: boolean;
 };
 
@@ -119,6 +121,7 @@ export function EventRoster({ eventId }: { eventId: string }) {
                             className="font-medium"
                           >
                             {member.nickname}
+                            <GearScoreStale stale={member.gearScoreStale} />
                           </a>{' '}
                           · {RANK_LABELS[member.rank]} · {formatWeapons(member.weapons)} ·{' '}
                           {member.combatRole

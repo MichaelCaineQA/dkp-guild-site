@@ -84,7 +84,9 @@ export function SettingsEditor({
           ? 'Отсутствия'
           : key.startsWith('auction.')
             ? 'Аукцион'
-            : 'Общие';
+            : key.startsWith('profile.')
+              ? 'Профиль и GS'
+              : 'Общие';
     groups.set(title, [...(groups.get(title) ?? []), key]);
   }
   return (

@@ -129,9 +129,12 @@ suite('Управление оргструктурой в PostgreSQL', () => {
     await db.pack.update({ where: { id: pack1 }, data: { leaderId: memberId } });
     const common = await service.roster(actor);
     expect(common.members.find((item) => item.id === memberId)).not.toHaveProperty('gearScore');
-    const own = await service.roster(actor, kp1);
+    const kp = await service.roster(actor, kp1);
+    expect(kp.members.find((item) => item.id === memberId)).not.toHaveProperty('gearScoreStale');
+    const own = await service.roster(actor, undefined, pack1);
     expect(own.members.find((item) => item.id === memberId)).toMatchObject({
       gearScore: 1234,
+      gearScoreStale: false,
       screenshotIds: ['screen-one'],
     });
     const foreign = await service.roster(actor, kp2);
@@ -152,6 +155,7 @@ suite('Управление оргструктурой в PostgreSQL', () => {
       members: Array<{ id: string; gearScore?: number }>;
     };
     expect(common.members.find((m) => m.id === memberId)).not.toHaveProperty('gearScore');
+    expect(common.members.find((m) => m.id === memberId)).not.toHaveProperty('gearScoreStale');
     const selected = (await (
       await fetch(`${baseUrl}/org/roster?packId=${pack1}`, { headers })
     ).json()) as { members: Array<{ id: string; gearScore?: number }> };

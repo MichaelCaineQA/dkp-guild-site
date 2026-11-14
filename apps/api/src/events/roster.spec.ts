@@ -13,6 +13,7 @@ describe('Состав события', () => {
   const db = {
     event: { findUnique: jest.fn(async () => event) },
     member: { findMany },
+    setting: { findMany: async () => [] },
     absence: {
       findMany: jest.fn(async () => [
         {
@@ -36,7 +37,7 @@ describe('Состав события', () => {
         combatRole: null,
         packId: 'p',
         pack: { name: 'Пак', kpId: 'k', kp: { name: 'КП' } },
-        gsRecords: [{ value: 3000 }],
+        gsRecords: [{ value: 3000, createdAt: new Date('2020-01-01'), screenshotIds: ['s'] }],
       },
       {
         id: 'b',
@@ -59,5 +60,6 @@ describe('Состав события', () => {
     const rows = await service.roster('e', false);
     expect(findMany.mock.calls[0][0].select.gsRecords).toBe(false);
     expect(rows[0]!.gearScore).toBeNull();
+    expect(rows[0]).not.toHaveProperty('gearScoreStale');
   });
 });

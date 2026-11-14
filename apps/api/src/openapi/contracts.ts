@@ -52,6 +52,7 @@ export const contracts: Record<string, Contract> = {
             nickname: str,
             pack: { type: 'object', nullable: true, additionalProperties: true },
             gearScore: { type: 'number', nullable: true },
+            gearScoreStale: { type: 'boolean' },
             screenshotIds: array(str),
           },
           ['id', 'nickname', 'pack'],

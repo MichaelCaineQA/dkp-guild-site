@@ -25,7 +25,9 @@ const pack = jest.fn(async () => ({
     },
   ],
 }));
-const scores = jest.fn(async () => [{ memberId: 'self', value: 4242 }]);
+const scores = jest.fn(async () => [
+  { memberId: 'self', value: 4242, createdAt: new Date('2020-01-01'), screenshotIds: ['s'] },
+]);
 const events = jest.fn(async () => []);
 const walletLots = jest.fn(async () => [
   {
@@ -64,6 +66,7 @@ const db = {
   gearScoreRecord: { findMany: scores },
   auction: { findMany: walletLots },
   dkpEntry: { findMany: walletEntries },
+  setting: { findMany: async () => [] },
 };
 @Module({
   controllers: [DashboardController],
@@ -96,12 +99,26 @@ describe('Дашборд через HTTP', () => {
   });
   beforeEach(() => {
     jest.clearAllMocks();
-    actor = { userId: 'u', username: 'Игрок', memberId: 'self', rank: 'MEMBER', isAdmin: false, blocked: false };
+    actor = {
+      userId: 'u',
+      username: 'Игрок',
+      memberId: 'self',
+      rank: 'MEMBER',
+      isAdmin: false,
+      blocked: false,
+    };
   });
   it('аноним получает 401, ожидающий приёма — 403, запросов данных нет', async () => {
     actor = undefined;
     expect((await fetch(url + '/dashboard')).status).toBe(401);
-    actor = { userId: 'new', username: 'Новый', memberId: null, rank: null, isAdmin: false, blocked: false };
+    actor = {
+      userId: 'new',
+      username: 'Новый',
+      memberId: null,
+      rank: null,
+      isAdmin: false,
+      blocked: false,
+    };
     expect((await fetch(url + '/dashboard')).status).toBe(403);
     expect(events).not.toHaveBeenCalled();
     expect(member).not.toHaveBeenCalled();
@@ -114,6 +131,7 @@ describe('Дашборд через HTTP', () => {
     expect(body.team!.id).toBe('own-pack');
     expect(body.team!.members[0].leader).toBe(true);
     expect(body.team!.members[0]).not.toHaveProperty('gearScore');
+    expect(body.team!.members[0]).not.toHaveProperty('gearScoreStale');
     expect(body.audit).toEqual([]);
     expect(list).toHaveBeenCalledWith(
       { limit: 10 },
@@ -134,11 +152,19 @@ describe('Дашборд через HTTP', () => {
     actor!.rank = 'GUILD_LEADER';
     const body = (await (await fetch(url + '/dashboard')).json()) as DashboardData;
     expect(body.team!.members[0].gearScore).toBe(4242);
+    expect(body.team!.members[0].gearScoreStale).toBe(true);
     expect(scores).toHaveBeenCalledTimes(1);
     expect(body.team!.members[0]).not.toHaveProperty('screenshotIds');
   });
   it('резервный Админ без Member получает события/аудит и пустую команду', async () => {
-    actor = { userId: 'admin:a', username: 'a', memberId: null, rank: null, isAdmin: true, blocked: false };
+    actor = {
+      userId: 'admin:a',
+      username: 'a',
+      memberId: null,
+      rank: null,
+      isAdmin: true,
+      blocked: false,
+    };
     const body = (await (await fetch(url + '/dashboard')).json()) as DashboardData;
     expect(body.team).toBeNull();
     expect(body.audit).toHaveLength(1);
@@ -148,9 +174,23 @@ describe('Дашборд через HTTP', () => {
   it('кошелёк: без привязанного Member (включая резервного Админа) — 403', async () => {
     actor = undefined;
     expect((await fetch(url + '/dashboard/wallet')).status).toBe(401);
-    actor = { userId: 'new', username: 'Новый', memberId: null, rank: null, isAdmin: false, blocked: false };
+    actor = {
+      userId: 'new',
+      username: 'Новый',
+      memberId: null,
+      rank: null,
+      isAdmin: false,
+      blocked: false,
+    };
     expect((await fetch(url + '/dashboard/wallet')).status).toBe(403);
-    actor = { userId: 'admin:a', username: 'a', memberId: null, rank: null, isAdmin: true, blocked: false };
+    actor = {
+      userId: 'admin:a',
+      username: 'a',
+      memberId: null,
+      rank: null,
+      isAdmin: true,
+      blocked: false,
+    };
     expect((await fetch(url + '/dashboard/wallet')).status).toBe(403);
     expect(walletLots).not.toHaveBeenCalled();
     expect(walletEntries).not.toHaveBeenCalled();
@@ -175,8 +215,6 @@ describe('Дашборд через HTTP', () => {
       where: { memberId: 'self' },
       select: { amount: true },
     });
-    expect(walletLots).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { status: 'OPEN' } }),
-    );
+    expect(walletLots).toHaveBeenCalledWith(expect.objectContaining({ where: { status: 'OPEN' } }));
   });
 });

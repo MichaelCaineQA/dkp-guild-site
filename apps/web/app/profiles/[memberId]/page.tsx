@@ -1,4 +1,5 @@
 'use client';
+import { GearScoreStale } from '../../../components/ui/gear-score-stale';
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { useParams } from 'next/navigation';
@@ -110,8 +111,7 @@ export default function ProfilePage() {
     if (busy) return;
     // Предпочитаемый предмет отправляем только при изменении (2.4): снятие
     // выбора и повторный выбор — тоже смена по кулдауну (решение 18).
-    const preferredDirty =
-      preferredItem !== ((profile?.preferredItem?.id ?? '') as string);
+    const preferredDirty = preferredItem !== ((profile?.preferredItem?.id ?? '') as string);
     const input = updateOwnProfileSchema.safeParse({
       ...(otherFieldsChanged ? { combatRole: role, weapons } : {}),
       ...(preferredDirty ? { preferredItemId: preferredItem || null } : {}),
@@ -189,9 +189,13 @@ export default function ProfilePage() {
   return (
     <Page>
       <Stack>
-        <PageHeader title={`Профиль: ${profile.nickname}`} />
+        <PageHeader title={<>Профиль: {profile.nickname}<GearScoreStale stale={profile.gearScore?.stale} /></>} />
         <ProfileDetails profile={profile} />
-        <PrimeTime key={profile.id} profile={profile} editable={canEditOwnProfile(actor, memberId)} />
+        <PrimeTime
+          key={profile.id}
+          profile={profile}
+          editable={canEditOwnProfile(actor, memberId)}
+        />
         {profile.gearScore && (
           <Card>
             <SectionTitle>GS: {profile.gearScore.value}</SectionTitle>
@@ -344,9 +348,9 @@ export default function ProfilePage() {
                       ))}
                     </Select>
                     <p className="text-sm text-secondary">
-                      Даёт скидку при победе в лоте с этим предметом (план 2.4). Боевую роль
-                      и предпочитаемый предмет можно менять не чаще раза в 2 недели — у каждого
-                      поля свой отсчёт.
+                      Даёт скидку при победе в лоте с этим предметом (план 2.4). Боевую роль и
+                      предпочитаемый предмет можно менять не чаще раза в 2 недели — у каждого поля
+                      свой отсчёт.
                     </p>
                   </Field>
                   <Field label="Комментарий">

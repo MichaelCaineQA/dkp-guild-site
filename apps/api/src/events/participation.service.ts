@@ -14,8 +14,10 @@ import {
   participationInputSchema,
   parseSettingValue,
   SETTING_DEFAULTS,
+  isGearScoreStale,
   type ParticipationState,
 } from '@dkp/shared';
+import { gearScoreStaleDays } from '../settings/gear-score-settings';
 type ReadDb = Pick<Prisma.TransactionClient, 'event' | 'member' | 'absence' | 'setting'>;
 @Injectable()
 export class ParticipationService {
@@ -117,6 +119,7 @@ export class ParticipationService {
       select: { startsAt: true, endsAt: true, scope: true, kpId: true, packId: true },
     });
     if (!event) throw new NotFoundException('Ивент не найден');
+    const staleDays = canViewGs ? await gearScoreStaleDays(this.db) : 0;
     const [members, absences] = await Promise.all([
       this.db.member.findMany({
         // Заблокированные скрыты из участников ивента (issue #149).
@@ -132,7 +135,12 @@ export class ParticipationService {
           packId: true,
           pack: { select: { name: true, kpId: true, kp: { select: { name: true } } } },
           gsRecords: canViewGs
-            ? { orderBy: { createdAt: 'desc' }, take: 1, select: { value: true } }
+            ? {
+                where: { NOT: { screenshotIds: { isEmpty: true } } },
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                take: 1,
+                select: { value: true, screenshotIds: true, createdAt: true },
+              }
             : false,
         },
         orderBy: { nickname: 'asc' },
@@ -172,6 +180,9 @@ export class ParticipationService {
         kpId: m.pack?.kpId ?? null,
         kpName: m.pack?.kp.name ?? null,
         gearScore: canViewGs ? (m.gsRecords?.[0]?.value ?? null) : null,
+        ...(canViewGs
+          ? { gearScoreStale: isGearScoreStale(m.gsRecords ?? [], staleDays, this.clock()) }
+          : {}),
         attending: !absent.has(m.id),
       }));
   }

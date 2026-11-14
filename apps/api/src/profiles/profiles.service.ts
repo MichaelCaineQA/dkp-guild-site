@@ -9,6 +9,7 @@ import {
   canChangeProfileField,
   canEditOwnProfile,
   canViewProfileGearScore,
+  isGearScoreStale,
   computeBalance,
   parseSettingValue,
   SETTING_DEFAULTS,
@@ -25,6 +26,7 @@ import {
   type AvatarColor,
   type PrimeTimeSlot,
 } from '@dkp/shared';
+import { gearScoreStaleDays } from '../settings/gear-score-settings';
 
 interface ProfileMember {
   timeZone: string;
@@ -163,6 +165,9 @@ export class ProfilesService {
             orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           })
         : undefined;
+    const staleDays = gs
+      ? await gearScoreStaleDays(this.db)
+      : SETTING_DEFAULTS['profile.gearScoreStaleDays'];
     // Полученный лут (план 2.5) — фактические выдачи лотов игрока,
     // свежие сверху; полная история — лут-лог с фильтром по игроку.
     const [awards, lootTotal] = await Promise.all([
@@ -183,12 +188,17 @@ export class ProfilesService {
                   value: gs.value,
                   screenshotIds: gs.screenshotIds,
                   createdAt: gs.createdAt.toISOString(),
+                  stale: isGearScoreStale([gs], staleDays, this.now()),
                 }
               : null,
           }),
       id: member.id,
       timeZone: member.timeZone,
-      primeTime: member.primeTime.map(({ weekday, fromMinute, toMinute }) => ({ weekday, fromMinute, toMinute })),
+      primeTime: member.primeTime.map(({ weekday, fromMinute, toMinute }) => ({
+        weekday,
+        fromMinute,
+        toMinute,
+      })),
       avatar: member.avatar ?? null,
       avatarColor: member.avatarColor ?? null,
       nickname: member.nickname,
@@ -196,7 +206,9 @@ export class ProfilesService {
       rank: member.rank,
       combatRole: member.combatRole,
       weapons: member.weapons ?? [],
-      preferredItem: member.preferredItem ? { id: member.preferredItem.id, name: member.preferredItem.name } : null,
+      preferredItem: member.preferredItem
+        ? { id: member.preferredItem.id, name: member.preferredItem.name }
+        : null,
       preferredItemChangedAt: member.preferredItemChangedAt?.toISOString() ?? null,
       combatRoleChangedAt: member.combatRoleChangedAt?.toISOString() ?? null,
       balance: computeBalance(entries),
@@ -257,19 +269,26 @@ export class ProfilesService {
         preferredName = item.name;
       }
 
-      const roleChanged =
-        input.combatRole !== undefined && input.combatRole !== member.combatRole;
+      const roleChanged = input.combatRole !== undefined && input.combatRole !== member.combatRole;
       const preferredChanged =
-        input.preferredItemId !== undefined &&
-        input.preferredItemId !== member.preferredItemId;
-      const primeTimeChanged = input.primeTime !== undefined &&
-        JSON.stringify(member.primeTime.map(({ weekday, fromMinute, toMinute }) => ({ weekday, fromMinute, toMinute }))) !== JSON.stringify(input.primeTime);
+        input.preferredItemId !== undefined && input.preferredItemId !== member.preferredItemId;
+      const primeTimeChanged =
+        input.primeTime !== undefined &&
+        JSON.stringify(
+          member.primeTime.map(({ weekday, fromMinute, toMinute }) => ({
+            weekday,
+            fromMinute,
+            toMinute,
+          })),
+        ) !== JSON.stringify(input.primeTime);
       const timeZoneChanged = input.timeZone !== undefined && input.timeZone !== member.timeZone;
       const otherFieldsChanged =
         roleChanged ||
         (input.weapons !== undefined &&
           JSON.stringify(member.weapons ?? []) !== JSON.stringify(input.weapons)) ||
-        preferredChanged || primeTimeChanged || timeZoneChanged;
+        preferredChanged ||
+        primeTimeChanged ||
+        timeZoneChanged;
       if (otherFieldsChanged && !input.comment)
         throw new BadRequestException('Укажите комментарий от 3 до 500 символов');
 
@@ -299,9 +318,7 @@ export class ProfilesService {
         where: { id },
         data: {
           ...(input.combatRole !== undefined ? { combatRole: input.combatRole } : {}),
-          ...(roleChanged
-            ? { prevCombatRole: member.combatRole, combatRoleChangedAt: now }
-            : {}),
+          ...(roleChanged ? { prevCombatRole: member.combatRole, combatRoleChangedAt: now } : {}),
           ...(input.weapons !== undefined ? { weapons: input.weapons } : {}),
           ...(input.avatar !== undefined ? { avatar: input.avatar } : {}),
           ...(input.avatarColor !== undefined ? { avatarColor: input.avatarColor } : {}),
@@ -321,7 +338,7 @@ export class ProfilesService {
           action: 'MEMBER_UPDATE',
           entityType: 'Member',
           entityId: id,
-          comment: `Роль: ${member.combatRole ?? 'не указана'} → ${input.combatRole ?? member.combatRole ?? 'не указана'}; оружия: ${formatWeapons(member.weapons ?? [])} → ${formatWeapons(input.weapons ?? member.weapons ?? [])}; предпочитаемый предмет: ${member.preferredItem ? `«${member.preferredItem.name}»` : 'не выбран'} → ${input.preferredItemId === undefined ? 'без изменений' : (preferredName ? `«${preferredName}»` : 'не выбран')}; аватар: ${member.avatar ?? 'не выбран'} → ${input.avatar === undefined ? (member.avatar ?? 'не выбран') : (input.avatar ?? 'не выбран')}; фон: ${member.avatarColor ?? 'автоматически'} → ${input.avatarColor === undefined ? (member.avatarColor ?? 'автоматически') : (input.avatarColor ?? 'автоматически')}; прайм-тайм: ${primeTimeChanged ? 'изменён' : 'без изменений'}; таймзона: ${member.timeZone} → ${input.timeZone ?? member.timeZone}.${input.comment ? ` ${input.comment}` : ''}`,
+          comment: `Роль: ${member.combatRole ?? 'не указана'} → ${input.combatRole ?? member.combatRole ?? 'не указана'}; оружия: ${formatWeapons(member.weapons ?? [])} → ${formatWeapons(input.weapons ?? member.weapons ?? [])}; предпочитаемый предмет: ${member.preferredItem ? `«${member.preferredItem.name}»` : 'не выбран'} → ${input.preferredItemId === undefined ? 'без изменений' : preferredName ? `«${preferredName}»` : 'не выбран'}; аватар: ${member.avatar ?? 'не выбран'} → ${input.avatar === undefined ? (member.avatar ?? 'не выбран') : (input.avatar ?? 'не выбран')}; фон: ${member.avatarColor ?? 'автоматически'} → ${input.avatarColor === undefined ? (member.avatarColor ?? 'автоматически') : (input.avatarColor ?? 'автоматически')}; прайм-тайм: ${primeTimeChanged ? 'изменён' : 'без изменений'}; таймзона: ${member.timeZone} → ${input.timeZone ?? member.timeZone}.${input.comment ? ` ${input.comment}` : ''}`,
         },
       });
     });

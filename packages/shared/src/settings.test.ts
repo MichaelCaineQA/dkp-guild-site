@@ -19,6 +19,7 @@ describe('SETTINGS_REGISTRY', () => {
         'checkin.startSharePct',
         'checkin.endSharePct',
         'absence.deadlineBeforeStartSec',
+        'profile.gearScoreStaleDays',
         'auction.step',
         'auction.liveDurationSec',
         'auction.longDurationDays',
@@ -55,6 +56,7 @@ describe('SETTINGS_REGISTRY', () => {
     expect(SETTING_DEFAULTS['checkin.startSharePct']).toBe(50);
     expect(SETTING_DEFAULTS['checkin.endSharePct']).toBe(50);
     expect(SETTING_DEFAULTS['absence.deadlineBeforeStartSec']).toBe(180);
+    expect(SETTING_DEFAULTS['profile.gearScoreStaleDays']).toBe(14);
     expect(SETTING_DEFAULTS['auction.step']).toBe(1);
     expect(SETTING_DEFAULTS['auction.liveDurationSec']).toBe(60);
     expect(SETTING_DEFAULTS['auction.longDurationDays']).toBe(2);

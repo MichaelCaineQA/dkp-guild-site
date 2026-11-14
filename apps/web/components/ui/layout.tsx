@@ -42,7 +42,7 @@ export function Page({
 }
 
 /** Заголовок страницы + необязательное пояснение. */
-export function PageHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+export function PageHeader({ title, subtitle }: { title: ReactNode; subtitle?: string }) {
   return (
     <header className="mb-4">
       <h1 className="text-2xl font-semibold text-primary">{title}</h1>
