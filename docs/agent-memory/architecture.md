@@ -75,6 +75,23 @@
   (вкладка «Лут-лог»; глубокая ссылка `?loot-member=<id>` из профиля
   открывает её с фильтром), виджет — `components/dashboard.tsx`.
 - `packages/shared` — общие типы, zod-схемы и чистая логика ядра.
+- `apps/api/src/members` — члены гильдии и **блокировка покинувших** (#149):
+  `Member.blockedAt` (null = активен). `POST /members/:id/block|unblock` и
+  `GET /members/blocked` — право `members.manage` (Глава/Админ), комментарий
+  обязателен, аудит `MEMBER_BLOCK`/`MEMBER_UNBLOCK`. Блокировка удаляет все
+  ставки на открытых лотах той же сериализуемой транзакцией и после коммита
+  шлёт комнатам лотов свежий срез через новый метод порта
+  `AUCTION_EVENTS.bidsRemoved` (gateway отвечает `auction:state`); Главу/админа
+  блокировать нельзя (`BLOCKABLE_RANKS` = OFFICER/MEMBER). Заблокированный:
+  `SessionUser.blocked=true` (перечитывается из БД в AuthGuard), весь REST —
+  403 «Гильдия закрыла свои врата», кроме эндпоинтов с `@AllowBlocked()`
+  (только `/auth/me`); выхода (без guard) и Socket.IO-handshake (disconnect).
+  Web: `AppShell` до рендера приложения показывает `BlockedScreen` («врата»)
+  на любом URL; вкладка состава «Заблокированные» = `/roster/blocked`.
+  Скрытие из списков — на сервере фильтром `blockedAt: null`: roster,
+  dkp-журнал (записи и балансы), участники ивента (participation/week),
+  чек-лист conduct, «Моя команда» дашборда. Данные (ДКП, класс, лут, ранг)
+  сохраняются, разблокировка возвращает без изменений.
 - `.github/workflows/ci.yml` — проверки CI.
 - `installer/` — установщик релизного Compose (`dkp`, Python 3 stdlib) для
   Ubuntu 22.04/24.04 (amd64/arm64), один домен, изолированный проект
