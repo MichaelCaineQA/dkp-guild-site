@@ -78,7 +78,7 @@ export class OrgService {
         },
       },
     });
-    const privileged = actor.isAdmin || viewer?.rank === 'GUILD_LEADER';
+    const privileged = actor.isAdmin || viewer?.rank === 'GUILD_LEADER' || viewer?.rank === 'ADMIN';
     const staleDays = await gearScoreStaleDays(this.db);
     const now = new Date();
     return {

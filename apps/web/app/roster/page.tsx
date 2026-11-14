@@ -372,7 +372,7 @@ export default function RosterPage() {
               <Table.Th className="cursor-pointer select-none" onClick={() => toggleSort('pack')}>
                 Пак {sortIndicator('pack')}
               </Table.Th>
-              {(user.isAdmin || user.rank === 'GUILD_LEADER') && <Table.Th>GS</Table.Th>}
+              {(user.isAdmin || user.rank === 'GUILD_LEADER' || user.rank === 'ADMIN') && <Table.Th>GS</Table.Th>}
               {canManage && <Table.Th>Действия</Table.Th>}
             </tr>
           </thead>
@@ -412,7 +412,7 @@ export default function RosterPage() {
                 <Table.Td>
                   {orgMembers.find((item) => item.id === row.id)?.pack?.name ?? '—'}
                 </Table.Td>
-                {(user.isAdmin || user.rank === 'GUILD_LEADER') && (
+                {(user.isAdmin || user.rank === 'GUILD_LEADER' || user.rank === 'ADMIN') && (
                   <Table.Td>
                     {orgMembers.find((item) => item.id === row.id)?.gearScore ?? '—'}
                   </Table.Td>
