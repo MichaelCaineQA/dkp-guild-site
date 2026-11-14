@@ -21,6 +21,7 @@ import { Avatar, avatarLabel, AVATAR_PALETTE } from '../../../components/avatar'
 import { useSession } from '../../../components/session-context';
 import { ScreenshotLinks } from '../../../components/onboarding';
 import { api } from '../../../lib/api';
+import { PrimeTime } from '../../../components/prime-time';
 import {
   Button,
   Card,
@@ -190,6 +191,7 @@ export default function ProfilePage() {
       <Stack>
         <PageHeader title={`Профиль: ${profile.nickname}`} />
         <ProfileDetails profile={profile} />
+        <PrimeTime key={profile.id} profile={profile} editable={canEditOwnProfile(actor, memberId)} />
         {profile.gearScore && (
           <Card>
             <SectionTitle>GS: {profile.gearScore.value}</SectionTitle>

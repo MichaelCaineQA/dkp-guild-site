@@ -11,6 +11,8 @@ function makeDb(
     rank: string;
     combatRole: string | null;
     blockedAt?: Date | null;
+    timeZone?: string;
+    primeTime?: import('@dkp/shared').PrimeTimeSlot[];
   }>,
   bidsSeed: Array<{ auctionId: string; memberId: string; open: boolean }> = [],
 ) {
@@ -38,7 +40,7 @@ function makeDb(
     },
     member: {
       findMany: async ({ where, orderBy, include }) => {
-        expect(include).toEqual({ user: { select: { username: true } } });
+        expect(include.user).toEqual({ select: { username: true } });
         const byBlocked =
           where.blockedAt === undefined
             ? () => true
@@ -107,6 +109,16 @@ function makeDb(
 const ACTOR: Actor = { memberId: 'm-actor', isAdmin: false, userId: 'u1' };
 
 describe('MembersService.roster', () => {
+  it('фильтрует доступных на стыке дней вместе с рангом', async () => {
+    const { db } = makeDb([
+      { id: 'a', nickname: 'a', rank: 'MEMBER', combatRole: 'DPS', timeZone: 'Europe/Moscow', primeTime: [{ weekday: 1, fromMinute: 0, toMinute: 60 }] },
+      { id: 'b', nickname: 'b', rank: 'MEMBER', combatRole: 'DPS', timeZone: 'Europe/Moscow', primeTime: [{ weekday: 0, fromMinute: 1380, toMinute: 1440 }] },
+      { id: 'c', nickname: 'c', rank: 'OFFICER', combatRole: 'DPS', timeZone: 'Europe/Moscow', primeTime: [{ weekday: 1, fromMinute: 0, toMinute: 60 }] },
+      { id: 'd', nickname: 'd', rank: 'MEMBER', combatRole: 'DPS' },
+    ]);
+    const service = new MembersService(db, () => new Date('2026-11-16T21:00:00Z'));
+    expect((await service.roster({ availableNow: 'true', rank: 'MEMBER' })).map((row) => row.id)).toEqual(['a']);
+  });
   it('возвращает состав, отсортированный по нику, с Discord-именем', async () => {
     const { db, members } = makeDb([
       { id: 'm-1', nickname: 'Zeta', rank: 'MEMBER', combatRole: 'DPS' },

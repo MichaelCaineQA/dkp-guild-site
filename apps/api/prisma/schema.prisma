@@ -247,6 +247,7 @@ model Member {
   dkpEntries DkpEntry[]
   manualDkpEntries DkpEntry[] @relation("ManualDkpBy")
   gsRecords GearScoreRecord[]
+  timeZone String @default("Europe/Moscow")
   primeTime PrimeTimeSlot[]
   auditLogs AuditLog[]
   createdAt DateTime @default(now())

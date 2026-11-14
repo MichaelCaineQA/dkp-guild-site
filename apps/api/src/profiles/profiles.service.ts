@@ -23,9 +23,12 @@ import {
   type PermissionActor,
   type Avatar,
   type AvatarColor,
+  type PrimeTimeSlot,
 } from '@dkp/shared';
 
 interface ProfileMember {
+  timeZone: string;
+  primeTime: PrimeTimeSlot[];
   avatar?: Avatar | null;
   avatarColor?: AvatarColor | null;
   weapons?: Weapon[];
@@ -45,6 +48,7 @@ export interface ProfileTransaction {
       include: {
         user: { select: { username: true } };
         preferredItem: { select: { id: true; name: true } };
+        primeTime: true;
       };
     }): Promise<(ProfileMember & { preferredItem: { id: string; name: string } | null }) | null>;
     update(args: {
@@ -59,6 +63,8 @@ export interface ProfileTransaction {
         preferredItemId?: string | null;
         prevPreferredItemId?: string | null;
         preferredItemChangedAt?: Date | null;
+        timeZone?: string;
+        primeTime?: { deleteMany: Record<string, never>; create: PrimeTimeSlot[] };
       };
     }): Promise<unknown>;
   };
@@ -181,6 +187,8 @@ export class ProfilesService {
               : null,
           }),
       id: member.id,
+      timeZone: member.timeZone,
+      primeTime: member.primeTime.map(({ weekday, fromMinute, toMinute }) => ({ weekday, fromMinute, toMinute })),
       avatar: member.avatar ?? null,
       avatarColor: member.avatarColor ?? null,
       nickname: member.nickname,
@@ -254,11 +262,14 @@ export class ProfilesService {
       const preferredChanged =
         input.preferredItemId !== undefined &&
         input.preferredItemId !== member.preferredItemId;
+      const primeTimeChanged = input.primeTime !== undefined &&
+        JSON.stringify(member.primeTime.map(({ weekday, fromMinute, toMinute }) => ({ weekday, fromMinute, toMinute }))) !== JSON.stringify(input.primeTime);
+      const timeZoneChanged = input.timeZone !== undefined && input.timeZone !== member.timeZone;
       const otherFieldsChanged =
         roleChanged ||
         (input.weapons !== undefined &&
           JSON.stringify(member.weapons ?? []) !== JSON.stringify(input.weapons)) ||
-        preferredChanged;
+        preferredChanged || primeTimeChanged || timeZoneChanged;
       if (otherFieldsChanged && !input.comment)
         throw new BadRequestException('Укажите комментарий от 3 до 500 символов');
 
@@ -294,6 +305,8 @@ export class ProfilesService {
           ...(input.weapons !== undefined ? { weapons: input.weapons } : {}),
           ...(input.avatar !== undefined ? { avatar: input.avatar } : {}),
           ...(input.avatarColor !== undefined ? { avatarColor: input.avatarColor } : {}),
+          ...(timeZoneChanged ? { timeZone: input.timeZone } : {}),
+          ...(primeTimeChanged ? { primeTime: { deleteMany: {}, create: input.primeTime! } } : {}),
           ...(input.preferredItemId !== undefined
             ? { preferredItemId: input.preferredItemId }
             : {}),
@@ -308,7 +321,7 @@ export class ProfilesService {
           action: 'MEMBER_UPDATE',
           entityType: 'Member',
           entityId: id,
-          comment: `Роль: ${member.combatRole ?? 'не указана'} → ${input.combatRole ?? member.combatRole ?? 'не указана'}; оружия: ${formatWeapons(member.weapons ?? [])} → ${formatWeapons(input.weapons ?? member.weapons ?? [])}; предпочитаемый предмет: ${member.preferredItem ? `«${member.preferredItem.name}»` : 'не выбран'} → ${input.preferredItemId === undefined ? 'без изменений' : (preferredName ? `«${preferredName}»` : 'не выбран')}; аватар: ${member.avatar ?? 'не выбран'} → ${input.avatar === undefined ? (member.avatar ?? 'не выбран') : (input.avatar ?? 'не выбран')}; фон: ${member.avatarColor ?? 'автоматически'} → ${input.avatarColor === undefined ? (member.avatarColor ?? 'автоматически') : (input.avatarColor ?? 'автоматически')}.${input.comment ? ` ${input.comment}` : ''}`,
+          comment: `Роль: ${member.combatRole ?? 'не указана'} → ${input.combatRole ?? member.combatRole ?? 'не указана'}; оружия: ${formatWeapons(member.weapons ?? [])} → ${formatWeapons(input.weapons ?? member.weapons ?? [])}; предпочитаемый предмет: ${member.preferredItem ? `«${member.preferredItem.name}»` : 'не выбран'} → ${input.preferredItemId === undefined ? 'без изменений' : (preferredName ? `«${preferredName}»` : 'не выбран')}; аватар: ${member.avatar ?? 'не выбран'} → ${input.avatar === undefined ? (member.avatar ?? 'не выбран') : (input.avatar ?? 'не выбран')}; фон: ${member.avatarColor ?? 'автоматически'} → ${input.avatarColor === undefined ? (member.avatarColor ?? 'автоматически') : (input.avatarColor ?? 'автоматически')}; прайм-тайм: ${primeTimeChanged ? 'изменён' : 'без изменений'}; таймзона: ${member.timeZone} → ${input.timeZone ?? member.timeZone}.${input.comment ? ` ${input.comment}` : ''}`,
         },
       });
     });
@@ -334,6 +347,7 @@ export class ProfilesService {
       include: {
         user: { select: { username: true } },
         preferredItem: { select: { id: true, name: true } },
+        primeTime: true,
       },
     });
     if (!member) throw new NotFoundException('Игрок не найден');

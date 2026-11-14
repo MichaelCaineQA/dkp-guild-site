@@ -14,6 +14,8 @@ import {
   rosterQuerySchema,
   updateMemberSchema,
   formatWeapons,
+  isAvailableAt,
+  type PrimeTimeSlot,
   type Weapon,
   type ChangeRankInput,
   type CreateMemberInput,
@@ -80,7 +82,7 @@ export interface MembersDb {
         blockedAt?: Date | null | { not: null };
       };
       orderBy: { nickname: 'asc' } | { blockedAt: 'desc' };
-      include: { user: { select: { username: true } } };
+      include: { user: { select: { username: true } }; primeTime?: true };
     }): Promise<
       Array<{
         avatar?: string | null;
@@ -92,6 +94,8 @@ export interface MembersDb {
         combatRole: string | null;
         weapons?: Weapon[];
         user: { username: string } | null;
+        timeZone?: string;
+        primeTime?: PrimeTimeSlot[];
       }>
     >;
     findUnique(args: { where: { id: string } }): Promise<MemberRow | null>;
@@ -165,9 +169,10 @@ export class MembersService {
     const members = await this.db.member.findMany({
       where,
       orderBy: { nickname: 'asc' },
-      include: { user: { select: { username: true } } },
+      include: { user: { select: { username: true } }, ...(filters.availableNow ? { primeTime: true } : {}) },
     });
-    return members.map((m) => ({
+    const now = this.now();
+    return members.filter((m) => !filters.availableNow || isAvailableAt(m.primeTime ?? [], m.timeZone ?? 'Europe/Moscow', now)).map((m) => ({
       id: m.id,
       avatar: m.avatar ?? null,
       avatarColor: m.avatarColor ?? null,

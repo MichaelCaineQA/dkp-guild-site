@@ -521,6 +521,8 @@ export const schemas: Record<string, SchemaObject> = {
   Profile: object(
     {
       ...roster,
+      timeZone: str,
+      primeTime: array(object({ weekday: num, fromMinute: num, toMinute: num })),
       preferredItem: {
         ...nullable(object({ id: str, name: str })),
         description:
@@ -556,6 +558,8 @@ export const schemas: Record<string, SchemaObject> = {
     },
     [
       ...Object.keys(roster),
+      'timeZone',
+      'primeTime',
       'preferredItem',
       'preferredItemChangedAt',
       'combatRoleChangedAt',
