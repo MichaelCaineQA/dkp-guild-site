@@ -22,6 +22,11 @@ const enumeration = (values: readonly string[]): SchemaObject => ({
 
 /** Схемы входа строятся из той же валидации, которую используют сервисы. */
 const inputs: Record<string, unknown> = {
+  OrgCreateKp: shared.orgCreateKpSchema,
+  OrgCreatePack: shared.orgCreatePackSchema,
+  OrgMoveMember: shared.orgMoveMemberSchema,
+  OrgMovePack: shared.orgMovePackSchema,
+  OrgLeader: shared.orgLeaderSchema,
   CreateMember: shared.createMemberSchema,
   UpdateMember: shared.updateMemberSchema,
   ChangeRank: shared.changeRankSchema,
@@ -209,7 +214,8 @@ export const schemas: Record<string, SchemaObject> = {
     markupPct: num,
     discountPct: {
       ...num,
-      description: 'Скидка за предпочитаемый предмет, зафиксированная при создании лота (решение 18).',
+      description:
+        'Скидка за предпочитаемый предмет, зафиксированная при создании лота (решение 18).',
     },
     firstBidAt: nullable(date),
     endsAt: nullable(date),
@@ -276,7 +282,8 @@ export const schemas: Record<string, SchemaObject> = {
     itemName: str,
     fullCost: {
       ...num,
-      description: 'Ожидаемое списание — полная стоимость ведущей ставки (наценка и скидка внутри).',
+      description:
+        'Ожидаемое списание — полная стоимость ведущей ставки (наценка и скидка внутри).',
     },
     endsAt: nullable(date),
   }),

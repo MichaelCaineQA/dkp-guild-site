@@ -25,3 +25,4 @@ export * from './week';
 
 export * from './participation';
 export * from './membership-history';
+export * from './org';
