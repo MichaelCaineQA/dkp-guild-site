@@ -23,6 +23,81 @@ type Tx = Prisma.TransactionClient;
 export class OrgService {
   constructor(private readonly db: PrismaService) {}
 
+  async roster(actor: SessionUser, kpId?: string, packId?: string) {
+    const viewer = actor.memberId
+      ? await this.db.member.findUnique({
+          where: { id: actor.memberId },
+          select: { rank: true, blockedAt: true },
+        })
+      : null;
+    if (!actor.isAdmin && (!viewer || viewer.blockedAt))
+      throw new ForbiddenException('Недостаточно прав');
+    if (kpId && packId) throw new BadRequestException('Выберите КП или пак');
+    const groups = await this.db.kP.findMany({
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        leaderId: true,
+        packs: {
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, leaderId: true, kpId: true },
+        },
+      },
+    });
+    const members = await this.db.member.findMany({
+      where: {
+        blockedAt: null,
+        ...(kpId ? { pack: { kpId } } : {}),
+        ...(packId ? { packId } : {}),
+      },
+      orderBy: { nickname: 'asc' },
+      select: {
+        id: true,
+        nickname: true,
+        avatar: true,
+        avatarColor: true,
+        rank: true,
+        combatRole: true,
+        weapons: true,
+        pack: {
+          select: {
+            id: true,
+            name: true,
+            leaderId: true,
+            kp: { select: { id: true, name: true, leaderId: true } },
+          },
+        },
+        gsRecords: {
+          where: { NOT: { screenshotIds: { isEmpty: true } } },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: 1,
+          select: { value: true, screenshotIds: true },
+        },
+      },
+    });
+    const privileged = actor.isAdmin || viewer?.rank === 'GUILD_LEADER';
+    return {
+      groups,
+      members: members.map(({ gsRecords, pack, ...member }) => {
+        const groupAccess =
+          !!(kpId || packId) &&
+          !!actor.memberId &&
+          (pack?.kp.leaderId === actor.memberId || pack?.leaderId === actor.memberId);
+        return {
+          ...member,
+          pack,
+          ...(privileged || groupAccess
+            ? {
+                gearScore: gsRecords[0]?.value ?? null,
+                screenshotIds: gsRecords[0]?.screenshotIds ?? [],
+              }
+            : {}),
+        };
+      }),
+    };
+  }
+
   private parse<T>(
     schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
     body: unknown,

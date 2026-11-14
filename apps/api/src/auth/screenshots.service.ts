@@ -15,7 +15,10 @@ export interface ScreenshotFile {
   size: number;
   mimetype: string;
 }
-export type ScreenshotDb = Pick<PrismaClient, 'screenshot' | 'user' | '$transaction'>;
+export type ScreenshotDb = Pick<
+  PrismaClient,
+  'screenshot' | 'user' | 'member' | 'gearScoreRecord' | '$transaction'
+>;
 export function imageMime(data: Buffer): string | null {
   if (
     data.length >= 24 &&
@@ -74,10 +77,33 @@ export class ScreenshotsService {
     }
     return { id };
   }
-  async download(id: string, actor: SessionUser) {
+  async download(id: string, actor: SessionUser, kpId?: string, packId?: string) {
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new NotFoundException();
     const file = await this.db.screenshot.findUnique({ where: { id } });
-    if (!file || (file.userId !== actor.userId && !can(actor, 'link_requests.review')))
+    let groupAccess = false;
+    if (file && actor.memberId && !actor.blocked && !!kpId !== !!packId) {
+      const target = await this.db.member.findFirst({
+        where: {
+          userId: file.userId,
+          blockedAt: null,
+          ...(kpId ? { pack: { kpId } } : { packId }),
+          gsRecords: { some: { screenshotIds: { has: id } } },
+        },
+        select: { pack: { select: { leaderId: true, kp: { select: { leaderId: true } } } } },
+      });
+      const viewer = await this.db.member.findUnique({
+        where: { id: actor.memberId },
+        select: { blockedAt: true },
+      });
+      groupAccess =
+        !!viewer &&
+        !viewer.blockedAt &&
+        (target?.pack?.leaderId === actor.memberId || target?.pack?.kp.leaderId === actor.memberId);
+    }
+    if (
+      !file ||
+      (file.userId !== actor.userId && !can(actor, 'link_requests.review') && !groupAccess)
+    )
       throw new NotFoundException('Скриншот недоступен');
     let data: Buffer;
     try {

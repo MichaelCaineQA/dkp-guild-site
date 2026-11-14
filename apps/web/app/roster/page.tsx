@@ -35,6 +35,7 @@ import {
 } from '../../components/ui';
 
 import { Avatar } from '../../components/avatar';
+import { TransferMemberModal } from '../../components/roster-groups';
 interface RosterRow {
   avatar?: string | null;
   avatarColor?: string | null;
@@ -45,18 +46,34 @@ interface RosterRow {
   combatRole: CombatRole | null;
   discord: string | null;
 }
+type OrgGroup = {
+  id: string;
+  name: string;
+  leaderId: string | null;
+  packs: { id: string; name: string; kpId: string; leaderId: string | null }[];
+};
+type OrgMember = {
+  id: string;
+  gearScore?: number | null;
+  pack: { id: string; name: string; kp: { id: string; name: string } } | null;
+};
 
 /** «Состав гильдии» (issue #6): таблица с фильтрами, доступна всем членам. */
 export default function RosterPage() {
   const { user, loading: sessionLoading } = useSession();
   const [rows, setRows] = useState<RosterRow[]>([]);
+  const [groups, setGroups] = useState<OrgGroup[]>([]);
+  const [orgMembers, setOrgMembers] = useState<OrgMember[]>([]);
+  const [kpFilter, setKpFilter] = useState('');
+  const [packFilter, setPackFilter] = useState('');
+  const [transfer, setTransfer] = useState<RosterRow | null>(null);
   const [rankFilter, setRankFilter] = useState<Rank | ''>('');
   const [roleFilter, setRoleFilter] = useState<CombatRole | ''>('');
   const [weaponFilter, setWeaponFilter] = useState<Weapon | ''>('');
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<RosterRow | null>(null);
   // Сортировка столбцов + пагинация (ревью владельца, п.9)
-  const [sortKey, setSortKey] = useState<keyof RosterRow | null>(null);
+  const [sortKey, setSortKey] = useState<keyof RosterRow | 'kp' | 'pack' | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
   const [pageOffset, setPageOffset] = useState(0);
   const PAGE_SIZE = 20;
@@ -69,28 +86,43 @@ export default function RosterPage() {
   };
 
   const sortedRows = useMemo(() => {
+    const filtered = rows.filter((row) => {
+      const member = orgMembers.find((item) => item.id === row.id);
+      return (
+        (!kpFilter || member?.pack?.kp.id === kpFilter) &&
+        (!packFilter || member?.pack?.id === packFilter)
+      );
+    });
     if (!sortKey) {
-      return rows;
+      return filtered;
     }
-    return [...rows].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       const av =
-        sortKey === 'weapons'
-          ? formatWeapons(a.weapons ?? [])
-          : sortKey === 'rank'
-            ? (RANK_ORDER_UI[a.rank] ?? 0)
-            : (a[sortKey] ?? '');
+        sortKey === 'kp'
+          ? (orgMembers.find((item) => item.id === a.id)?.pack?.kp.name ?? '')
+          : sortKey === 'pack'
+            ? (orgMembers.find((item) => item.id === a.id)?.pack?.name ?? '')
+            : sortKey === 'weapons'
+              ? formatWeapons(a.weapons ?? [])
+              : sortKey === 'rank'
+                ? (RANK_ORDER_UI[a.rank] ?? 0)
+                : (a[sortKey] ?? '');
       const bv =
-        sortKey === 'weapons'
-          ? formatWeapons(b.weapons ?? [])
-          : sortKey === 'rank'
-            ? (RANK_ORDER_UI[b.rank] ?? 0)
-            : (b[sortKey] ?? '');
+        sortKey === 'kp'
+          ? (orgMembers.find((item) => item.id === b.id)?.pack?.kp.name ?? '')
+          : sortKey === 'pack'
+            ? (orgMembers.find((item) => item.id === b.id)?.pack?.name ?? '')
+            : sortKey === 'weapons'
+              ? formatWeapons(b.weapons ?? [])
+              : sortKey === 'rank'
+                ? (RANK_ORDER_UI[b.rank] ?? 0)
+                : (b[sortKey] ?? '');
       const cmp = String(av).localeCompare(String(bv), 'ru');
       return sortAsc ? cmp : -cmp;
     });
-  }, [rows, sortKey, sortAsc]);
+  }, [rows, sortKey, sortAsc, orgMembers, kpFilter, packFilter]);
 
-  function toggleSort(key: keyof RosterRow) {
+  function toggleSort(key: keyof RosterRow | 'kp' | 'pack') {
     if (sortKey === key) {
       setSortAsc((v) => !v);
     } else {
@@ -100,7 +132,7 @@ export default function RosterPage() {
     setPageOffset(0);
   }
 
-  function sortIndicator(key: keyof RosterRow) {
+  function sortIndicator(key: keyof RosterRow | 'kp' | 'pack') {
     if (sortKey !== key) {
       return '↕';
     }
@@ -129,6 +161,24 @@ export default function RosterPage() {
       void loadRoster();
     }
   }, [sessionLoading, user, loadRoster]);
+
+  useEffect(() => {
+    if (sessionLoading || (!user?.memberId && !user?.isAdmin)) return;
+    let active = true;
+    void api<{ groups: OrgGroup[]; members: OrgMember[] }>('/org/roster')
+      .then((data) => {
+        if (active && Array.isArray(data.groups) && Array.isArray(data.members)) {
+          setGroups(data.groups);
+          setOrgMembers(data.members);
+        }
+      })
+      .catch(() => {
+        if (active) setError('Не удалось загрузить КП и паки');
+      });
+    return () => {
+      active = false;
+    };
+  }, [sessionLoading, user]);
 
   const canManage = useMemo(
     () =>
@@ -177,57 +227,96 @@ export default function RosterPage() {
         blocked={!!canManage}
         current="members"
       />
-      <div className="mb-4 flex flex-wrap items-center gap-4">
-        <Field label="Ранг:">
-          <Select
-            value={rankFilter}
-            onChange={(e) => {
-              setRankFilter(e.target.value as Rank | '');
-              setPageOffset(0);
-            }}
-          >
-            <option value="">все ранги</option>
-            {RANKS.map((rank) => (
-              <option key={rank} value={rank}>
-                {RANK_LABELS[rank]}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Роль:">
-          <Select
-            value={roleFilter}
-            onChange={(e) => {
-              setRoleFilter(e.target.value as CombatRole | '');
-              setPageOffset(0);
-            }}
-          >
-            <option value="">все роли</option>
-            {COMBAT_ROLES.map((role) => (
-              <option key={role} value={role}>
-                {COMBAT_ROLE_LABELS[role]}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Оружие:">
-          <Select
-            value={weaponFilter}
-            onChange={(event) => {
-              setWeaponFilter(event.target.value as Weapon | '');
-              setPageOffset(0);
-            }}
-          >
-            <option value="">все оружия</option>
-            {WEAPONS.map((weapon) => (
-              <option key={weapon} value={weapon}>
-                {WEAPON_LABELS[weapon]}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Muted>Всего: {rows.length}</Muted>
-      </div>
+      <details open className="mb-4">
+        <summary>Фильтры · Всего: {sortedRows.length}</summary>
+        <div className="mt-3 flex flex-wrap items-center gap-4">
+          <Field label="КП:">
+            <Select
+              value={kpFilter}
+              onChange={(e) => {
+                setKpFilter(e.target.value);
+                setPackFilter('');
+                setPageOffset(0);
+              }}
+            >
+              <option value="">все КП</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Пак:">
+            <Select
+              value={packFilter}
+              onChange={(e) => {
+                setPackFilter(e.target.value);
+                setPageOffset(0);
+              }}
+            >
+              <option value="">все паки</option>
+              {groups
+                .filter((group) => !kpFilter || group.id === kpFilter)
+                .flatMap((group) => group.packs)
+                .map((pack) => (
+                  <option key={pack.id} value={pack.id}>
+                    {pack.name}
+                  </option>
+                ))}
+            </Select>
+          </Field>
+          <Field label="Ранг:">
+            <Select
+              value={rankFilter}
+              onChange={(e) => {
+                setRankFilter(e.target.value as Rank | '');
+                setPageOffset(0);
+              }}
+            >
+              <option value="">все ранги</option>
+              {RANKS.map((rank) => (
+                <option key={rank} value={rank}>
+                  {RANK_LABELS[rank]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Роль:">
+            <Select
+              value={roleFilter}
+              onChange={(e) => {
+                setRoleFilter(e.target.value as CombatRole | '');
+                setPageOffset(0);
+              }}
+            >
+              <option value="">все роли</option>
+              {COMBAT_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {COMBAT_ROLE_LABELS[role]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Оружие:">
+            <Select
+              value={weaponFilter}
+              onChange={(event) => {
+                setWeaponFilter(event.target.value as Weapon | '');
+                setPageOffset(0);
+              }}
+            >
+              <option value="">все оружия</option>
+              {WEAPONS.map((weapon) => (
+                <option key={weapon} value={weapon}>
+                  {WEAPON_LABELS[weapon]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Muted>Всего: {sortedRows.length}</Muted>
+        </div>
+      </details>
 
       {error && <ErrorText>{error}</ErrorText>}
 
@@ -262,6 +351,14 @@ export default function RosterPage() {
               >
                 Discord {sortIndicator('discord')}
               </Table.Th>
+              <Table.Th className="cursor-pointer select-none" onClick={() => toggleSort('kp')}>
+                КП {sortIndicator('kp')}
+              </Table.Th>
+              <Table.Th className="cursor-pointer select-none" onClick={() => toggleSort('pack')}>
+                Пак {sortIndicator('pack')}
+              </Table.Th>
+              {(user.isAdmin || user.rank === 'GUILD_LEADER') && <Table.Th>GS</Table.Th>}
+              {canManage && <Table.Th>Действия</Table.Th>}
             </tr>
           </thead>
           <tbody>
@@ -291,9 +388,32 @@ export default function RosterPage() {
                 </Table.Td>
                 <Table.Td>{formatWeapons(row.weapons ?? [])}</Table.Td>
                 <Table.Td>{row.discord ?? <Muted>—</Muted>}</Table.Td>
+                <Table.Td>
+                  {orgMembers.find((item) => item.id === row.id)?.pack?.kp.name ?? '—'}
+                </Table.Td>
+                <Table.Td>
+                  {orgMembers.find((item) => item.id === row.id)?.pack?.name ?? '—'}
+                </Table.Td>
+                {(user.isAdmin || user.rank === 'GUILD_LEADER') && (
+                  <Table.Td>
+                    {orgMembers.find((item) => item.id === row.id)?.gearScore ?? '—'}
+                  </Table.Td>
+                )}
+                {canManage && (
+                  <Table.Td>
+                    <Button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setTransfer(row);
+                      }}
+                    >
+                      Переместить
+                    </Button>
+                  </Table.Td>
+                )}
               </Table.Row>
             ))}
-            {rows.length === 0 && (
+            {sortedRows.length === 0 && (
               <tr>
                 <Table.Td colSpan={5}>
                   <Muted>Никого не найдено</Muted>
@@ -302,10 +422,11 @@ export default function RosterPage() {
             )}
           </tbody>
         </Table>
-        {rows.length > PAGE_SIZE && (
+        {sortedRows.length > PAGE_SIZE && (
           <div className="flex items-center justify-between border-t border-line p-3 text-sm">
             <Muted>
-              {pageOffset + 1}–{Math.min(pageOffset + PAGE_SIZE, rows.length)} из {rows.length}
+              {pageOffset + 1}–{Math.min(pageOffset + PAGE_SIZE, sortedRows.length)} из{' '}
+              {sortedRows.length}
             </Muted>
             <span className="flex gap-2">
               <Button
@@ -315,7 +436,7 @@ export default function RosterPage() {
                 ←
               </Button>
               <Button
-                disabled={pageOffset + PAGE_SIZE >= rows.length}
+                disabled={pageOffset + PAGE_SIZE >= sortedRows.length}
                 onClick={() => setPageOffset(pageOffset + PAGE_SIZE)}
               >
                 →
@@ -325,14 +446,29 @@ export default function RosterPage() {
         )}
       </Card>
 
+      {transfer && (
+        <TransferMemberModal
+          memberId={transfer.id}
+          memberName={transfer.nickname}
+          groups={groups}
+          currentPackId={orgMembers.find((item) => item.id === transfer.id)?.pack?.id}
+          onClose={() => setTransfer(null)}
+          onTransferred={() => {
+            setTransfer(null);
+            void api<{ groups: OrgGroup[]; members: OrgMember[] }>('/org/roster').then((data) => {
+              setGroups(data.groups);
+              setOrgMembers(data.members);
+            });
+          }}
+        />
+      )}
+
       {selected && (
         <MemberCard
           row={selected}
           canAssignLeader={!!user?.isAdmin}
           canManage={!!canManage}
-          canBlock={
-            !!canManage && (selected.rank === 'MEMBER' || selected.rank === 'OFFICER')
-          }
+          canBlock={!!canManage && (selected.rank === 'MEMBER' || selected.rank === 'OFFICER')}
           canChangeRank={
             !!user &&
             can(
@@ -567,9 +703,8 @@ function MemberCard({
         <div className="mt-4">
           <h3 className="mb-2 font-semibold text-primary">Блокировка</h3>
           <p className="mb-2 text-sm text-secondary">
-            Для покинувших гильдию: вход закроется экраном «врата», активные ставки
-            снимутся, ДКП и история сохранятся. Разблокировка — на вкладке
-            «Заблокированные».
+            Для покинувших гильдию: вход закроется экраном «врата», активные ставки снимутся, ДКП и
+            история сохранятся. Разблокировка — на вкладке «Заблокированные».
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Input

@@ -33,6 +33,7 @@ suite('Управление оргструктурой в PostgreSQL', () => {
   const kps: string[] = [];
   const packs: string[] = [];
   const members: string[] = [];
+  const users: string[] = [];
 
   beforeAll(async () => {
     const parsed = new URL(url!);
@@ -52,7 +53,13 @@ suite('Управление оргструктурой в PostgreSQL', () => {
         _res: unknown,
         next: () => void,
       ) => {
-        req.session = { user: req.headers['x-test-admin'] ? admin : undefined };
+        req.session = {
+          user: req.headers['x-test-admin']
+            ? admin
+            : req.headers['x-test-member']
+              ? actor
+              : undefined,
+        };
         next();
       },
     );
@@ -91,7 +98,9 @@ suite('Управление оргструктурой в PostgreSQL', () => {
     await db.packMembershipHistory.deleteMany({ where: { packId: { in: packs } } });
     await db.kP.updateMany({ where: { id: { in: kps } }, data: { leaderId: null } });
     await db.pack.updateMany({ where: { id: { in: packs } }, data: { leaderId: null } });
+    await db.gearScoreRecord.deleteMany({ where: { memberId: { in: members } } });
     await db.member.deleteMany({ where: { id: { in: members } } });
+    await db.user.deleteMany({ where: { id: { in: users } } });
     await db.pack.deleteMany({ where: { id: { in: packs } } });
     await db.kP.deleteMany({ where: { id: { in: kps } } });
     await db.$disconnect();
@@ -104,6 +113,67 @@ suite('Управление оргструктурой в PostgreSQL', () => {
       body: JSON.stringify({ name: 'Нет доступа' }),
     });
     expect(response.status).toBe(401);
+  });
+
+  it('лидер пака получает GS только своей группы и только в выбранной вкладке', async () => {
+    const other = await db.member.create({
+      data: { nickname: `other-${randomUUID()}`, packId: pack2 },
+    });
+    members.push(other.id);
+    await db.gearScoreRecord.createMany({
+      data: [
+        { memberId, value: 1234, screenshotIds: ['screen-one'] },
+        { memberId: other.id, value: 5678, screenshotIds: ['screen-two'] },
+      ],
+    });
+    await db.pack.update({ where: { id: pack1 }, data: { leaderId: memberId } });
+    const common = await service.roster(actor);
+    expect(common.members.find((item) => item.id === memberId)).not.toHaveProperty('gearScore');
+    const own = await service.roster(actor, kp1);
+    expect(own.members.find((item) => item.id === memberId)).toMatchObject({
+      gearScore: 1234,
+      screenshotIds: ['screen-one'],
+    });
+    const foreign = await service.roster(actor, kp2);
+    expect(foreign.members.find((item) => item.id === other.id)).not.toHaveProperty('gearScore');
+  });
+
+  it('HTTP выдаёт GS только при выборе своей группы', async () => {
+    const user = await db.user.create({ data: { username: `org-http-${randomUUID()}` } });
+    users.push(user.id);
+    await db.member.update({ where: { id: memberId }, data: { userId: user.id } });
+    actor.userId = user.id;
+    await db.gearScoreRecord.create({
+      data: { memberId, value: 4321, screenshotIds: ['gs-http'] },
+    });
+    await db.pack.update({ where: { id: pack1 }, data: { leaderId: memberId } });
+    const headers = { 'x-test-member': '1' };
+    const common = (await (await fetch(`${baseUrl}/org/roster`, { headers })).json()) as {
+      members: Array<{ id: string; gearScore?: number }>;
+    };
+    expect(common.members.find((m) => m.id === memberId)).not.toHaveProperty('gearScore');
+    const selected = (await (
+      await fetch(`${baseUrl}/org/roster?packId=${pack1}`, { headers })
+    ).json()) as { members: Array<{ id: string; gearScore?: number }> };
+    expect(selected.members.find((m) => m.id === memberId)?.gearScore).toBe(4321);
+  });
+
+  it('лидер пака не получает GS соседнего пака в той же КП', async () => {
+    const neighborPack = await db.pack.create({ data: { name: 'соседний', kpId: kp1 } });
+    packs.push(neighborPack.id);
+    const neighbor = await db.member.create({
+      data: { nickname: `neighbor-${randomUUID()}`, packId: neighborPack.id },
+    });
+    members.push(neighbor.id);
+    await db.gearScoreRecord.create({
+      data: { memberId: neighbor.id, value: 9999, screenshotIds: ['neighbor-gs'] },
+    });
+    await db.pack.update({ where: { id: pack1 }, data: { leaderId: memberId } });
+    const result = await service.roster(actor, kp1);
+    expect(result.members.find((item) => item.id === neighbor.id)).not.toHaveProperty('gearScore');
+    expect(result.members.find((item) => item.id === neighbor.id)).not.toHaveProperty(
+      'screenshotIds',
+    );
   });
 
   it('HTTP API создаёт пустую КП администратору', async () => {
