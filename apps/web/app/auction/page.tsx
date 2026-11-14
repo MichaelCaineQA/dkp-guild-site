@@ -223,7 +223,14 @@ export default function AuctionPage() {
             ['items', 'Справочник предметов'],
           ] as Array<[Tab, string]>
         ).map(([key, label]) => (
-          <Button key={key} onClick={() => setTab(key)} aria-pressed={tab === key}>
+          <Button
+            key={key}
+            onClick={() => {
+              setTab(key);
+              if (key === 'items') void load();
+            }}
+            aria-pressed={tab === key}
+          >
             {label}
           </Button>
         ))}
@@ -305,9 +312,7 @@ export default function AuctionPage() {
                 {visible.length === 0 && (
                   <tr>
                     <Table.Td colSpan={canManage ? 7 : 6}>
-                      <Muted>
-                        {search ? 'Ничего не найдено' : 'Справочник пока пуст'}
-                      </Muted>
+                      <Muted>{search ? 'Ничего не найдено' : 'Справочник пока пуст'}</Muted>
                     </Table.Td>
                   </tr>
                 )}
@@ -346,7 +351,10 @@ export default function AuctionPage() {
               </Select>
             </Field>
             <Field label="Слот">
-              <Select value={form.slot} onChange={(e) => setForm({ ...form, slot: e.target.value })}>
+              <Select
+                value={form.slot}
+                onChange={(e) => setForm({ ...form, slot: e.target.value })}
+              >
                 <option value="">не указан</option>
                 {ITEM_SLOTS.map((slot) => (
                   <option key={slot} value={slot}>

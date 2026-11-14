@@ -1,9 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createStandaloneLotSchema, type ItemRow, type LotDefaults } from '@dkp/shared';
+import {
+  createStandaloneLotSchema,
+  ITEM_RARITIES,
+  ITEM_SLOTS,
+  ITEM_TARGET_ROLES,
+  ITEM_TARGET_ROLE_LABELS,
+  type ItemTargetRole,
+  type ItemRow,
+  type LotDefaults,
+} from '@dkp/shared';
 import { api } from '../lib/api';
-import { Button, ErrorText, Field, Modal, Muted, Select } from './ui';
+import { Button, ErrorText, Field, Input, Modal, Muted, Select } from './ui';
 import {
   LotParamsFields,
   lotParamsFromDefaults,
@@ -36,10 +45,21 @@ export function CreateLotDialog({
   const [params, setParams] = useState<LotParamsState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [creatingItem, setCreatingItem] = useState(false);
+  const [name, setName] = useState('');
+  const [rarity, setRarity] = useState('');
+  const [slot, setSlot] = useState('');
+  const [price, setPrice] = useState('');
+  const [roles, setRoles] = useState<ItemTargetRole[]>(['ALL']);
 
   useEffect(() => {
     api<ItemRow[]>('/items')
-      .then(setItems)
+      .then((loaded) =>
+        setItems((current) => [
+          ...loaded,
+          ...current.filter((item) => !loaded.some((entry) => entry.id === item.id)),
+        ]),
+      )
       .catch(() => setItemsError('Не удалось загрузить справочник предметов'));
   }, []);
 
@@ -55,6 +75,31 @@ export function CreateLotDialog({
       setParams(lotParamsFromDefaults('OPENING', loaded));
     } catch (err) {
       setError(errorMessage(err, 'Не удалось загрузить параметры лота'));
+    }
+  };
+
+  const createItem = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const item = await api<ItemRow>('/items', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          rarity: rarity || null,
+          slot: slot || null,
+          targetRoles: roles,
+          defaultStartPrice: price.trim() === '' ? null : Number(price),
+        }),
+      });
+      setItems((current) => [...current.filter((entry) => entry.id !== item.id), item]);
+      setItemsError(null);
+      setCreatingItem(false);
+      await pickItem(item.id);
+    } catch (err) {
+      setError(errorMessage(err, 'Не удалось создать предмет'));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -82,8 +127,8 @@ export function CreateLotDialog({
     <Modal title="Новый лот из хранилища гильдии" onClose={() => !busy && onClose()} wide>
       <div className="flex flex-col gap-3">
         <Muted>
-          Лот без ивента: предмет из хранилища гильдии. Торги идут как обычно — ставки,
-          анти-снайп, автосписание; продлить или отменить может Глава/Админ.
+          Лот без ивента: предмет из хранилища гильдии. Торги идут как обычно — ставки, анти-снайп,
+          автосписание; продлить или отменить может Глава/Админ.
         </Muted>
         <Field label="Предмет из справочника">
           <Select
@@ -100,6 +145,104 @@ export function CreateLotDialog({
             ))}
           </Select>
         </Field>
+        {!creatingItem ? (
+          <Button
+            disabled={busy}
+            onClick={() => {
+              setError(null);
+              setCreatingItem(true);
+            }}
+          >
+            Добавить новый предмет
+          </Button>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <Muted>Новый предмет будет сохранён в справочнике.</Muted>
+            <Field label="Название предмета">
+              <Input
+                aria-label="Название предмета"
+                value={name}
+                maxLength={80}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </Field>
+            <Field label="Редкость">
+              <Select
+                aria-label="Редкость"
+                value={rarity}
+                onChange={(e) => setRarity(e.target.value)}
+              >
+                <option value="">не указана</option>
+                {ITEM_RARITIES.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Слот">
+              <Select aria-label="Слот" value={slot} onChange={(e) => setSlot(e.target.value)}>
+                <option value="">не указан</option>
+                {ITEM_SLOTS.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Рекомендованная стартовая цена">
+              <Input
+                aria-label="Рекомендованная стартовая цена"
+                type="number"
+                min={0}
+                step={1}
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+              />
+            </Field>
+            <Field label="Кому нужна">
+              <div className="flex flex-wrap gap-3">
+                {ITEM_TARGET_ROLES.map((role) => (
+                  <label key={role} className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={roles.includes(role)}
+                      onChange={() =>
+                        setRoles((current) =>
+                          role === 'ALL'
+                            ? current.includes('ALL')
+                              ? []
+                              : ['ALL']
+                            : current.includes(role)
+                              ? current.filter((r) => r !== role)
+                              : [...current.filter((r) => r !== 'ALL'), role],
+                        )
+                      }
+                    />
+                    {ITEM_TARGET_ROLE_LABELS[role]}
+                  </label>
+                ))}
+              </div>
+            </Field>
+            <div className="flex justify-end gap-2">
+              <Button
+                disabled={busy}
+                onClick={() => {
+                  setCreatingItem(false);
+                  setError(null);
+                }}
+              >
+                Отмена
+              </Button>
+              <Button
+                disabled={busy || !name.trim() || roles.length === 0}
+                onClick={() => void createItem()}
+              >
+                {busy ? 'Сохранение…' : 'Сохранить предмет'}
+              </Button>
+            </div>
+          </div>
+        )}
         {itemsError && <ErrorText>{itemsError}</ErrorText>}
         {defaults && params && (
           <LotParamsFields state={params} defaults={defaults} onChange={setParams} />
@@ -111,7 +254,7 @@ export function CreateLotDialog({
           </Button>
           <Button
             variant="primary"
-            disabled={busy || !itemId || !params}
+            disabled={busy || creatingItem || !itemId || !params}
             onClick={() => void submit()}
           >
             {busy ? 'Создание…' : 'Создать лот'}
