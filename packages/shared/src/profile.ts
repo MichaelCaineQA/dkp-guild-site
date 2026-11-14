@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { COMBAT_ROLES, type CombatRole, type Rank } from './domain';
 import { weaponPairSchema, type Weapon } from './weapons';
 import type { ProfileLootRow } from './loot-log';
+import { primeTimeSlotSchema, timeZoneSchema, type PrimeTimeSlot } from './prime-time';
 export const AVATARS = [
   'AURORA',
   'EMBER',
@@ -66,6 +67,8 @@ export const updateOwnProfileSchema = z
     avatar: z.enum(AVATARS).nullable().optional(),
     avatarColor: z.enum(AVATAR_COLORS).nullable().optional(),
     preferredItemId: z.string().min(1, 'Выберите предмет').nullable().optional(),
+    timeZone: timeZoneSchema.optional(),
+    primeTime: z.array(primeTimeSlotSchema).max(100).optional(),
     comment: z.string().trim().min(3).max(500).optional(),
   })
   .strict()
@@ -85,6 +88,8 @@ export function canViewProfileGearScore(
   );
 }
 export interface PlayerProfile {
+  timeZone: string;
+  primeTime: PrimeTimeSlot[];
   avatar?: Avatar | null;
   avatarColor?: AvatarColor | null;
   gearScore?: { value: number; screenshotIds: string[]; createdAt: string } | null;

@@ -70,6 +70,7 @@ export default function RosterPage() {
   const [rankFilter, setRankFilter] = useState<Rank | ''>('');
   const [roleFilter, setRoleFilter] = useState<CombatRole | ''>('');
   const [weaponFilter, setWeaponFilter] = useState<Weapon | ''>('');
+  const [availableNow, setAvailableNow] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<RosterRow | null>(null);
   // Сортировка столбцов + пагинация (ревью владельца, п.9)
@@ -142,6 +143,7 @@ export default function RosterPage() {
   const loadRoster = useCallback(async () => {
     const params = new URLSearchParams();
     if (weaponFilter) params.set('weapon', weaponFilter);
+    if (availableNow) params.set('availableNow', 'true');
     if (rankFilter) {
       params.set('rank', rankFilter);
     }
@@ -154,7 +156,7 @@ export default function RosterPage() {
     } catch (err) {
       setError(err instanceof Error && 'status' in err ? 'Не удалось загрузить состав' : 'Ошибка');
     }
-  }, [rankFilter, roleFilter, weaponFilter]);
+  }, [rankFilter, roleFilter, weaponFilter, availableNow]);
 
   useEffect(() => {
     if (!sessionLoading && (user?.memberId || user?.isAdmin)) {
@@ -314,6 +316,7 @@ export default function RosterPage() {
               ))}
             </Select>
           </Field>
+          <label><input type="checkbox" checked={availableNow} onChange={(event) => { setAvailableNow(event.target.checked); setPageOffset(0); }} /> Свободен сейчас</label>
           <Muted>Всего: {sortedRows.length}</Muted>
         </div>
       </details>

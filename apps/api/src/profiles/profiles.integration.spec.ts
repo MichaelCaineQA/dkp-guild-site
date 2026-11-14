@@ -15,6 +15,8 @@ let preferredItemId: string | null = null;
 let preferredChangedAt: Date | null = null;
 /** Время последней смены роли — свой таймер кулдауна (решение 18). */
 let roleChangedAt: Date | null = null;
+let timeZone = 'Europe/Moscow';
+let primeTime: import('@dkp/shared').PrimeTimeSlot[] = [];
 let audit: Array<unknown> = [];
 let failAudit = false;
 let actor: SessionUser | undefined;
@@ -42,6 +44,8 @@ function member(id: string, combatRole: CombatRole | null) {
     ? {
         id,
         nickname: 'Игрок',
+        timeZone,
+        primeTime,
         rank: 'MEMBER' as const,
         combatRole,
         combatRoleChangedAt: null,
@@ -112,6 +116,8 @@ const db: ProfilesDb = {
     let draftAvatarColor = avatarColor;
     let draftPreferredItemId = preferredItemId;
     let draftPreferredChangedAt = preferredChangedAt;
+    let draftTimeZone = timeZone;
+    let draftPrimeTime = [...primeTime];
     const draftAudit: unknown[] = [];
     const tx: ProfileTransaction = {
       member: {
@@ -142,6 +148,8 @@ const db: ProfilesDb = {
           if (data.preferredItemId !== undefined) draftPreferredItemId = data.preferredItemId;
           if (data.preferredItemChangedAt !== undefined)
             draftPreferredChangedAt = data.preferredItemChangedAt;
+          if (data.timeZone !== undefined) draftTimeZone = data.timeZone;
+          if (data.primeTime !== undefined) draftPrimeTime = data.primeTime.create;
           return {};
         },
       },
@@ -168,6 +176,8 @@ const db: ProfilesDb = {
     avatarColor = draftAvatarColor;
     preferredItemId = draftPreferredItemId;
     preferredChangedAt = draftPreferredChangedAt;
+    timeZone = draftTimeZone;
+    primeTime = draftPrimeTime;
     audit.push(...draftAudit);
     return result;
   },
@@ -202,6 +212,8 @@ describe('профили через HTTP', () => {
     preferredItemId = null;
     preferredChangedAt = null;
     roleChangedAt = null;
+    timeZone = 'Europe/Moscow';
+    primeTime = [];
     audit = [];
     failAudit = false;
     loot = [];
@@ -212,6 +224,20 @@ describe('профили через HTTP', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+
+  it('сохраняет свой прайм-тайм и пишет изменение в аудит', async () => {
+    const slots = [{ weekday: 0, fromMinute: 1380, toMinute: 1440 }];
+    const result = await patch('m1', { timeZone: 'Europe/Riga', primeTime: slots, comment: 'Новое расписание' });
+    expect(result.status).toBe(200);
+    const profile = await (await fetch(`${url}/profiles/m1`)).json();
+    expect(profile).toMatchObject({ timeZone: 'Europe/Riga', primeTime: slots });
+    expect(audit).toEqual([expect.objectContaining({ action: 'MEMBER_UPDATE', actorMemberId: 'm1', comment: expect.stringContaining('прайм-тайм: изменён') })]);
+  });
+
+  it('запрещает менять чужой прайм-тайм', async () => {
+    expect((await patch('m2', { primeTime: [], comment: 'Попытка изменения' })).status).toBe(403);
+    expect(audit).toEqual([]);
+  });
 
   it('анониму — 401, непривязанному аккаунту — 403', async () => {
     actor = undefined;

@@ -53,5 +53,6 @@ export const rosterQuerySchema = z.object({
   weapon: z.enum(WEAPONS).optional(),
   rank: z.enum(RANKS).optional(),
   combatRole: z.enum(COMBAT_ROLES).optional(),
+  availableNow: z.enum(['true']).optional(),
 });
 export type RosterQuery = z.infer<typeof rosterQuerySchema>;
