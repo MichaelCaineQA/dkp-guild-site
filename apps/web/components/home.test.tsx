@@ -44,3 +44,38 @@ it('ошибка API не выдаётся за отключённый Discord �
   fireEvent.click(screen.getByRole('button', { name: 'Вход для администратора' }));
   expect(screen.getByLabelText('Логин администратора')).toBeTruthy();
 });
+
+it('приветствует гостя названием гильдии из настроек', async () => {
+  vi.mocked(api).mockImplementation(async (path) =>
+    path === '/meta/guild-name' ? { name: 'Sun Eclipse' } : { discord: true },
+  );
+  render(<HomePage />);
+  expect(
+    await screen.findByRole('heading', { name: 'Добро пожаловать во врата гильдии Sun Eclipse' }),
+  ).toBeTruthy();
+});
+
+it.each([null, '', '   '])('без названия гильдии (%j) сохраняет общее приветствие', async (name) => {
+  vi.mocked(api).mockImplementation(async (path) =>
+    path === '/meta/guild-name' ? { name } : { discord: true },
+  );
+  render(<HomePage />);
+  await screen.findByRole('link', { name: 'Связать с Discord' });
+  expect(
+    screen.getByRole('heading', { name: 'Добро пожаловать в ДКП-систему гильдии' }),
+  ).toBeTruthy();
+});
+
+it('при ошибке загрузки названия сохраняет общее приветствие и доступ к входу', async () => {
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === '/meta/guild-name') throw new Error('offline');
+    return { discord: true };
+  });
+  render(<HomePage />);
+  await screen.findByRole('link', { name: 'Связать с Discord' });
+  expect(
+    screen.getByRole('heading', { name: 'Добро пожаловать в ДКП-систему гильдии' }),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Вход для администратора' }));
+  expect(screen.getByLabelText('Логин администратора')).toBeTruthy();
+});

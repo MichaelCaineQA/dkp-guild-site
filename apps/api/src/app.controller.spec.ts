@@ -1,3 +1,6 @@
+import 'reflect-metadata';
+import { Module, type INestApplication } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { PrismaService } from './prisma/prisma.service';
 
@@ -35,5 +38,58 @@ describe('AppController', () => {
   it('отдаёт справочник боевых ролей из @dkp/shared', () => {
     const controller = makeController(() => Promise.resolve(1));
     expect(controller.getCombatRoles()).toEqual({ DPS: 'ДД', HEALER: 'Хил', TANK: 'Танк' });
+  });
+});
+
+describe('Публичное название гильдии: HTTP-контракт', () => {
+  let app: INestApplication;
+  let url: string;
+  const findFirst = jest.fn();
+
+  @Module({
+    controllers: [AppController],
+    providers: [
+      {
+        provide: PrismaService,
+        useValue: { guild: { findFirst } },
+      },
+    ],
+  })
+  class TestModule {}
+
+  beforeAll(async () => {
+    app = await NestFactory.create(TestModule, { logger: false });
+    await app.listen(0, '127.0.0.1');
+    url = await app.getUrl();
+  });
+
+  afterAll(async () => {
+    await app?.close();
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('без авторизации возвращает название первой гильдии', async () => {
+    findFirst.mockResolvedValue({ name: 'Солнечный Эклипс' });
+
+    const response = await fetch(`${url}/meta/guild-name`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ name: 'Солнечный Эклипс' });
+    expect(findFirst).toHaveBeenCalledWith({
+      orderBy: { createdAt: 'asc' },
+      select: { name: true },
+    });
+  });
+
+  it('возвращает null, если гильдия ещё не создана', async () => {
+    findFirst.mockResolvedValue(null);
+
+    const response = await fetch(`${url}/meta/guild-name`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ name: null });
   });
 });

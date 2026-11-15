@@ -41,6 +41,15 @@ export class AppController {
     return { name: guild?.name ?? 'Гильдия', hasCrest: !!guild?.crest };
   }
 
+  @Get('meta/guild-name')
+  async getGuildName(): Promise<{ name: string | null }> {
+    const guild = await this.prisma.guild.findFirst({
+      orderBy: { createdAt: 'asc' },
+      select: { name: true },
+    });
+    return { name: guild?.name ?? null };
+  }
+
   /** Справочник боевых ролей — заодно проверяет связку с @dkp/shared. */
   @Get('meta/combat-roles')
   getCombatRoles(): Record<string, string> {

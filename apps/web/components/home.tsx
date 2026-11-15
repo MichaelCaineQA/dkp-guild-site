@@ -37,6 +37,21 @@ function WelcomeScreen() {
   const [busy, setBusy] = useState(false);
   const [discord, setDiscord] = useState<boolean | null>(null);
   const [providersError, setProvidersError] = useState(false);
+  const [guildName, setGuildName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void api<{ name: string | null }>('/meta/guild-name')
+      .then((guild) => {
+        if (active) setGuildName(guild.name?.trim() || null);
+      })
+      .catch(() => {
+        // Название необязательно для входа: при ошибке остаётся общее приветствие.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -80,7 +95,11 @@ function WelcomeScreen() {
   return (
     <Page>
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 text-center">
-        <h1 className="text-4xl font-bold">Добро пожаловать в ДКП-систему гильдии</h1>
+        <h1 className="text-4xl font-bold">
+          {guildName
+            ? `Добро пожаловать во врата гильдии ${guildName}`
+            : 'Добро пожаловать в ДКП-систему гильдии'}
+        </h1>
         <p className="max-w-lg text-secondary">
           Расписание ивентов, посещение чек-ин кодами, журнал ДКП и статистика. Чтобы продолжить,
           привяжите свою учётную запись Discord.

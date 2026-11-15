@@ -32,6 +32,11 @@ const c = (
 
 /** Ключи привязаны к методам контроллеров; пути и HTTP-статусы сканирует Nest. */
 export const contracts: Record<string, Contract> = {
+  App_getGuildName: {
+    summary: 'Получить публичное название гильдии',
+    response: object({ name: { ...str, nullable: true } }),
+    public: true,
+  },
   Org_roster: c(
     'Структура и состав групп',
     object({
