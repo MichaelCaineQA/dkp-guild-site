@@ -442,21 +442,27 @@ export class ConductService {
       input.phase,
       typeof this.settings === 'function' ? await this.settings(this.db) : this.settings,
     );
-    await this.db.dkpEntry.create({
-      data: {
-        memberId: input.memberId,
-        type: 'CHECKIN_EARN',
-        amount,
-        eventId,
-        createdById: actor.memberId,
-        comment: `Ручной чек-ин (${input.phase === 'START' ? 'старт' : 'финал'}). ${input.comment}`,
-      },
-    });
+    // Нулевая доля (напр. плата 1 при 50/50) — отметку ставим, запись на 0
+    // в журнал не пишем (аудит F01).
+    if (amount > 0) {
+      await this.db.dkpEntry.create({
+        data: {
+          memberId: input.memberId,
+          type: 'CHECKIN_EARN',
+          amount,
+          eventId,
+          createdById: actor.memberId,
+          comment: `Ручной чек-ин (${input.phase === 'START' ? 'старт' : 'финал'}). ${input.comment}`,
+        },
+      });
+    }
     await this.audit(
       actor,
       'MANUAL_CHECKIN',
       `${eventId}:${input.memberId}`,
-      `Ручная отметка ${input.phase === 'START' ? 'старта' : 'финала'} (+${amount} ДКП). ${input.comment}`,
+      `Ручная отметка ${input.phase === 'START' ? 'старта' : 'финала'}${
+        amount > 0 ? ` (+${amount} ДКП)` : ' (доля платы — 0 ДКП)'
+      }. ${input.comment}`,
     );
     return { ok: true };
   }

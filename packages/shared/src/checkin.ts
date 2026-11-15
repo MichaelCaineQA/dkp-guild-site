@@ -58,18 +58,23 @@ export function checkInWindowState(
 /**
  * Доля платы за фазу (решение №7: 50/50). Использует настройки
  * checkin.startSharePct / endSharePct, но сумма долей обязана быть 100%.
+ *
+ * Инвариант (аудит F01): сумма двух фаз всегда равна плате. Стартовая доля
+ * округляется вниз, финальная — остаток: нечётная плата не завышает журнал,
+ * а «ушёл раньше» никогда не получает больше половины (лишний балл —
+ * досидевшим до финального кода). При малой плате стартовая доля может
+ * быть нулевой — записи журнала на 0 не создаются.
  */
 export function checkInShareAmount(
   dkpReward: number,
   phase: CheckInPhase,
   shares: { startSharePct: number; endSharePct: number },
 ): number {
-  const pct = phase === 'START' ? shares.startSharePct : shares.endSharePct;
-  const amount = Math.round((dkpReward * pct) / 100);
-  if (amount <= 0) {
-    throw new Error('Доля платы должна быть положительной');
+  if (shares.startSharePct <= 0 || shares.endSharePct <= 0) {
+    throw new Error('Доли платы должны быть положительными');
   }
-  return amount;
+  const startAmount = Math.floor((dkpReward * shares.startSharePct) / 100);
+  return phase === 'START' ? startAmount : dkpReward - startAmount;
 }
 
 /** Заявка игрока: выбранный из 4 код (строка 100–999). */
