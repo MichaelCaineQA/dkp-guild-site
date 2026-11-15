@@ -253,6 +253,46 @@ describe('AbsencesService.cancel', () => {
 });
 
 describe('AbsencesService.markSeen', () => {
+  it('лидер КП автора может отметить отсутствие', async () => {
+    const { db, seen } = makeDb([{ id: 'a-1' }]);
+    const findUnique = db.absence.findUnique;
+    db.absence.findUnique = async (args) => {
+      const row = await findUnique(args);
+      return (
+        row && {
+          ...row,
+          member: { pack: { leaderId: 'pack-leader', kp: { leaderId: 'kp-leader' } } },
+        }
+      );
+    };
+    await new AbsencesService(db, SETTINGS, clock).markSeen('a-1', {
+      memberId: 'kp-leader',
+      isAdmin: false,
+      rank: 'MEMBER',
+    });
+    expect(seen.has('a-1:kp-leader')).toBe(true);
+  });
+  it('лидер другого пака не может отметить отсутствие', async () => {
+    const { db, seen } = makeDb([{ id: 'a-1' }]);
+    const findUnique = db.absence.findUnique;
+    db.absence.findUnique = async (args) => {
+      const row = await findUnique(args);
+      return (
+        row && {
+          ...row,
+          member: { pack: { leaderId: 'pack-leader', kp: { leaderId: 'kp-leader' } } },
+        }
+      );
+    };
+    await expect(
+      new AbsencesService(db, SETTINGS, clock).markSeen('a-1', {
+        memberId: 'other',
+        isAdmin: false,
+        rank: 'MEMBER',
+      }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(seen.size).toBe(0);
+  });
   it.each(['MEMBER', 'OFFICER'])(
     'ранг %s без дополнительных прав не ставит Увидел',
     async (rank) => {
@@ -327,7 +367,6 @@ describe('AbsencesService.forEvent / markExcusedForFinishedEvent', () => {
     const date = new Date('2026-03-20T17:00:00Z');
     for (const actor of [
       { memberId: 'm-1', isAdmin: false, rank: 'MEMBER' },
-      { memberId: 'm-2', isAdmin: false, rank: 'OFFICER' },
       { memberId: 'm-2', isAdmin: false, rank: 'GUILD_LEADER' },
       { memberId: null, isAdmin: true, rank: null },
     ])
@@ -335,6 +374,15 @@ describe('AbsencesService.forEvent / markExcusedForFinishedEvent', () => {
     expect(
       (
         await service.forEvent(date, undefined, { memberId: 'm-2', isAdmin: false, rank: 'MEMBER' })
+      )[0]?.reason,
+    ).toBeNull();
+    expect(
+      (
+        await service.forEvent(date, undefined, {
+          memberId: 'm-2',
+          isAdmin: false,
+          rank: 'OFFICER',
+        })
       )[0]?.reason,
     ).toBeNull();
   });
@@ -345,12 +393,15 @@ describe('AbsencesService.forEvent / markExcusedForFinishedEvent', () => {
     db.absence.findMany = async (args) =>
       (await findMany(args)).map((row) => ({
         ...row,
-        member: { ...row.member, pack: { leaderId: 'pack-leader' } },
+        member: { ...row.member, pack: { leaderId: 'pack-leader', kp: { leaderId: 'kp-leader' } } },
       }));
     const service = new AbsencesService(db, SETTINGS, clock);
     const date = new Date('2026-03-20T17:00:00Z');
     const actor = { memberId: 'pack-leader', isAdmin: false, rank: 'MEMBER' };
     expect((await service.forEvent(date, undefined, actor))[0]?.reason).toBe('Личная причина');
+    expect(
+      (await service.forEvent(date, undefined, { ...actor, memberId: 'kp-leader' }))[0]?.reason,
+    ).toBe('Личная причина');
     expect(
       (await service.forEvent(date, undefined, { ...actor, memberId: 'other-leader' }))[0]?.reason,
     ).toBeNull();

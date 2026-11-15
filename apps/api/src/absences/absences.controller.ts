@@ -35,9 +35,14 @@ export class AbsencesController {
   /** Все активные заявки — Главе и Админу. */
   @Get()
   @Header('Cache-Control', 'private, no-store')
-  @RequirePermission('absence.see')
-  list() {
-    return this.absences.list();
+  @RequirePermission('members.view_roster')
+  list(@Req() req: AuthedRequest) {
+    const user = req.session!.user!;
+    return this.absences.list(undefined, {
+      memberId: user.memberId,
+      isAdmin: user.isAdmin,
+      rank: user.rank,
+    });
   }
 
   /** Отсутствующие по конкретному ивенту (для карточки/проведения). */
@@ -75,7 +80,7 @@ export class AbsencesController {
 
   /** Отметка «Увидел» — Главе/Админу; лидеры групп — этап 3. */
   @Post(':id/seen')
-  @RequirePermission('absence.see')
+  @RequirePermission('members.view_roster')
   markSeen(@Param('id') id: string, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
     const actor = { memberId: user.memberId, isAdmin: user.isAdmin, rank: user.rank };

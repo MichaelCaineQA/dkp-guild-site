@@ -22,6 +22,12 @@ beforeEach(() => {
   vi.mocked(api).mockResolvedValue([row]);
 });
 afterEach(cleanup);
+it('лидер группы видит кнопку для соответствующей заявки', async () => {
+  session('MEMBER', 'group-leader');
+  vi.mocked(api).mockResolvedValue([{ ...row, canMarkSeen: true }]);
+  render(<AbsentMembersPanel eventId="e" eventStartsAt="2027-04-01T00:00:00Z" />);
+  expect(await screen.findByRole('button', { name: 'Увидел' })).toBeDefined();
+});
 it.each(['MEMBER', 'OFFICER'] as const)('%s видит причину, без кнопки Увидел', async (rank) => {
   session(rank);
   render(<AbsentMembersPanel eventId="e" eventStartsAt="2027-04-01T00:00:00Z" />);

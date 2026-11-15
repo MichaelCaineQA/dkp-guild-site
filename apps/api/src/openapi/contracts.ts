@@ -393,7 +393,9 @@ export const contracts: Record<string, Contract> = {
   Absences_mine: c('Получить свои активные отсутствия', list('Absence'), {
     access: 'Участник с привязанным Member.',
   }),
-  Absences_list: c('Получить активные отсутствия гильдии', list('Absence'), { access: leader }),
+  Absences_list: c('Получить доступные активные отсутствия', list('Absence'), {
+    access: 'Глава и Админ видят все заявки; лидеры КП и паков — заявки своей группы.',
+  }),
   Absences_forEvent: c('Получить отсутствия на момент ивента', list('EventAbsence'), {
     query: 'AbsencesQuery',
     description:
@@ -411,7 +413,7 @@ export const contracts: Record<string, Contract> = {
     description: 'Только своё отсутствие до его начала.',
   }),
   Absences_markSeen: c('Отметить отсутствие как увиденное', 'Ok', {
-    access: leader,
+    access: 'Глава, Админ, лидер КП или пака автора отсутствия.',
     errors: [404],
     description:
       'Не меняет статус отсутствия. Отметка и аудит атомарны; повторные/одновременные запросы идемпотентны. Доступно также резервному админу без Member. seenBy в обоих списках содержит ID участников и system-admin для резервного администратора.',

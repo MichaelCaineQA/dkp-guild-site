@@ -91,14 +91,28 @@ describe('аудит через HTTP: права, фильтры, ровно о�
   });
   beforeEach(() => {
     jest.clearAllMocks();
-    actor = { userId: 'u1', username: 'Офицер', memberId: 'm1', rank: 'OFFICER', isAdmin: false, blocked: false };
+    actor = {
+      userId: 'u1',
+      username: 'Офицер',
+      memberId: 'm1',
+      rank: 'OFFICER',
+      isAdmin: false,
+      blocked: false,
+    };
     login.mockReturnValue(true);
   });
 
   it('аноним получает 401, рядовой — только личный журнал', async () => {
     actor = undefined;
     expect((await fetch(`${url}/audit`)).status).toBe(401);
-    actor = { userId: 'u2', username: 'Игрок', memberId: 'm2', rank: 'MEMBER', isAdmin: false, blocked: false };
+    actor = {
+      userId: 'u2',
+      username: 'Игрок',
+      memberId: 'm2',
+      rank: 'MEMBER',
+      isAdmin: false,
+      blocked: false,
+    };
     expect((await fetch(`${url}/audit`)).status).toBe(200);
     expect((await fetch(`${url}/audit/actions`)).status).toBe(200);
     expect(findMany).toHaveBeenCalledWith(
@@ -124,6 +138,28 @@ describe('аудит через HTTP: права, фильтры, ровно о�
     expect(count).toHaveBeenCalledWith({ where });
   });
 
+  it('офицер без лидерства не видит причину отсутствия в аудите', async () => {
+    const absenceLookup = jest
+      .spyOn(db.absence, 'findMany')
+      .mockResolvedValue([{ id: 'a1', memberId: 'm2' }]);
+    findMany.mockResolvedValueOnce([
+      {
+        id: 'log-absence',
+        actorMemberId: 'm1',
+        action: 'ABSENCE_CREATE',
+        entityType: 'Absence',
+        entityId: 'a1',
+        comment: 'Личная причина',
+        createdAt: new Date('2026-11-06T12:00:00Z'),
+        actor: { nickname: 'Глава' },
+      },
+    ]);
+    const response = await fetch(`${url}/audit`);
+    const body = (await response.json()) as { entries: Array<{ comment: string | null }> };
+    expect(body.entries[0]?.comment).toBeNull();
+    absenceLookup.mockRestore();
+  });
+
   it('человекочитаемые названия: entityName по типу сущности, имена вместо id в комментарии', async () => {
     const response = await fetch(`${url}/audit`);
     expect(response.status).toBe(200);
@@ -137,13 +173,27 @@ describe('аудит через HTTP: права, фильтры, ровно о�
   });
 
   it('в личном журнале скрывает название и детали чужой сущности', async () => {
-    actor = { userId: 'u1', username: 'Игрок', memberId: 'm1', rank: 'MEMBER', isAdmin: false, blocked: false };
+    actor = {
+      userId: 'u1',
+      username: 'Игрок',
+      memberId: 'm1',
+      rank: 'MEMBER',
+      isAdmin: false,
+      blocked: false,
+    };
     const response = await fetch(`${url}/audit`);
     const { entries } = (await response.json()) as {
-      entries: Array<{ entityType: string; entityId: string; entityName: string | null; comment: string | null }>;
+      entries: Array<{
+        entityType: string;
+        entityId: string;
+        entityName: string | null;
+        comment: string | null;
+      }>;
     };
     expect(entries.find((entry) => entry.entityType === 'Pack')).toMatchObject({
-      entityId: '', entityName: null, comment: null,
+      entityId: '',
+      entityName: null,
+      comment: null,
     });
   });
 
@@ -182,7 +232,14 @@ describe('аудит через HTTP: права, фильтры, ровно о�
   });
 
   it('резервный админ без Member видит журнал', async () => {
-    actor = { userId: 'admin:admin', username: 'Админ', memberId: null, rank: null, isAdmin: true, blocked: false };
+    actor = {
+      userId: 'admin:admin',
+      username: 'Админ',
+      memberId: null,
+      rank: null,
+      isAdmin: true,
+      blocked: false,
+    };
     expect((await fetch(`${url}/audit`)).status).toBe(200);
   });
 

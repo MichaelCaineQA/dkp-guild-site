@@ -55,7 +55,7 @@ export default function AbsencesPage() {
       const requests: Promise<AbsenceRow[]>[] = [
         user?.memberId ? api<AbsenceRow[]>('/absences/mine') : Promise.resolve([]),
       ];
-      if (canSee) {
+      if (user?.memberId || canSee) {
         requests.push(api<AbsenceRow[]>('/absences'));
       }
       const [mineData, allData] = await Promise.all(requests);
@@ -159,11 +159,11 @@ export default function AbsencesPage() {
         />
       </Card>
 
-      {canSee && all !== null && (
+      {all !== null && (canSee || all.length > 0) && (
         <>
           <div className="mt-4" />
           <Card>
-            <SectionTitle>Все заявки гильдии</SectionTitle>
+            <SectionTitle>{canSee ? 'Все заявки гильдии' : 'Заявки моей группы'}</SectionTitle>
             <AbsenceTable
               rows={all}
               onSeen={async (id) => {
