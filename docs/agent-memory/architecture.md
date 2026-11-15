@@ -40,7 +40,15 @@
   транзакции через порт `AUCTION_EVENTS`; Redis adapter и Redis-сессии — при
   заданном `REDIS_URL`, иначе in-memory. Сессии — `apps/api/src/auth/session.ts`
   (общий store для REST и WS-handshake; при переходе на Redis действующие
-  входы сбрасываются один раз). Веб-клиент — хук `apps/web/lib/use-auction-lot.ts`
+  входы сбрасываются один раз). **Отзыв WS-доступа (аудит F02, #164, PR #177):**
+  `SocketAccessService.refreshUser` перечитывает членство/blocked из БД
+  на handshake и каждой `auction:join` (как AuthGuard в REST); сокеты при
+  соединении входят в комнату `user:{userId}` — `MembersService.block` после
+  коммита и `POST /auth/logout` зовут `AUCTION_EVENTS.userAccessRevoked`:
+  ошибка «врата» + `disconnectSockets(true)` (Redis adapter разносит на все
+  инстансы). RealtimeModule не пере-предоставляет PrismaService — второй
+  PrismaClient грузит `.env` в process.env и ломал discord.integration.spec.
+  Веб-клиент — хук `apps/web/lib/use-auction-lot.ts`
   (prod: `/api/socket.io` через Caddy, dev: прокси Next). **`addTrailingSlash: false`
   обязателен и на gateway, и в клиенте**: дев-прокси Next срезает завершающий
   слэш 308-редиректом — без опции handshake `/api/socket.io/` ломается (ловили
@@ -93,7 +101,11 @@
 - Управление оргструктурой (#143): `apps/api/src/org` предоставляет создание
   КП/паков, переносы и назначение лидеров; проверки контекстных прав,
   история и аудит выполняются в сериализуемых транзакциях.
-- `apps/api/src/members` — члены гильдии и **блокировка покинувших** (#149):
+- `apps/api/src/members` — члены гильдии и **блокировка покинувших** (#149).
+  **Административного `PATCH /members/:id` нет (аудит F03, #165, PR #178):**
+  личные поля (ник, боевая роль, оружия) меняет только владелец через
+  `PATCH /profiles/:id` (`updateOwnProfileSchema`, ник — 2–40, занятый — 409,
+  смена с комментарием в аудит); администрации — смена ранга и блокировка:
   `Member.blockedAt` (null = активен). `POST /members/:id/block|unblock` и
   `GET /members/blocked` — право `members.manage` (Глава/Админ), комментарий
   обязателен, аудит `MEMBER_BLOCK`/`MEMBER_UNBLOCK`. Блокировка удаляет все
