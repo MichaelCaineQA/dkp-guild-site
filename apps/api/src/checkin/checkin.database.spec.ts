@@ -208,4 +208,46 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
       await db.auditLog.count({ where: { action: 'CHECKIN_END_EARLY', entityId: eventId } }),
     ).toBe(1);
   });
+
+  // Аудит F01 (#163): нечётная плата не должна начислять больше самой платы.
+  // Ручные отметки идут через ту же checkInShareAmount, что и самоотметки.
+  it.each([
+    { reward: 11, startAmount: 5, amounts: [5, 6] },
+    { reward: 3, startAmount: 1, amounts: [1, 2] },
+    { reward: 1, startAmount: 0, amounts: [1] }, // стартовая доля 0 — записи на 0 не будет
+  ])('плата $reward: обе фазы дают ровно плату', async ({ reward, startAmount, amounts }) => {
+    const suffix = randomUUID().slice(0, 10);
+    const oddEventId = (
+      await db.event.create({
+        data: {
+          name: 'Нечётная плата',
+          eventTypeId: (await db.eventType.create({ data: { name: 'odd-' + suffix } })).id,
+          raidLeadId: rlId,
+          mode: 'PVE',
+          startsAt: new Date('2027-03-03T17:00:00Z'),
+          endsAt: new Date('2027-03-03T19:00:00Z'),
+          dkpReward: reward,
+        },
+      })
+    ).id;
+    const entries = () =>
+      db.dkpEntry.findMany({ where: { eventId: oddEventId, memberId } });
+    await conduct.manualCheckIn(
+      oddEventId,
+      { memberId, phase: 'START', comment: 'Проверка нечётной платы' },
+      { memberId: rlId, isAdmin: false },
+      'MEMBER',
+    );
+    const afterStart = await entries();
+    expect(afterStart.map((e) => e.amount)).toEqual(startAmount > 0 ? [startAmount] : []);
+    await conduct.manualCheckIn(
+      oddEventId,
+      { memberId, phase: 'END', comment: 'Проверка нечётной платы' },
+      { memberId: rlId, isAdmin: false },
+      'MEMBER',
+    );
+    const afterEnd = await entries();
+    expect([...afterEnd.map((e) => e.amount)].sort((a, b) => a - b)).toEqual(amounts);
+    expect(afterEnd.reduce((sum, e) => sum + e.amount, 0)).toBe(reward);
+  });
 });

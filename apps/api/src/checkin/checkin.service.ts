@@ -357,15 +357,19 @@ export class CheckInService {
         startSharePct: this.settings.startSharePct,
         endSharePct: this.settings.endSharePct,
       });
-      await this.db.dkpEntry.create({
-        data: {
-          memberId,
-          type: 'CHECKIN_EARN',
-          amount,
-          eventId,
-          comment: `Чек-ин ${phase === 'START' ? 'старт' : 'финал'}: код верный`,
-        },
-      });
+      // Нулевая доля (напр. плата 1 при 50/50) — отметка засчитывается,
+      // но запись журнала на 0 не создаём (аудит F01).
+      if (amount > 0) {
+        await this.db.dkpEntry.create({
+          data: {
+            memberId,
+            type: 'CHECKIN_EARN',
+            amount,
+            eventId,
+            comment: `Чек-ин ${phase === 'START' ? 'старт' : 'финал'}: код верный`,
+          },
+        });
+      }
     }
 
     await this.db.auditLog.create({
