@@ -67,7 +67,9 @@ echo "rsync $*" >> "$CALL_LOG"
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = "\n".join(self.calls())
         order = ["stop api", "exec -T db", "--entrypoint tar", "prisma migrate deploy",
-                 "dist-seed/prisma/seed.js", "up -d --wait api web caddy"]
+                 "dist-seed/prisma/seed.js", "up -d --wait"]
+        # Первый up ждёт БД, финальный up запускает активные сервисы/профили.
+        calls = calls.replace("up -d --wait db redis", "start-database")
         positions = [calls.index(step) for step in order]
         self.assertEqual(positions, sorted(positions))
 
@@ -85,7 +87,7 @@ echo "rsync $*" >> "$CALL_LOG"
         calls = "\n".join(self.calls())
         self.assertIn("prisma migrate deploy", calls)
         self.assertNotIn("start api", calls)
-        self.assertNotIn("up -d --wait api web caddy", calls)
+        self.assertFalse(any(call.endswith(" up -d --wait") for call in self.calls()))
         self.assertEqual(len(list((self.root / "backups").glob("*/database.dump"))), 1)
 
     def test_failed_screenshots_snapshot_prevents_migration(self):

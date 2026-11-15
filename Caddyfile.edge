@@ -1,0 +1,22 @@
+stage.suneclipse.ru {
+    handle_path /api/* {
+        reverse_proxy staging-api:3001
+    }
+    handle {
+        reverse_proxy staging-web:3000
+    }
+}
+api.stage.suneclipse.ru {
+    reverse_proxy staging-api:3001
+}
+suneclipse.ru {
+    handle_path /api/* {
+        reverse_proxy production-api:3001
+    }
+    handle {
+        reverse_proxy production-web:3000
+    }
+}
+api.suneclipse.ru {
+    reverse_proxy production-api:3001
+}

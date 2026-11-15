@@ -1,0 +1,2 @@
+# Shell-скрипты должны исполняться на Linux и после checkout на Windows.
+*.sh text eol=lf

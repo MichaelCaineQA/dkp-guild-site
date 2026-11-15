@@ -43,6 +43,9 @@ services:
       SCREENSHOT_DIR: /app/uploads/screenshots
     volumes:
       - screenshot-data:/app/uploads/screenshots
+    networks:
+      default:
+        aliases: ['${API_UPSTREAM:-api}']
     depends_on:
       db:
         condition: service_healthy
@@ -53,7 +56,12 @@ services:
     restart: unless-stopped
     depends_on:
       - api
+    networks:
+      default:
+        aliases: ['${WEB_UPSTREAM:-web}']
   caddy:
+    # При совместном размещении TLS обслуживает отдельный edge-проект.
+    profiles: [standalone]
     image: caddy:2-alpine
     restart: unless-stopped
     environment:

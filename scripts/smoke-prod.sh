@@ -18,6 +18,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 cat > "$PRODUCTION_ENV_FILE" <<'ENV'
+COMPOSE_PROFILES=standalone
 WEB_HOST=localhost
 API_HOST=api.localhost
 POSTGRES_USER=dkp
