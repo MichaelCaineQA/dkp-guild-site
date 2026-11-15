@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard';
 import { PermissionsGuard, RequirePermission } from '../permissions/permissions.guard';
 import { MembersService } from './members.service';
@@ -29,11 +29,9 @@ export class MembersController {
     return this.members.getOne(id);
   }
 
-  @Patch(':id')
-  @RequirePermission('members.manage')
-  update(@Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest) {
-    return this.members.update(id, body, toActor(req));
-  }
+  // PATCH /members/:id удалён (аудит F03, план 2.5): личные поля (ник, роль
+  // в бою, оружия) редактирует сам игрок через свой профиль; администрации
+  // остаются явно разрешённые операции ниже.
 
   /** Смена ранга — Глава/Админ, комментарий обязателен (аудит). */
   @Post(':id/change-rank')

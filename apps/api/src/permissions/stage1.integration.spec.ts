@@ -114,7 +114,9 @@ describe('PLAN 1.1: права через реальные HTTP-маршруты
 
   it('Офицер не создаёт/изменяет состав и не подтверждает заявки прямым запросом', async () => {
     expect((await request('/members')).status).toBe(404);
-    expect((await request('/members/m1', 'PATCH')).status).toBe(403);
+    // PATCH /members/:id удалён целиком (аудит F03): маршрута нет ни у кого —
+    // личные поля меняет сам игрок через свой профиль.
+    expect((await request('/members/m1', 'PATCH')).status).toBe(404);
     expect((await request('/auth/link-requests', 'GET')).status).toBe(401);
     expect((await request('/auth/link-requests/r1/approve')).status).toBe(401);
     expect(createMember).not.toHaveBeenCalled();

@@ -57,6 +57,24 @@ it('старый профиль заполняет оружия без смен�
   });
 });
 
+it('смену ника отправляет PATCH с комментарием (аудит F03)', async () => {
+  render(<ProfilePage />);
+  await screen.findByText('Профиль: Алистер');
+  fireEvent.change(screen.getByLabelText('Игровой ник'), { target: { value: 'Новенький' } });
+  fireEvent.change(screen.getByLabelText('Комментарий'), { target: { value: 'Сменил ник в игре' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить профиль' }));
+  expect(await screen.findByRole('status')).toHaveProperty('textContent', 'Профиль сохранён');
+  expect(api).toHaveBeenCalledWith('/profiles/m1', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      nickname: 'Новенький',
+      avatar: null,
+      avatarColor: null,
+      comment: 'Сменил ник в игре',
+    }),
+  });
+});
+
 it('непривязанному аккаунту не загружает профиль', () => {
   vi.mocked(useSession).mockReturnValue({
     user: { userId: 'u2', username: 'guest', memberId: null, rank: null, isAdmin: false, blocked: false },

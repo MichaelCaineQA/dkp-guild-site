@@ -15,15 +15,11 @@ export const createMemberSchema = z.object({
 export type CreateMemberInput = z.infer<typeof createMemberSchema>;
 
 /**
- * Редактирование члена (офицер+): ник, роль и пара оружий. Ранг — отдельной
- * ручкой members.change_rank (Глава/Админ + комментарий в аудит).
+ * Редактирование чужих личных полей (ник/роль/оружия) удалено (аудит F03,
+ * план 2.5/12.11): их меняет сам игрок через PATCH /profiles/:id
+ * (updateOwnProfileSchema); администрации остаётся смена ранга отдельной
+ * ручкой members.change_rank.
  */
-export const updateMemberSchema = z.object({
-  nickname,
-  combatRole: z.enum(COMBAT_ROLES),
-  weapons: weaponPairSchema,
-});
-export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
 
 /** Смена ранга: обязательный комментарий — он уходит в AuditLog (правило 4). */
 export const changeRankSchema = z.object({

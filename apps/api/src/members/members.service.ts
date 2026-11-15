@@ -12,15 +12,12 @@ import {
   changeRankSchema,
   createMemberSchema,
   rosterQuerySchema,
-  updateMemberSchema,
-  formatWeapons,
   isAvailableAt,
   type PrimeTimeSlot,
   type Weapon,
   type ChangeRankInput,
   type CreateMemberInput,
   type RosterQuery,
-  type UpdateMemberInput,
 } from '@dkp/shared';
 import { serializable } from '../prisma/serializable';
 import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction-events';
@@ -230,36 +227,9 @@ export class MembersService {
     return member;
   }
 
-  /** Редактирование ника/роли в бою (members.manage). */
-  async update(id: string, body: unknown, actor: Actor): Promise<MemberRow> {
-    const parsed = updateMemberSchema.safeParse(body);
-    if (!parsed.success) throw new BadRequestException('Укажите ник, роль и два разных оружия');
-    const input: UpdateMemberInput = parsed.data;
-
-    const existing = await this.mustExist(id);
-    const clash = await this.db.member.findFirst({ where: { nickname: input.nickname } });
-    if (clash && clash.id !== id) {
-      throw new ConflictException('Член с таким ником уже есть');
-    }
-
-    const member = await this.db.member.update({
-      where: { id },
-      data: { nickname: input.nickname, combatRole: input.combatRole, weapons: input.weapons },
-    });
-    const changes: string[] = [];
-    if (JSON.stringify(existing.weapons ?? []) !== JSON.stringify(member.weapons ?? []))
-      changes.push(
-        `оружия: ${formatWeapons(existing.weapons ?? [])} → ${formatWeapons(member.weapons ?? [])}`,
-      );
-    if (existing.nickname !== member.nickname) {
-      changes.push(`ник «${existing.nickname}» → «${member.nickname}»`);
-    }
-    if (existing.combatRole !== member.combatRole) {
-      changes.push(`роль в бою «${existing.combatRole ?? '—'}» → «${member.combatRole ?? '—'}»`);
-    }
-    await this.audit(actor, 'MEMBER_UPDATE', member.id, changes.join('; ') || 'Без изменений');
-    return member;
-  }
+  // Редактирование чужих личных полей (ник/роль/оружия) удалено (аудит F03,
+  // план 2.5/12.11): их меняет сам игрок через свой профиль; здесь остаются
+  // создание, смена ранга и блокировка.
 
   /**
    * Смена ранга (members.change_rank, Глава/Админ): комментарий обязателен

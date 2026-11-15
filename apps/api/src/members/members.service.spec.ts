@@ -199,57 +199,9 @@ describe('MembersService.create', () => {
   });
 });
 
-describe('MembersService.update', () => {
-  it('меняет ник и роль, пишет MEMBER_UPDATE с деталями изменений', async () => {
-    const { db, audit } = makeDb([
-      { id: 'm-1', nickname: 'Old', rank: 'MEMBER', combatRole: 'DPS' },
-    ]);
-    const service = new MembersService(db);
-
-    const member = await service.update(
-      'm-1',
-      { weapons: ['STAFF', 'WAND'], nickname: 'New', combatRole: 'HEALER' },
-      ACTOR,
-    );
-    expect(member).toMatchObject({
-      weapons: ['STAFF', 'WAND'],
-      nickname: 'New',
-      combatRole: 'HEALER',
-      rank: 'MEMBER',
-    });
-    expect(audit[0]!.comment).toContain('ник «Old» → «New»');
-    expect(audit[0]!.comment).toContain('роль в бою «DPS» → «HEALER»');
-  });
-
-  it('ник в чужой карточке занят — 409', async () => {
-    const { db } = makeDb([
-      { id: 'm-1', nickname: 'Aa', rank: 'MEMBER', combatRole: null },
-      { id: 'm-2', nickname: 'Bb', rank: 'MEMBER', combatRole: null },
-    ]);
-    const service = new MembersService(db);
-
-    await expect(
-      service.update(
-        'm-1',
-        { weapons: ['STAFF', 'WAND'], nickname: 'Bb', combatRole: 'DPS' },
-        ACTOR,
-      ),
-    ).rejects.toThrow(ConflictException);
-  });
-
-  it('несуществующий — 404', async () => {
-    const { db } = makeDb([]);
-    const service = new MembersService(db);
-
-    await expect(
-      service.update(
-        'm-x',
-        { weapons: ['STAFF', 'WAND'], nickname: 'Xx', combatRole: 'DPS' },
-        ACTOR,
-      ),
-    ).rejects.toThrow(NotFoundException);
-  });
-});
+// MembersService.update удалён вместе с админским обходом (аудит F03, план
+// 2.5/12.11): личные поля меняет сам игрок через свой профиль — см.
+// profiles.integration.spec («ник меняется самим владельцем…»).
 
 describe('MembersService.changeRank', () => {
   it('меняет ранг, пишет ROLE_CHANGE с комментарием', async () => {
