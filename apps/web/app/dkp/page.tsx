@@ -73,7 +73,7 @@ export default function DkpPage() {
   }, [memberFilter, typeFilter, offset]);
 
   useEffect(() => {
-    if (!sessionLoading && user?.memberId) {
+    if (!sessionLoading && (user?.memberId || user?.isAdmin)) {
       void load();
     }
   }, [sessionLoading, user, load]);

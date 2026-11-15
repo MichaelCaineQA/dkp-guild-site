@@ -4,6 +4,7 @@ import { ConductService } from './conduct.service';
 
 const EVENT = {
   id: 'e-1',
+  name: 'Осада',
   status: 'RUNNING',
   startsAt: new Date('2026-03-03T17:00:00Z'),
   endsAt: new Date('2026-03-03T19:00:00Z'),

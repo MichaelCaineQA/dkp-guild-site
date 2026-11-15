@@ -7,6 +7,8 @@ suite('Фильтры аудита: PostgreSQL', () => {
   let db: PrismaClient;
   let service: AuditService;
   let memberId: string;
+  let guildId: string;
+  let packId: string;
   const prefix = 'audit-test-' + randomUUID();
   beforeAll(async () => {
     const parsed = new URL(url!);
@@ -15,6 +17,13 @@ suite('Фильтры аудита: PostgreSQL', () => {
     db = new PrismaClient({ datasourceUrl: url });
     service = new AuditService(db as unknown as AuditDb);
     memberId = (await db.member.create({ data: { nickname: prefix.slice(0, 20) } })).id;
+    const guild = await db.guild.create({
+      data: { name: prefix.slice(0, 20), gameTimeAnchor: new Date('2026-01-01') },
+    });
+    guildId = guild.id;
+    const kp = await db.kP.create({ data: { name: 'КП аудита', guildId } });
+    const pack = await db.pack.create({ data: { name: 'Пак аудита', kpId: kp.id } });
+    packId = pack.id;
     await db.auditLog.createMany({
       data: [
         {
@@ -49,12 +58,25 @@ suite('Фильтры аудита: PostgreSQL', () => {
           createdAt: new Date('2026-11-07'),
           comment: 'Система',
         },
+        {
+          // Запись «как до фикса»: имя пака + сырой id КП в комментарии.
+          actorMemberId: memberId,
+          action: 'PACK_CREATE',
+          entityType: 'Pack',
+          entityId: packId,
+          createdAt: new Date('2026-11-07'),
+          comment: `Создан пак «Пак аудита» в КП ${kp.id}`,
+        },
       ],
     });
   });
   afterAll(async () => {
     if (!db) return;
     await db.auditLog.deleteMany({ where: { action: prefix } });
+    await db.auditLog.deleteMany({ where: { action: 'PACK_CREATE', entityId: packId } });
+    if (packId) await db.pack.deleteMany({ where: { id: packId } });
+    if (guildId) await db.kP.deleteMany({ where: { guildId } });
+    if (guildId) await db.guild.delete({ where: { id: guildId } });
     if (memberId) await db.member.delete({ where: { id: memberId } });
     await db.$disconnect();
   });
@@ -74,5 +96,13 @@ suite('Фильтры аудита: PostgreSQL', () => {
         (e) => e.entityId,
       ),
     ).toEqual(['member']);
+  });
+
+  it('человекочитаемые названия: entityName пака и имя КП вместо id в комментарии (issue #183)', async () => {
+    const { entries } = await service.list({ action: 'PACK_CREATE', actorMemberId: memberId });
+    const row = entries.find((e) => e.entityId === packId);
+    expect(row?.entityName).toBe('Пак аудита');
+    expect(row?.comment).toBe('Создан пак «Пак аудита» в КП «КП аудита»');
+    expect(row?.comment).not.toMatch(/c[a-z0-9]{20,}/);
   });
 });

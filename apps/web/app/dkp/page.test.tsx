@@ -123,4 +123,22 @@ describe('DkpPage', () => {
     expect(await screen.findByText(/заявку на привязку ника/)).toBeDefined();
     expect(api).not.toHaveBeenCalled();
   });
+
+  it('резервный админ без Member видит журнал (issue #183)', async () => {
+    mockSession({
+      userId: 'admin:root',
+      username: 'admin',
+      memberId: null,
+      rank: null,
+      isAdmin: true,
+      blocked: false,
+    });
+
+    render(<DkpPage />);
+
+    expect(await screen.findByText('Балансы гильдии')).toBeDefined();
+    expect(screen.getByText('Чек-ин старт: код верный')).toBeDefined();
+    const call = vi.mocked(api).mock.calls.find((c) => String(c[0]).startsWith('/dkp/entries'));
+    expect(call).toBeDefined();
+  });
 });

@@ -87,7 +87,11 @@ export default function LinkRequestsPage() {
         title="Заявки на вступление"
         subtitle="Ожидают вступления. Одобрение открывает игроку доступ к сайту."
       />
-      <RosterTabs requests={!!user && can(user, 'link_requests.review')} current="requests" />
+      <RosterTabs
+        requests={!!user && can(user, 'link_requests.review')}
+        blocked={!!user && can(user, 'members.manage')}
+        current="requests"
+      />
       {error && <ErrorText>{error}</ErrorText>}
       <Card className="p-0">
         <Table className="p-5">

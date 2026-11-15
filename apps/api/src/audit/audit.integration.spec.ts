@@ -31,13 +31,34 @@ const findMany = jest.fn(async () => [
     createdAt: new Date('2026-11-06T12:00:00Z'),
     actor: { nickname: 'Глава' },
   },
+  {
+    id: 'log-2',
+    actorMemberId: 'm1',
+    action: 'PACK_CREATE',
+    entityType: 'Pack',
+    entityId: 'pack-1',
+    comment: 'Создан пак «Пак 1» в КП kp1234567890123456789',
+    createdAt: new Date('2026-11-06T12:01:00Z'),
+    actor: { nickname: 'Глава' },
+  },
 ]);
-const count = jest.fn(async () => 1);
+const count = jest.fn(async () => 2);
 const db: AuditDb = {
   screenshot: { findMany: async () => [] },
   absence: { findMany: async () => [] },
   dkpEntry: { findMany: async () => [] },
   member: { findMany: async () => [{ id: 'm2', nickname: 'Игрок' }] },
+  kP: { findMany: async () => [{ id: 'kp1234567890123456789', name: 'Альфа' }] },
+  pack: { findMany: async () => [{ id: 'pack-1', name: 'Пак 1' }] },
+  event: { findMany: async () => [] },
+  eventType: { findMany: async () => [] },
+  item: { findMany: async () => [] },
+  guild: { findMany: async () => [] },
+  rulesPage: { findMany: async () => [] },
+  user: { findMany: async () => [] },
+  memberLinkRequest: { findMany: async () => [] },
+  lootDrop: { findMany: async () => [] },
+  auction: { findMany: async () => [] },
   auditLog: { create: record, findMany, count, groupBy: async () => [{ action: 'ROLE_CHANGE' }] },
 };
 const login = jest.fn(() => true);
@@ -90,9 +111,10 @@ describe('аудит через HTTP: права, фильтры, ровно о�
       `${url}/audit?actorMemberId=m1&action=ROLE_CHANGE&from=2026-11-01T00:00:00Z&to=2026-11-07T00:00:00Z&offset=50`,
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      entries: [{ actorName: 'Глава', entityName: 'Игрок' }],
-    });
+    const body = (await response.json()) as {
+      entries: Array<{ actorName: string | null; entityName: string | null }>;
+    };
+    expect(body.entries[0]).toMatchObject({ actorName: 'Глава', entityName: 'Игрок' });
     const where = {
       actorMemberId: 'm1',
       action: 'ROLE_CHANGE',
@@ -100,6 +122,29 @@ describe('аудит через HTTP: права, фильтры, ровно о�
     };
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where, skip: 50, take: 50 }));
     expect(count).toHaveBeenCalledWith({ where });
+  });
+
+  it('человекочитаемые названия: entityName по типу сущности, имена вместо id в комментарии', async () => {
+    const response = await fetch(`${url}/audit`);
+    expect(response.status).toBe(200);
+    const { entries } = (await response.json()) as {
+      entries: Array<{ entityType: string; entityName: string | null; comment: string | null }>;
+    };
+    const pack = entries.find((row) => row.entityType === 'Pack');
+    expect(pack?.entityName).toBe('Пак 1');
+    expect(pack?.comment).toBe('Создан пак «Пак 1» в КП «Альфа»');
+    expect(JSON.stringify(entries)).not.toContain('kp1234567890123456789');
+  });
+
+  it('в личном журнале скрывает название и детали чужой сущности', async () => {
+    actor = { userId: 'u1', username: 'Игрок', memberId: 'm1', rank: 'MEMBER', isAdmin: false, blocked: false };
+    const response = await fetch(`${url}/audit`);
+    const { entries } = (await response.json()) as {
+      entries: Array<{ entityType: string; entityId: string; entityName: string | null; comment: string | null }>;
+    };
+    expect(entries.find((entry) => entry.entityType === 'Pack')).toMatchObject({
+      entityId: '', entityName: null, comment: null,
+    });
   });
 
   it('совмещает Систему, сущность и период, не превращает system=false в true', async () => {

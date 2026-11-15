@@ -75,6 +75,7 @@ export interface ConductDb {
   event: {
     findUnique(args: { where: { id: string } }): Promise<{
       id: string;
+      name: string;
       status: string;
       startsAt: Date;
       endsAt: Date;
@@ -266,7 +267,7 @@ export class ConductService {
               action: 'ABSENCE_CREATE',
               entityType: 'Absence',
               entityId: absence.id,
-              comment: `Уважительная причина по итогам ивента ${eventId}: ${action.reason}`,
+              comment: `Уважительная причина по итогам ивента «${event.name || eventId}»: ${action.reason}`,
             },
           });
         }
