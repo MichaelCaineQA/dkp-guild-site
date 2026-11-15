@@ -229,6 +229,22 @@ describe('CheckInService.playerView', () => {
     const view = await service.playerView('e-1', 'm-player');
     expect(view.choices).toHaveLength(0);
   });
+
+  it('варианты стабильны между запросами: перезагрузка страницы не выдает верный код', async () => {
+    // Регрессия: обманки пересоздавались на каждый запрос, поэтому после
+    // перезагрузки (или 10-секундного опроса) верный код оставался единственным
+    // неизменным — его можно было выбрать, не слушая РЛ.
+    const { db } = makeDb();
+    const clock: Clock = () => new Date('2026-03-03T16:58:00Z');
+    const service = new CheckInService(db, SETTINGS, clock, ENC_KEY);
+
+    await service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER');
+    const first = await service.playerView('e-1', 'm-player');
+    const second = await service.playerView('e-1', 'm-player');
+    const third = await service.playerView('e-1', 'm-player');
+    expect(second.choices).toEqual(first.choices);
+    expect(third.choices).toEqual(first.choices);
+  });
 });
 
 describe('CheckInService.submit', () => {

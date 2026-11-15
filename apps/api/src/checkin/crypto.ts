@@ -2,6 +2,7 @@ import {
   createCipheriv,
   createDecipheriv,
   createHash,
+  createHmac,
   randomBytes,
   randomInt,
 } from 'node:crypto';
@@ -70,19 +71,35 @@ export function decryptCheckInCode(sealed: string, keyHex: string): string | nul
 /**
  * Набор из 4 вариантов для игрока (план 2.2): верный код + 3 обманки,
  * перемешанно. Обманки не совпадают с верным кодом и между собой.
+ *
+ * Набор детерминирован HMAC от соли кода: соль секретна (не отдаётся
+ * игроку) и уникальна для каждого кода, поэтому снаружи он выглядит
+ * случайным, но на повторных запросах (перезагрузка страницы, опрос
+ * статуса) не меняется. Генерировать обманки заново на каждый запрос
+ * нельзя: верный код хранится в БД и стоек, и перезагрузка страницы
+ * выдавала бы его как единственный неизменный.
  */
-export function buildCodeChoices(correctCode: string): string[] {
+export function buildCodeChoices(correctCode: string, salt: string): string[] {
   const choices = new Set<string>([correctCode]);
+  let index = 0;
   while (choices.size < 4) {
-    choices.add(generateCheckInCode());
+    choices.add(String(100 + hmacNumber(salt, `decoy:${index}`, 900)));
+    index++;
   }
-  // Перемешивание Фишера—Йетса по независимым случайным числам
+  // Порядок детерминирован той же солью: позиция верного кода стабильна
+  // в пределах окна, но непредсказуема без соли.
   const array = Array.from(choices);
   for (let i = array.length - 1; i > 0; i--) {
-    const j = randomInt(0, i + 1);
+    const j = hmacNumber(salt, `shuffle:${i}`, i + 1);
     [array[i], array[j]] = [array[j]!, array[i]!];
   }
   return array;
+}
+
+/** Детерминированное «случайное» число: HMAC-SHA256(salt, label) % modulo. */
+function hmacNumber(salt: string, label: string, modulo: number): number {
+  const digest = createHmac('sha256', salt).update(label).digest();
+  return digest.readUInt32BE(0) % modulo;
 }
 
 /** Проверка формата кода (используется и в тестах). */
