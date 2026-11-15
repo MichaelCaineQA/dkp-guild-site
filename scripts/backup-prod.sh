@@ -1,4 +1,5 @@
 #!/bin/sh
+# Запускается в каталоге своего стенда: БД и uploads не смешиваются со stage/prod.
 set -eu
 cd "$(dirname "$0")/.."
 env_file=${PRODUCTION_ENV_FILE:-.env.production}

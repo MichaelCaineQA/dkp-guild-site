@@ -1,0 +1,24 @@
+# Один TLS-прокси для двух изолированных проектов на одном VPS.
+name: dkp-edge
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile.edge:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [staging, production]
+networks:
+  staging:
+    external: true
+    name: dkp-guild-site_default
+  production:
+    external: true
+    name: dkp-production_default
+volumes:
+  caddy-data:
+  caddy-config:

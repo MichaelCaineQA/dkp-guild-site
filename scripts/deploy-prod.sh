@@ -21,4 +21,5 @@ fi
 # При ошибке миграции API остаётся остановленным до проверки и восстановления.
 compose run --rm --no-deps api ./node_modules/.bin/prisma migrate deploy
 compose run --rm --no-deps api node dist-seed/prisma/seed.js
-compose up -d --wait api web caddy
+# Запускаем только активные профили: общий edge обновляется отдельно от приложения.
+compose up -d --wait

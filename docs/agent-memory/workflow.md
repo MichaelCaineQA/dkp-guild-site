@@ -66,7 +66,14 @@ Production/staging и резервное копирование описаны �
   staging автоматически через окружение GitHub `staging`
   (secrets `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_SSH_KEY`/`DEPLOY_KNOWN_HOSTS`,
   variable `DEPLOY_PATH`); ручной workflow_dispatch выбирает окружение
-  и для production требует тег. Прежний VPS 193.37.68.243 выведен
+  и для production требует тег из истории main (`release_tag` или tag ref).
+  Production — `/opt/dkp-production`, проект `dkp-production`,
+  `suneclipse.ru` / `api.suneclipse.ru`. Оба приложения: пустой
+  `COMPOSE_PROFILES`, уникальные API_UPSTREAM/WEB_UPSTREAM; TLS — отдельный
+  `/opt/dkp-edge` (docker-compose.edge.yml + Caddyfile.edge), сети обоих
+  проектов. Одиночный deploy требует `COMPOSE_PROFILES=standalone` в env.
+  Серверная блокировка deploy/cron — `/run/lock/dkp-deploy.lock`.
+  Прежний VPS 193.37.68.243 выведен
   из эксплуатации (docker-демон и SSH зависали у прошлого провайдера).
 - Проверка: `https://stage.suneclipse.ru/api/health`; вход — резервный
   админ из серверного `.env.production`. Realtime (#97): engine.io-handshake —

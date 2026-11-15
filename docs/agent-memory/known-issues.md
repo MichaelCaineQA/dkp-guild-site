@@ -102,6 +102,10 @@
   владельца (core.autocrlf=true, без .gitattributes) конвертирует текстовые
   файлы в CRLF — на сервере `sh scripts/backup-prod.sh` падает
   с `set: Illegal option -`.
+- В #188 (2026-11-15) добавлен `.gitattributes`: `*.sh text eol=lf`.
+  Для свежих checkout shell-скрипты теперь сохраняют LF; старые рабочие
+  копии могут требовать повторного checkout файлов. Проверка:
+  `git ls-files --eol scripts/*.sh` и Linux-прогон `scripts/test_deploy.py`.
 - Обход: для ручной заливки использовать `git -c core.autocrlf=false
   archive HEAD | ssh ...`. Штатный путь — workflow Deploy на раннере
   Linux, там проблемы нет.

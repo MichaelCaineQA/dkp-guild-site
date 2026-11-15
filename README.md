@@ -204,16 +204,72 @@ Workflow `Deploy` запускается автоматически при пу�
 `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` (проверенный ключ сервера)
 и variable `DEPLOY_PATH` (абсолютный путь к checkout с заранее
 настроенным `.env.production`).
-Выберите нужный ref и окружение в Actions. Production принимает только тег;
-правила подтверждения для GitHub environment настраиваются владельцем
-отдельно. У staging должны быть отдельные домены, БД, секреты и каталог
-сервера.
+Для staging выберите нужную ветку и окружение в Actions → Deploy → Run workflow.
+Для production запускайте workflow из `main`, выберите `production` и заполните
+`release_tag` (например `v1.0.0`). Можно также отправить workflow_dispatch
+непосредственно с ref тега, без `release_tag`. Тег должен существовать и указывать
+на коммит из истории `main`; ветка без тега и тег невлитой ветки отклоняются
+до SSH. Создание тега само по себе production не обновляет. Теги `v*` отдельно
+запускают workflow Release (публикация установщика и образов).
 
-**Стенд `stage.suneclipse.ru`** (окружение `staging`, VPS 193.37.68.243):
+Обычный релиз: дождаться зелёного CI и автоматического деплоя `main` на stage,
+проверить **конкретный SHA** через `/api/health`, поставить на него новый тег,
+дождаться Release и вручную запустить Deploy с этим тегом. Опубликованные теги
+не передвигать. В GitHub environment production разрешите dispatch из `main`
+и тегов, запретив остальные ветки. Деплои двух стендов сериализуются серверным
+`flock /run/lock/dkp-deploy.lock`, включая распаковку архива.
+
+**Стенд `stage.suneclipse.ru`** (окружение `staging`, VPS 188.120.225.204):
 checkout `/opt/dkp-guild-site` с локальным `.env.production`; каждый пуш
 в `main` обновляет его автоматически. DNS-запись должна указывать прямо
 на VPS (без проксирования Cloudflare), иначе Caddy не получит сертификат
 Let's Encrypt и не будут работать WebSocket-обновления аукциона.
+
+### Production и stage на одном VPS
+
+Production: `suneclipse.ru`, API `api.suneclipse.ru`, каталог
+`/opt/dkp-production`, Compose-проект `dkp-production`. Stage сохраняет
+`/opt/dkp-guild-site` и проект `dkp-guild-site`. У каждого свой
+`.env.production` (0600), БД, Redis, том скриншотов и каталог `backups`.
+Данные stage не копируются в production. Discord для production требует
+Redirect `https://suneclipse.ru/api/auth/discord/callback`; без OAuth доступен
+резервный администратор из production env.
+
+Оба приложения работают с **пустым** `COMPOSE_PROFILES=`. Для одиночного
+сервера оставляйте `COMPOSE_PROFILES=standalone`, как в env-примере.
+При переходе существующего standalone-стенда добавьте это поле явно.
+В env двух стендов задайте уникальные upstream-алиасы:
+
+| Поле | Stage | Production |
+|---|---|---|
+| `COMPOSE_PROJECT_NAME` | `dkp-guild-site` | `dkp-production` |
+| `API_UPSTREAM` | `staging-api` | `production-api` |
+| `WEB_UPSTREAM` | `staging-web` | `production-web` |
+
+Порты 80/443 занимает отдельный проект `dkp-edge`. Файлы
+`docker-compose.edge.yml` и `Caddyfile.edge` размещаются в `/opt/dkp-edge`;
+edge присоединяется к существующим сетям двух приложений. Поднимите оба
+стека (`sh scripts/deploy-prod.sh` в каждом каталоге), затем остановите
+старый Caddy stage (`docker compose --env-file .env.production
+-f docker-compose.prod.yml stop caddy`) и запустите edge:
+
+```bash
+cd /opt/dkp-edge
+docker compose -f docker-compose.edge.yml up -d --wait
+```
+
+Переключение освобождает 80/443 и кратко прерывает HTTPS stage; его БД и тома
+сохраняются. Edge обновляется отдельно от деплоев приложения. При правке его
+конфигурации сначала выполните `caddy validate`, затем `caddy reload` в
+контейнере. Не запускайте standalone Caddy одновременно с edge.
+Проверьте `/api/health` и HTTPS обоих сайтов; SHA должен соответствовать
+выбранному для каждого стенда коммиту. GitHub variable `DEPLOY_PATH`
+production должна быть `/opt/dkp-production`, staging — `/opt/dkp-guild-site`.
+
+Установите отдельное ежедневное расписание бэкапа production; используйте
+общую блокировку `/run/lock/dkp-deploy.lock` для cron обоих стендов, чтобы
+копирование не пересекалось с миграциями. Внешнее хранилище, хранение 30 дней
+и контрольное восстановление настраиваются по следующему разделу.
 
 ### Локальная HTTPS-проверка production-стека
 
