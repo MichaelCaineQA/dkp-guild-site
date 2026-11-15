@@ -409,7 +409,10 @@ export class MembersService {
               `. ${parsed.data.comment}`,
           },
         });
-        return { member: updated, affectedAuctionIds: [...new Set(activeBids.map((b) => b.auctionId))] };
+        return {
+          member: updated,
+          affectedAuctionIds: [...new Set(activeBids.map((b) => b.auctionId))],
+        };
       },
       true,
     );
@@ -417,6 +420,11 @@ export class MembersService {
     // лотов уходит свежий срез без ставок заблокированного.
     for (const auctionId of result.affectedAuctionIds) {
       this.events.bidsRemoved(auctionId);
+    }
+    // Открытые сокеты пользователя не должны переживать блокировку: закрываем
+    // все соединения (аудит F02). Член без привязки пользователя сессий не имеет.
+    if (result.member.userId) {
+      this.events.userAccessRevoked(result.member.userId);
     }
     return {
       id: result.member.id,

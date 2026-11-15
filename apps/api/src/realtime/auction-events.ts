@@ -33,6 +33,12 @@ export interface AuctionEventsPort {
     winner: LotAwardRow | null,
     reason: AuctionCloseReason,
   ): void;
+  /**
+   * Доступ пользователя отозван — блокировка (issue #149) или выход:
+   * все сокеты пользователя закрываются (аудит F02), включая другие
+   * инстансы API через Redis adapter.
+   */
+  userAccessRevoked(userId: string): void;
 }
 
 /** Токен DI-провайдера порта (реализация — AuctionGateway). */
@@ -45,4 +51,5 @@ export const NOOP_AUCTION_EVENTS: AuctionEventsPort = {
   bidsRemoved: () => {},
   lotUpdated: () => {},
   lotClosed: () => {},
+  userAccessRevoked: () => {},
 };

@@ -244,6 +244,7 @@ describe('AuctionCloseService: событие realtime (issue #97)', () => {
       bidPlaced: jest.fn(), bidsRemoved: jest.fn(),
       lotUpdated: jest.fn(),
       lotClosed: jest.fn(),
+    userAccessRevoked: jest.fn(),
     };
     const { db } = makeDb([longLot({ bids: [{ id: 'b1', memberId: 'm1', amount: 100, fullCost: 100, markupPct: 0, member: { nickname: 'ДД' } }] })]);
     const svc = new AuctionCloseService(db, () => NOW, 0, events);

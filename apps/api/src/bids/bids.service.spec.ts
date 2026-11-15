@@ -425,6 +425,7 @@ describe('BidsService: события realtime (issue #97)', () => {
     bidPlaced: jest.fn(), bidsRemoved: jest.fn(),
     lotUpdated: jest.fn(),
     lotClosed: jest.fn(),
+    userAccessRevoked: jest.fn(),
   });
 
   it('принятая ставка отправляет событие после фиксации — с новой ставкой и окончанием', async () => {

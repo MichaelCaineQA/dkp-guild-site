@@ -41,6 +41,7 @@ suite('Блокировка участников: настоящие транз�
       },
       lotUpdated: () => {},
       lotClosed: () => {},
+      userAccessRevoked: () => {},
     };
     service = new MembersService(db as unknown as MembersDb, undefined, events);
   });

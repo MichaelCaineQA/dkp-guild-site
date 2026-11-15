@@ -3,7 +3,9 @@ import {
   Controller,
   Get,
   HttpCode,
+  Inject,
   NotFoundException,
+  Optional,
   Param,
   Post,
   Req,
@@ -22,6 +24,7 @@ import { LinkRequestService } from './link-request.service';
 import { performTestLogin } from './test-login';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction, AuditInterceptor } from '../audit/audit.interceptor';
+import { AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction-events';
 
 const WEB_URL = process.env.WEB_URL ?? 'http://localhost:3000';
 
@@ -32,6 +35,11 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly linkRequests: LinkRequestService,
     private readonly audit: AuditService,
+    // Сокеты пользователя закрываются при выходе (аудит F02); Optional —
+    // юнит-тесты собирают контроллер без realtime.
+    @Optional()
+    @Inject(AUCTION_EVENTS)
+    private readonly sockets?: AuctionEventsPort,
   ) {}
 
   /** Публичное состояние входа: только флаг, без параметров и секретов OAuth. */
@@ -111,6 +119,9 @@ export class AuthController {
 
   @Post('logout')
   logout(@Req() req: AuthedRequest, @Res() res: Response): void {
+    // Сокеты живут дольше сессии — закрываем их сразу (аудит F02).
+    const user = req.session?.user;
+    if (user) this.sockets?.userAccessRevoked(user.userId);
     req.session!.destroy(() => {
       res.clearCookie('dkp.sid');
       res.json({ ok: true });

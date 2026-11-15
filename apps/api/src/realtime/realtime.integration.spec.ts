@@ -9,6 +9,7 @@ import { BidsService, type BidsDb, type BidsTx } from '../bids/bids.service';
 import { AuctionCloseService, type CloseDb } from '../auction-close/auction-close.service';
 import { AuctionGateway } from './auction.gateway';
 import { AuctionSnapshotService, type SnapshotDb } from './auction-snapshot';
+import { SocketAccessService } from './socket-access.service';
 
 /**
  * Realtime аукциона по HTTP+WS как в бою (issue #97): настоящий Socket.IO
@@ -50,7 +51,10 @@ interface BidRowData {
 const MEMBERS = [
   {
     id: 'm-1',
+    userId: 'u-1',
     nickname: 'Воин',
+    rank: 'MEMBER' as const,
+    blockedAt: null as Date | null,
     combatRole: 'DPS' as const,
     prevCombatRole: null,
     combatRoleChangedAt: null,
@@ -60,7 +64,10 @@ const MEMBERS = [
   },
   {
     id: 'm-2',
+    userId: 'u-2',
     nickname: 'Целитель',
+    rank: 'MEMBER' as const,
+    blockedAt: null as Date | null,
     combatRole: 'HEALER' as const,
     prevCombatRole: null,
     combatRoleChangedAt: null,
@@ -69,6 +76,18 @@ const MEMBERS = [
     preferredItemChangedAt: null,
   },
 ];
+
+/** Допуск как в бою: перечитывает MEMBERS — тест может «заблокировать» игрока. */
+function makeAccess() {
+  return {
+    refreshUser: async (user: SessionUser): Promise<SessionUser | null> => {
+      if (user.isAdmin) return { ...user, blocked: false };
+      const member = MEMBERS.find((m) => m.userId === user.userId);
+      if (!member) return null;
+      return { ...user, memberId: member.id, rank: member.rank, blocked: member.blockedAt != null };
+    },
+  } as unknown as SocketAccessService;
+}
 
 function makeStore() {
   const auction: LotRow = {
@@ -197,6 +216,7 @@ let storeRef: ReturnType<typeof makeStore>;
       provide: AuctionSnapshotService,
       useFactory: () => new AuctionSnapshotService(storeRef.snapshotDb),
     },
+    { provide: SocketAccessService, useFactory: () => makeAccess() },
     AuctionGateway,
   ],
 })
@@ -366,5 +386,47 @@ describe('Realtime аукциона: интеграция Socket.IO (issue #97)'
     intruder.emit('auction:join', { auctionId: 'a-1' });
     await expect(once(intruder, 'auction:state', 700)).rejects.toThrow();
     intruder.disconnect();
+  });
+
+  it('блокировка отзывает WS-доступ: открытый сокет закрывается, устаревшая сессия больше не подключается (аудит F02, #164)', async () => {
+    putSession('sid-c', USER_2);
+    const c = connect(app, 'sid-c');
+    await opened(c);
+    c.emit('auction:join', { auctionId: 'a-1' });
+    await once(c, 'auction:state'); // подписка до блокировки работает
+
+    // Блокировка (MembersService после коммита): допуск исчез, сокеты закрываются.
+    // Оба события приходят одним пакетом — слушатели вешаем до отзыва.
+    const blocked = MEMBERS.find((m) => m.id === 'm-2')!;
+    const errorPromise = once<{ message?: string } | string>(c, 'auction:error');
+    const closedPromise = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('сокет не закрыт сервером')), 3000);
+      c.once('disconnect', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+    blocked.blockedAt = new Date();
+    try {
+      gateway.userAccessRevoked('u-2');
+
+      // Уже открытое соединение: ошибка «врата» и закрытие сервером
+      expect(await errorPromise).toBeTruthy();
+      await closedPromise;
+      expect(c.connected).toBe(false);
+
+      // Новая подписка/соединение с той же (устаревшей) cookie-сессией
+      const c2 = connect(app, 'sid-c');
+      const reject = await once(c2, 'auction:error');
+      expect(reject).toBeTruthy();
+      c2.disconnect();
+
+      // События лота ушедшему игроку больше не приходят
+      c.emit('auction:join', { auctionId: 'a-1' });
+      await expect(once(c, 'auction:state', 700)).rejects.toThrow();
+      c.disconnect();
+    } finally {
+      blocked.blockedAt = null; // не влиять на остальные тесты
+    }
   });
 });
