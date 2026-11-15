@@ -120,8 +120,14 @@
   (указаны DNS FirstVDS 188.120.247.2/188.120.247.8) + restart docker.
 - В образе предустановлен nginx, слушающий :80 — caddy не стартует
   (`address already in use`). Лечится `systemctl disable --now nginx`.
-- Парольная аутентификация root по паролю от FirstVDS оставлена включённой
-  (ключи добавлены); hardening sshd на новом сервере не делался.
+- При первичной настройке парольная аутентификация root была включена.
+  **Обновлено 2026-11-16 по поручению владельца:** парольный и keyboard-interactive
+  вход SSH отключены, root входит только по ключу. Конфигурация —
+  `/etc/ssh/sshd_config.d/00-dkp-key-only.conf` (приоритет над
+  `40-hosting.conf`); проверены `sshd -t`, `sshd -T`, новый вход по ключу
+  и отказ без ключа (`Permission denied (publickey)`). Повторная проверка:
+  `ssh -o BatchMode=yes -o PasswordAuthentication=no dkp-stage true`;
+  эффективные параметры — `sshd -T` на сервере.
 
 ## Один GUILD_LEADER на базу: частичный unique-индекс
 
