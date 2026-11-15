@@ -41,8 +41,20 @@ export interface AuditDb {
   absence: {
     findMany(args: {
       where: { memberId?: string; id?: { in: string[] } };
-      select: { id: true; memberId?: true };
-    }): Promise<Array<{ id: string; memberId?: string }>>;
+      select: {
+        id: true;
+        memberId?: true;
+        member?: {
+          select: { pack: { select: { leaderId: true; kp: { select: { leaderId: true } } } } };
+        };
+      };
+    }): Promise<
+      Array<{
+        id: string;
+        memberId?: string;
+        member?: { pack: { leaderId: string | null; kp: { leaderId: string | null } } | null };
+      }>
+    >;
   };
   dkpEntry: {
     findMany(args: {
@@ -190,7 +202,15 @@ export class AuditService {
       absenceIds.length
         ? this.db.absence.findMany({
             where: { id: { in: absenceIds } },
-            select: { id: true, memberId: true },
+            select: {
+              id: true,
+              memberId: true,
+              member: {
+                select: {
+                  pack: { select: { leaderId: true, kp: { select: { leaderId: true } } } },
+                },
+              },
+            },
           })
         : [],
       dkpIds.length
@@ -205,6 +225,7 @@ export class AuditService {
         .filter((row) => row.memberId)
         .map((row) => [row.id, row.memberId!]),
     );
+    const groupLeaders = new Map(affectedAbsences.map((row) => [row.id, row.member?.pack]));
     const targetOf = (entry: { entityType: string; entityId: string; action: string }) => {
       if (entry.entityType === 'Member') return entry.entityId;
       if (
@@ -234,30 +255,41 @@ export class AuditService {
     const names = new Map<string, string>();
     if (idList.length) {
       const where = { id: { in: idList } };
-      const [kps, packs, events, eventTypes, items, guilds, rulesPages, users, linkRequests, lootDrops, auctions] =
-        await Promise.all([
-          this.db.kP.findMany({ where, select: { id: true, name: true } }),
-          this.db.pack.findMany({ where, select: { id: true, name: true } }),
-          this.db.event.findMany({ where, select: { id: true, name: true } }),
-          this.db.eventType.findMany({ where, select: { id: true, name: true } }),
-          this.db.item.findMany({ where, select: { id: true, name: true } }),
-          this.db.guild.findMany({ where, select: { id: true, name: true } }),
-          // У страниц правил первичный ключ — slug, а не id.
-          this.db.rulesPage.findMany({
-            where: { slug: { in: idList } },
-            select: { slug: true, title: true },
-          }),
-          this.db.user.findMany({ where, select: { id: true, username: true } }),
-          this.db.memberLinkRequest.findMany({ where, select: { id: true, nickname: true } }),
-          this.db.lootDrop.findMany({
-            where,
-            select: { id: true, item: { select: { name: true } } },
-          }),
-          this.db.auction.findMany({
-            where,
-            select: { id: true, lootDrop: { select: { item: { select: { name: true } } } } },
-          }),
-        ]);
+      const [
+        kps,
+        packs,
+        events,
+        eventTypes,
+        items,
+        guilds,
+        rulesPages,
+        users,
+        linkRequests,
+        lootDrops,
+        auctions,
+      ] = await Promise.all([
+        this.db.kP.findMany({ where, select: { id: true, name: true } }),
+        this.db.pack.findMany({ where, select: { id: true, name: true } }),
+        this.db.event.findMany({ where, select: { id: true, name: true } }),
+        this.db.eventType.findMany({ where, select: { id: true, name: true } }),
+        this.db.item.findMany({ where, select: { id: true, name: true } }),
+        this.db.guild.findMany({ where, select: { id: true, name: true } }),
+        // У страниц правил первичный ключ — slug, а не id.
+        this.db.rulesPage.findMany({
+          where: { slug: { in: idList } },
+          select: { slug: true, title: true },
+        }),
+        this.db.user.findMany({ where, select: { id: true, username: true } }),
+        this.db.memberLinkRequest.findMany({ where, select: { id: true, nickname: true } }),
+        this.db.lootDrop.findMany({
+          where,
+          select: { id: true, item: { select: { name: true } } },
+        }),
+        this.db.auction.findMany({
+          where,
+          select: { id: true, lootDrop: { select: { item: { select: { name: true } } } } },
+        }),
+      ]);
       for (const row of kps) names.set(row.id, row.name);
       for (const row of packs) names.set(row.id, row.name);
       for (const row of events) names.set(row.id, row.name);
@@ -268,8 +300,7 @@ export class AuditService {
       for (const row of users) names.set(row.id, row.username);
       for (const row of linkRequests) names.set(row.id, row.nickname);
       for (const row of lootDrops) names.set(row.id, row.item.name);
-      for (const row of auctions)
-        if (row.lootDrop) names.set(row.id, row.lootDrop.item.name);
+      for (const row of auctions) if (row.lootDrop) names.set(row.id, row.lootDrop.item.name);
     }
     const memberIds = [
       ...new Set([...entries.map(targetOf).filter((id): id is string => !!id), ...idList]),
@@ -300,14 +331,25 @@ export class AuditService {
           ((entry.entityType === 'DkpEntry' || entry.entityType === 'Event') &&
             personalIds.entries.includes(entry.entityId)) ||
           (entry.entityType === 'Event' && entry.entityId.endsWith(`:${actor?.memberId}`));
+        const hideAbsenceComment =
+          entry.entityType === 'Absence' &&
+          !!actor &&
+          !actor.isAdmin &&
+          actor.rank !== 'ADMIN' &&
+          actor.rank !== 'GUILD_LEADER' &&
+          affectedIds.get(entry.entityId) !== actor.memberId &&
+          (!actor.memberId ||
+            (groupLeaders.get(entry.entityId)?.leaderId !== actor.memberId &&
+              groupLeaders.get(entry.entityId)?.kp.leaderId !== actor.memberId));
         return {
           ...entry,
-          ...(safeDetails ? { comment: readableComment(entry.comment) } : { comment: null, entityId: '' }),
+          ...(safeDetails
+            ? { comment: hideAbsenceComment ? null : readableComment(entry.comment) }
+            : { comment: null, entityId: '' }),
           actorName: author?.nickname ?? (entry.actorIsAdmin ? 'Админ' : null),
-          entityName:
-            !safeDetails
-              ? null
-              : targetOf(entry)
+          entityName: !safeDetails
+            ? null
+            : targetOf(entry)
               ? (memberNames.get(targetOf(entry)!) ?? 'Участник недоступен')
               : (names.get(entry.entityId) ?? null),
         };

@@ -57,7 +57,12 @@ export interface AbsencesDb {
       where?: { memberId?: string; status?: string };
       orderBy: { dateFrom: 'desc' };
       include: {
-        member: { select: { nickname: true; pack?: { select: { leaderId: true } } } };
+        member: {
+          select: {
+            nickname: true;
+            pack?: { select: { leaderId: true; kp: { select: { leaderId: true } } } };
+          };
+        };
         seenBy: { select: { actorKey: true } };
         event?: { select: { startsAt: true; endsAt: true; name: true } };
       };
@@ -73,11 +78,21 @@ export interface AbsencesDb {
         allDay?: boolean;
         reason: string;
         status: string;
-        member: { nickname: string; pack?: { leaderId: string | null } | null };
+        member: {
+          nickname: string;
+          pack?: { leaderId: string | null; kp: { leaderId: string | null } } | null;
+        };
         seenBy: Array<{ actorKey: string }>;
       }>
     >;
-    findUnique(args: { where: { id: string } }): Promise<{
+    findUnique(args: {
+      where: { id: string };
+      include?: {
+        member: {
+          select: { pack: { select: { leaderId: true; kp: { select: { leaderId: true } } } } };
+        };
+      };
+    }): Promise<{
       id: string;
       eventId?: string | null;
       memberId: string;
@@ -85,6 +100,7 @@ export interface AbsencesDb {
       dateTo: Date;
       eligibleFrom?: Date | null;
       status: string;
+      member?: { pack: { leaderId: string | null; kp: { leaderId: string | null } } | null };
     } | null>;
     create(args: {
       data: {
@@ -157,29 +173,43 @@ export class AbsencesService {
   ) {}
 
   /** Свои заявки (или все — для списка Главы/Админа). */
-  async list(memberId?: string): Promise<AbsenceRow[]> {
+  async list(memberId?: string, actor?: AbsencesActor): Promise<AbsenceRow[]> {
     const rows = await this.db.absence.findMany({
       where: memberId ? { memberId, status: 'ACTIVE' } : { status: 'ACTIVE' },
       orderBy: { dateFrom: 'desc' },
       include: {
-        member: { select: { nickname: true } },
+        member: {
+          select: {
+            nickname: true,
+            pack: { select: { leaderId: true, kp: { select: { leaderId: true } } } },
+          },
+        },
         seenBy: { select: { actorKey: true } },
         event: { select: { startsAt: true, endsAt: true, name: true } },
       },
     });
-    return rows.map((row) => ({
-      id: row.id,
-      eventId: row.eventId ?? null,
-      eventName: row.event?.name ?? null,
-      memberId: row.memberId,
-      memberName: row.member.nickname,
-      dateFrom: row.event?.startsAt ?? row.dateFrom,
-      dateTo: row.event?.endsAt ?? row.dateTo,
-      allDay: row.allDay ?? false,
-      reason: row.reason,
-      status: row.status,
-      seenBy: row.seenBy.map((s) => s.actorKey),
-    }));
+    return rows
+      .filter(
+        (row) =>
+          !actor ||
+          can({ ...actor, rank: actor.rank as never }, 'absence.see') ||
+          (!!actor.memberId &&
+            (actor.memberId === row.member.pack?.leaderId ||
+              actor.memberId === row.member.pack?.kp.leaderId)),
+      )
+      .map((row) => ({
+        id: row.id,
+        eventId: row.eventId ?? null,
+        eventName: row.event?.name ?? null,
+        memberId: row.memberId,
+        memberName: row.member.nickname,
+        dateFrom: row.event?.startsAt ?? row.dateFrom,
+        dateTo: row.event?.endsAt ?? row.dateTo,
+        allDay: row.allDay ?? false,
+        reason: row.reason,
+        status: row.status,
+        seenBy: row.seenBy.map((s) => s.actorKey),
+      }));
   }
 
   /**
@@ -258,11 +288,23 @@ export class AbsencesService {
    */
   async markSeen(id: string, actor: AbsencesActor): Promise<{ ok: true }> {
     const actorKey = absenceSeenActorKey(actor);
-    if (!actorKey || !can({ ...actor, rank: actor.rank as never }, 'absence.see'))
-      throw new ForbiddenException('Отметка «Увидел» — Главе и Админу');
+    if (!actorKey) throw new ForbiddenException('Отметка «Увидел» недоступна');
     return serializable(this.db, async (tx) => {
-      const absence = await tx.absence.findUnique({ where: { id } });
+      const absence = await tx.absence.findUnique({
+        where: { id },
+        include: {
+          member: {
+            select: { pack: { select: { leaderId: true, kp: { select: { leaderId: true } } } } },
+          },
+        },
+      });
       if (!absence) throw new NotFoundException('Заявка не найдена');
+      if (
+        !can({ ...actor, rank: actor.rank as never }, 'absence.see') &&
+        actor.memberId !== absence.member?.pack?.leaderId &&
+        actor.memberId !== absence.member?.pack?.kp.leaderId
+      )
+        throw new ForbiddenException('Отметка «Увидел» недоступна');
       const result = await tx.absenceSeen.createMany({
         data: [{ absenceId: id, seenById: actor.memberId, actorKey }],
         skipDuplicates: true,
@@ -297,6 +339,7 @@ export class AbsencesService {
       memberId: string;
       memberName: string;
       reason: string | null;
+      canMarkSeen: boolean;
       seenBy: string[];
     }>
   > {
@@ -307,7 +350,12 @@ export class AbsencesService {
       where: { status: 'ACTIVE' },
       orderBy: { dateFrom: 'desc' },
       include: {
-        member: { select: { nickname: true, pack: { select: { leaderId: true } } } },
+        member: {
+          select: {
+            nickname: true,
+            pack: { select: { leaderId: true, kp: { select: { leaderId: true } } } },
+          },
+        },
         seenBy: { select: { actorKey: true } },
       },
     });
@@ -339,14 +387,21 @@ export class AbsencesService {
         id: absence.id,
         memberId: absence.memberId,
         memberName: absence.member.nickname,
+        canMarkSeen:
+          !!actor &&
+          (can({ ...actor, rank: actor.rank as never }, 'absence.see') ||
+            (!!actor.memberId &&
+              (actor.memberId === absence.member.pack?.leaderId ||
+                actor.memberId === absence.member.pack?.kp.leaderId))),
         reason:
           actor &&
           (actor.isAdmin ||
             actor.rank === 'ADMIN' ||
             actor.rank === 'GUILD_LEADER' ||
-            actor.rank === 'OFFICER' ||
             actor.memberId === absence.memberId ||
-            (!!actor.memberId && actor.memberId === absence.member.pack?.leaderId))
+            (!!actor.memberId &&
+              (actor.memberId === absence.member.pack?.leaderId ||
+                actor.memberId === absence.member.pack?.kp.leaderId)))
             ? absence.reason
             : null,
         seenBy: absence.seenBy.map((s) => s.actorKey),

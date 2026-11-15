@@ -35,6 +35,29 @@ describe('Состав события', () => {
     render(<EventRoster eventId="e" />);
     expect(await screen.findByText('Не удалось загрузить состав')).toBeTruthy();
   });
+  it('пустой состав показывает сообщение без полос прогресса', async () => {
+    vi.mocked(api).mockResolvedValue([]);
+    render(<EventRoster eventId="e" />);
+    expect(await screen.findByText('Нет приглашённых участников')).toBeTruthy();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+  });
+  it('счётчик КП включает участника без пака', async () => {
+    const base = {
+      rank: 'MEMBER',
+      weapons: ['STAFF', 'WAND'],
+      combatRole: 'HEALER',
+      kpId: 'k',
+      kpName: 'КП',
+      gearScore: null,
+    };
+    vi.mocked(api).mockResolvedValue([
+      { ...base, id: '1', nickname: 'Аня', packId: 'p', packName: 'Пак', attending: true },
+      { ...base, id: '2', nickname: 'Борис', packId: null, packName: null, attending: false },
+    ]);
+    render(<EventRoster eventId="e" />);
+    expect(await screen.findByText('КП — Будут 1 из 2')).toBeTruthy();
+    expect(screen.getByText('Без пака — Будут 0 из 1')).toBeTruthy();
+  });
   it('сначала показывает идущих по нику и считает прогресс', async () => {
     const base = {
       rank: 'MEMBER',

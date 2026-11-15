@@ -5,6 +5,7 @@ export interface EventAbsenceRow {
   memberId: string;
   memberName: string;
   reason: string | null;
+  canMarkSeen: boolean;
   seenBy: string[];
 }
 export function EventAbsences({
@@ -44,7 +45,7 @@ export function EventAbsences({
               </span>
               {row.seenBy.length > 0 && <Muted> · Просмотрели: {row.seenBy.length}</Muted>}
             </div>
-            {canSee && actorKey && (
+            {(canSee || row.canMarkSeen) && actorKey && (
               <Button
                 disabled={busyId !== null || row.seenBy.includes(actorKey)}
                 onClick={() => onSeen(row.id)}

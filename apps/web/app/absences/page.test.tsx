@@ -68,12 +68,16 @@ describe('AbsencesPage', () => {
   });
 
   it('рядовый видит форму, свои заявки, но не список гильдии', async () => {
+    vi.mocked(api).mockImplementation(async (path: string) =>
+      path === '/absences/mine' ? [...MINE] : [],
+    );
     mockSession({
       userId: 'u3',
       username: 'test-member',
       memberId: 'm-3',
       rank: 'MEMBER',
-      isAdmin: false, blocked: false,
+      isAdmin: false,
+      blocked: false,
     });
 
     render(<AbsencesPage />);
@@ -83,7 +87,7 @@ describe('AbsencesPage', () => {
     expect(screen.getByText('1 видели')).toBeDefined(); // «Увидели» в своей заявке
     expect(screen.getByText('Отменить')).toBeDefined();
     expect(screen.queryByText('Все заявки гильдии')).toBeNull();
-    expect(api).not.toHaveBeenCalledWith('/absences');
+    expect(api).toHaveBeenCalledWith('/absences');
   });
 
   it('глава видит и список всех заявок с кнопкой «Увидел» (офицер — нет, решение владельца)', async () => {
@@ -92,7 +96,8 @@ describe('AbsencesPage', () => {
       username: 'test-leader',
       memberId: 'm-off',
       rank: 'GUILD_LEADER',
-      isAdmin: false, blocked: false,
+      isAdmin: false,
+      blocked: false,
     });
 
     render(<AbsencesPage />);
@@ -117,7 +122,8 @@ describe('AbsencesPage', () => {
       username: 'Админ',
       memberId: null,
       rank: null,
-      isAdmin: true, blocked: false,
+      isAdmin: true,
+      blocked: false,
     });
     render(<AbsencesPage />);
     expect(await screen.findByText('Все заявки гильдии')).toBeDefined();
@@ -131,7 +137,8 @@ describe('AbsencesPage', () => {
       username: 'Игрок',
       memberId: 'm-3',
       rank: 'MEMBER',
-      isAdmin: false, blocked: false,
+      isAdmin: false,
+      blocked: false,
     });
     vi.mocked(api).mockImplementation(async (path, init) => {
       if (path === '/absences' && init?.method === 'POST') return { id: 'new' };
