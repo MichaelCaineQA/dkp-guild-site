@@ -506,6 +506,7 @@ describe('AuctionManageService: события realtime (issue #97)', () => {
       bidPlaced: jest.fn(), bidsRemoved: jest.fn(),
       lotUpdated: jest.fn(),
       lotClosed: jest.fn(),
+    userAccessRevoked: jest.fn(),
     };
     const { db } = makeDb({ auctions: [{ ...LOT, endsAt: new Date(NOW.getTime() + 60_000) }] });
     const svc = new AuctionManageService(db, () => NOW, events);
