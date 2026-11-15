@@ -9,6 +9,7 @@ import { z } from 'zod';
 /** Создание заявки: период (с–по) и причина (видна всем членам гильдии). */
 export const createAbsenceSchema = z
   .object({
+    memberId: z.string().min(1).optional(),
     dateFrom: z.coerce.date(),
     dateTo: z.coerce.date(),
     allDay: z.boolean().default(false),

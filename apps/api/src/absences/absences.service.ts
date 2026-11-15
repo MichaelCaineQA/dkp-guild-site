@@ -39,8 +39,20 @@ export interface AbsencesDb {
   member: {
     findMany(args: {
       where: { blockedAt: null };
-      select: { id: true; packId: true; pack: { select: { kpId: true } } };
-    }): Promise<Array<{ id: string; packId: string | null; pack: { kpId: string } | null }>>;
+      select: {
+        id: true;
+        nickname: true;
+        packId: true;
+        pack: { select: { kpId: true; leaderId: true; kp: { select: { leaderId: true } } } };
+      };
+    }): Promise<
+      Array<{
+        id: string;
+        nickname: string;
+        packId: string | null;
+        pack: { kpId: string; leaderId: string | null; kp: { leaderId: string | null } } | null;
+      }>
+    >;
   };
   setting?: {
     findUnique(args: {
@@ -172,6 +184,26 @@ export class AbsencesService {
     private readonly clock: Clock = () => new Date(),
   ) {}
 
+  async candidates(actor: AbsencesActor) {
+    if (!actor.memberId) return [];
+    const members = await this.db.member.findMany({
+      where: { blockedAt: null },
+      select: {
+        id: true,
+        nickname: true,
+        packId: true,
+        pack: { select: { kpId: true, leaderId: true, kp: { select: { leaderId: true } } } },
+      },
+    });
+    return members
+      .filter(
+        (m) =>
+          m.id !== actor.memberId &&
+          (m.pack?.leaderId === actor.memberId || m.pack?.kp.leaderId === actor.memberId),
+      )
+      .map(({ id, nickname }) => ({ id, nickname }));
+  }
+
   /** Свои заявки (или все — для списка Главы/Админа). */
   async list(memberId?: string, actor?: AbsencesActor): Promise<AbsenceRow[]> {
     const rows = await this.db.absence.findMany({
@@ -218,6 +250,8 @@ export class AbsencesService {
    */
   async create(memberId: string, body: unknown, actor: AbsencesActor): Promise<{ id: string }> {
     const input: CreateAbsenceInput = createAbsenceSchema.parse(body);
+    const targetId = input.memberId ?? memberId;
+    if (!actor.memberId || memberId !== actor.memberId) throw new ForbiddenException();
 
     // Ивенты, попадающие в период заявки, включая уже начавшиеся:
     // идущий (RUNNING) ивент тем более «меньше 3 минут до старта» —
@@ -236,17 +270,40 @@ export class AbsencesService {
       throw new ConflictException(error);
     }
 
-    const created = await this.db.absence.create({
-      data: {
-        memberId,
-        dateFrom: input.dateFrom,
-        dateTo: input.dateTo,
-        reason: input.reason,
-        allDay: input.allDay,
-        eligibleFrom: new Date(now.getTime() + deadlineBeforeStartSec * 1000),
-      },
+    const created = await serializable(this.db, async (tx) => {
+      if (targetId !== actor.memberId) {
+        const candidates = await new AbsencesService(
+          tx as AbsencesDb,
+          this.settings,
+          this.clock,
+        ).candidates(actor);
+        if (!candidates.some((candidate) => candidate.id === targetId))
+          throw new ForbiddenException(
+            'Можно оформить отсутствие только для участника своей группы',
+          );
+      }
+      const created = await tx.absence.create({
+        data: {
+          memberId: targetId,
+          dateFrom: input.dateFrom,
+          dateTo: input.dateTo,
+          reason: input.reason,
+          allDay: input.allDay,
+          eligibleFrom: new Date(now.getTime() + deadlineBeforeStartSec * 1000),
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorMemberId: actor.memberId,
+          actorIsAdmin: actor.isAdmin,
+          action: 'ABSENCE_CREATE',
+          entityType: 'Absence',
+          entityId: created.id,
+          comment: 'Подана заявка на отсутствие',
+        },
+      });
+      return created;
     });
-    await this.audit(actor, 'ABSENCE_CREATE', created.id, 'Подана заявка на отсутствие');
     return created;
   }
 
@@ -368,7 +425,12 @@ export class AbsencesService {
       if (!event) throw new NotFoundException('Ивент не найден');
       const members = await this.db.member.findMany({
         where: { blockedAt: null },
-        select: { id: true, packId: true, pack: { select: { kpId: true } } },
+        select: {
+          id: true,
+          nickname: true,
+          packId: true,
+          pack: { select: { kpId: true, leaderId: true, kp: { select: { leaderId: true } } } },
+        },
       });
       invitedIds = new Set(
         members

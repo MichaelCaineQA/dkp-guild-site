@@ -95,7 +95,7 @@ describe('DkpPage', () => {
     expect(screen.getAllByText('Первый').length).toBeGreaterThan(0);
     expect(screen.getAllByText('корректировка').length).toBeGreaterThan(0); // бейдж в таблице + опция фильтра
     expect(screen.getByText('-3')).toBeDefined();
-    expect(screen.getByText('Чек-ин старт: код верный')).toBeDefined();
+    expect(await screen.findByText('Чек-ин старт: код верный')).toBeDefined();
   });
 
   it('клик по игроку в балансах фильтрует операции', async () => {

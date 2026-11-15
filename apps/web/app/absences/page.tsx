@@ -10,6 +10,7 @@ import {
   Card,
   ErrorText,
   Input,
+  Select,
   Muted,
   Notice,
   Page,
@@ -42,6 +43,7 @@ export default function AbsencesPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [candidates, setCandidates] = useState<Array<{ id: string; nickname: string }>>([]);
 
   const canSee = useMemo(
     () =>
@@ -59,6 +61,10 @@ export default function AbsencesPage() {
         requests.push(api<AbsenceRow[]>('/absences'));
       }
       const [mineData, allData] = await Promise.all(requests);
+      const candidatesData = user?.memberId
+        ? await api<Array<{ id: string; nickname: string }>>('/absences/candidates')
+        : [];
+      setCandidates(candidatesData);
       setMine(mineData);
       setAll(allData ?? null);
       setError(null);
@@ -108,6 +114,7 @@ export default function AbsencesPage() {
       {user.memberId && (
         <AbsenceForm
           busy={busy}
+          candidates={candidates}
           onSubmit={async (body) => {
             setBusy(true);
             setMessage(null);
@@ -187,10 +194,13 @@ export default function AbsencesPage() {
 /** Форма подачи: день или период (с–по) + причина (план 2.3). */
 function AbsenceForm({
   busy,
+  candidates,
   onSubmit,
 }: {
   busy: boolean;
+  candidates: Array<{ id: string; nickname: string }>;
   onSubmit: (body: {
+    memberId?: string;
     dateFrom: string;
     dateTo: string;
     reason: string;
@@ -204,6 +214,7 @@ function AbsenceForm({
   const [timeTo, setTimeTo] = useState('');
   const [reason, setReason] = useState('');
   const [periodError, setPeriodError] = useState('');
+  const [memberId, setMemberId] = useState('');
 
   return (
     <Card>
@@ -231,6 +242,7 @@ function AbsenceForm({
           }
           setPeriodError('');
           void onSubmit({
+            ...(memberId ? { memberId } : {}),
             dateFrom: start.toISOString(),
             dateTo: end.toISOString(),
             allDay: mode === 'day',
@@ -238,6 +250,19 @@ function AbsenceForm({
           });
         }}
       >
+        {candidates.length > 0 && (
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-secondary">Игрок</span>
+            <Select value={memberId} onChange={(e) => setMemberId(e.target.value)}>
+              <option value="">Я</option>
+              {candidates.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.nickname}
+                </option>
+              ))}
+            </Select>
+          </label>
+        )}
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-secondary">С</span>
           <Input
