@@ -35,6 +35,7 @@ function makeDb(seed: Array<Partial<AbsenceRecord> & { id: string }> = []) {
       findMany: async () =>
         [...new Set(absences.map((a) => a.memberId))].map((id) => ({
           id,
+          nickname: 'Игрок',
           packId: null,
           pack: null,
         })),
@@ -159,6 +160,62 @@ function createBody(overrides: Record<string, unknown> = {}) {
 }
 
 describe('AbsencesService.create', () => {
+  it('лидер КП оформляет отсутствие участника другого пака своей КП', async () => {
+    const { db, absences, audit } = makeDb();
+    db.member.findMany = async () => [
+      {
+        id: 'target',
+        nickname: 'Игрок',
+        packId: 'p2',
+        pack: { kpId: 'kp', leaderId: 'other', kp: { leaderId: 'm-1' } },
+      },
+    ];
+    await new AbsencesService(db, SETTINGS, clock).create(
+      'm-1',
+      createBody({ memberId: 'target' }),
+      ACTOR,
+    );
+    expect(absences[0].memberId).toBe('target');
+    expect(audit[0].actorMemberId).toBe('m-1');
+  });
+
+  it('лидер пака не может оформить отсутствие участника чужого пака', async () => {
+    const { db, absences } = makeDb();
+    db.member.findMany = async () => [
+      {
+        id: 'target',
+        nickname: 'Игрок',
+        packId: 'p2',
+        pack: { kpId: 'kp', leaderId: 'other', kp: { leaderId: 'other' } },
+      },
+    ];
+    await expect(
+      new AbsencesService(db, SETTINGS, clock).create(
+        'm-1',
+        createBody({ memberId: 'target' }),
+        ACTOR,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(absences).toHaveLength(0);
+  });
+
+  it('лидер пака оформляет отсутствие своего участника', async () => {
+    const { db, absences } = makeDb();
+    db.member.findMany = async () => [
+      {
+        id: 'target',
+        nickname: 'Игрок',
+        packId: 'p1',
+        pack: { kpId: 'kp', leaderId: 'm-1', kp: { leaderId: 'other' } },
+      },
+    ];
+    await new AbsencesService(db, SETTINGS, clock).create(
+      'm-1',
+      createBody({ memberId: 'target' }),
+      ACTOR,
+    );
+    expect(absences[0].memberId).toBe('target');
+  });
   it('создаёт заявку на будущий период, пишет аудит', async () => {
     const { db, audit } = makeDb();
     const service = new AbsencesService(db, SETTINGS, clock);

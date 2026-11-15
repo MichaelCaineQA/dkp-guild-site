@@ -53,6 +53,7 @@ describe('AbsencesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api).mockImplementation(async (path: string) => {
+      if (path === '/absences/candidates') return [];
       if (path === '/absences/mine') {
         return [...MINE];
       }
@@ -108,6 +109,35 @@ describe('AbsencesPage', () => {
     expect(screen.getByText('✓ Увидено')).toBeDefined(); // уже видел
   });
 
+  it('лидер выбирает участника группы при оформлении отсутствия', async () => {
+    mockSession({
+      userId: 'u',
+      username: 'Лидер',
+      memberId: 'm-3',
+      rank: 'MEMBER',
+      isAdmin: false,
+      blocked: false,
+    });
+    vi.mocked(api).mockImplementation(async (path, init) => {
+      if (path === '/absences/candidates') return [{ id: 'target', nickname: 'Участник' }];
+      if (path === '/absences' && init?.method === 'POST') return { id: 'new' };
+      return [];
+    });
+    render(<AbsencesPage />);
+    fireEvent.change(await screen.findByLabelText('Игрок'), { target: { value: 'target' } });
+    fireEvent.change(screen.getByLabelText('С'), { target: { value: '2026-12-10' } });
+    fireEvent.change(screen.getByLabelText('Причина (видна вам и руководству)'), {
+      target: { value: 'Работа' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Подать' }));
+    await waitFor(() =>
+      expect(api).toHaveBeenCalledWith(
+        '/absences',
+        expect.objectContaining({ body: expect.stringContaining('"memberId":"target"') }),
+      ),
+    );
+  });
+
   it('непривязанному — подсказка про привязку', async () => {
     mockSession({ userId: 'u4', username: 'stranger', memberId: null, rank: null, isAdmin: false });
 
@@ -143,6 +173,7 @@ describe('AbsencesPage', () => {
     vi.mocked(api).mockImplementation(async (path, init) => {
       if (path === '/absences' && init?.method === 'POST') return { id: 'new' };
       if (path === '/absences/mine') return [];
+      if (path === '/absences' || path === '/absences/candidates') return [];
       throw new Error(`unexpected path ${path}`);
     });
     render(<AbsencesPage />);

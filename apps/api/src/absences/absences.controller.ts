@@ -33,6 +33,18 @@ export class AbsencesController {
   }
 
   /** Все активные заявки — Главе и Админу. */
+  @Get('candidates')
+  @Header('Cache-Control', 'private, no-store')
+  @RequirePermission('members.view_roster')
+  candidates(@Req() req: AuthedRequest) {
+    const user = req.session!.user!;
+    return this.absences.candidates({
+      memberId: user.memberId,
+      isAdmin: user.isAdmin,
+      rank: user.rank,
+    });
+  }
+
   @Get()
   @Header('Cache-Control', 'private, no-store')
   @RequirePermission('members.view_roster')

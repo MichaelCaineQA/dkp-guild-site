@@ -489,6 +489,7 @@ export const schemas: Record<string, SchemaObject> = {
     checkinEnd: str,
     dkpEarned: num,
   }),
+  AbsenceCandidate: object({ id: str, nickname: str }),
   Absence: object({
     id: str,
     eventId: nullable(str),

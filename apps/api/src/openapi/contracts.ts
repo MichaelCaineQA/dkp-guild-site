@@ -393,6 +393,13 @@ export const contracts: Record<string, Contract> = {
   Absences_mine: c('Получить свои активные отсутствия', list('Absence'), {
     access: 'Участник с привязанным Member.',
   }),
+  Absences_candidates: c(
+    'Получить участников для оформления отсутствия',
+    list('AbsenceCandidate'),
+    {
+      access: 'Лидер КП или пака видит активных участников своей группы.',
+    },
+  ),
   Absences_list: c('Получить доступные активные отсутствия', list('Absence'), {
     access: 'Глава и Админ видят все заявки; лидеры КП и паков — заявки своей группы.',
   }),
@@ -404,9 +411,9 @@ export const contracts: Record<string, Contract> = {
   Absences_create: c('Оформить отсутствие', 'Id', {
     access: 'Участник с привязанным Member.',
     body: 'CreateAbsence',
-    errors: [409],
+    errors: [403, 409],
     description:
-      'dateTo > dateFrom; интервал полуоткрытый. События, чей дедлайн на момент подачи истёк, не покрываются.',
+      'memberId необязателен: без него оформляется своё отсутствие; лидер КП или пака может выбрать активного участника своей группы. dateTo > dateFrom; интервал полуоткрытый. События, чей дедлайн на момент подачи истёк, не покрываются.',
   }),
   Absences_cancel: c('Отменить своё отсутствие', 'Ok', {
     errors: [404, 409],
