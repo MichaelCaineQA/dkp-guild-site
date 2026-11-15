@@ -52,6 +52,24 @@ suite('Права лидеров на отсутствие в PostgreSQL', () =>
     if (leaderId) await db.member.delete({ where: { id: leaderId } });
     await db.$disconnect();
   });
+  it('причину видят автор, глава и админ; посторонний и офицер без назначения не видят', async () => {
+    const reasonFor = async (actor: {
+      memberId: string | null;
+      isAdmin: boolean;
+      rank: string | null;
+    }) =>
+      (await service.forEvent(date, undefined, actor)).find((row) => row.id === absenceId)?.reason;
+    expect(await reasonFor({ memberId: authorId, isAdmin: false, rank: 'MEMBER' })).toBe('Личное');
+    expect(await reasonFor({ memberId: 'other', isAdmin: false, rank: 'GUILD_LEADER' })).toBe(
+      'Личное',
+    );
+    expect(await reasonFor({ memberId: null, isAdmin: true, rank: null })).toBe('Личное');
+    expect(await reasonFor({ memberId: 'other', isAdmin: false, rank: 'MEMBER' })).toBeNull();
+    expect(await reasonFor({ memberId: 'other', isAdmin: false, rank: 'OFFICER' })).toBeNull();
+    expect(
+      await service.list(undefined, { memberId: 'other', isAdmin: false, rank: 'MEMBER' }),
+    ).toEqual([]);
+  });
   it('лидер КП видит причину и отмечает заявку, после смены лидера теряет доступ', async () => {
     const actor = { memberId: leaderId, isAdmin: false, rank: 'MEMBER' };
     const officer = { memberId: leaderId, isAdmin: false, rank: 'OFFICER' };
