@@ -1,4 +1,4 @@
-import { cleanup, render, screen, fireEvent } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DkpPage from './page';
 
@@ -89,13 +89,12 @@ describe('DkpPage', () => {
 
     render(<DkpPage />);
 
-    expect(await screen.findByText('Балансы гильдии')).toBeDefined();
+    expect(await screen.findByText('Чек-ин старт: код верный')).toBeDefined();
     // Текст «Ваш баланс: N ДКП» разбит спанами — ищем по подстроке
     expect(screen.getByText(/Ваш баланс/).textContent).toContain('2');
     expect(screen.getAllByText('Первый').length).toBeGreaterThan(0);
     expect(screen.getAllByText('корректировка').length).toBeGreaterThan(0); // бейдж в таблице + опция фильтра
     expect(screen.getByText('-3')).toBeDefined();
-    expect(await screen.findByText('Чек-ин старт: код верный')).toBeDefined();
   });
 
   it('клик по игроку в балансах фильтрует операции', async () => {
@@ -108,12 +107,11 @@ describe('DkpPage', () => {
     });
 
     render(<DkpPage />);
-    await screen.findByText('Операции');
-
-    fireEvent.click(screen.getAllByText('Первый')[0]!); // плитка балансов
-    await screen.findByText('Операции');
-    const call = vi.mocked(api).mock.calls.find((c) => String(c[0]).includes('memberId=m-1'));
-    expect(String(call?.[0])).toContain('memberId=m-1');
+    const players = await screen.findAllByText('Первый');
+    fireEvent.click(players[0]!); // плитка балансов
+    await waitFor(() => {
+      expect(api).toHaveBeenCalledWith(expect.stringContaining('memberId=m-1'));
+    });
   });
 
   it('непривязанному — подсказка про привязку', async () => {
@@ -137,7 +135,7 @@ describe('DkpPage', () => {
     render(<DkpPage />);
 
     expect(await screen.findByText('Балансы гильдии')).toBeDefined();
-    expect(screen.getByText('Чек-ин старт: код верный')).toBeDefined();
+    expect(await screen.findByText('Чек-ин старт: код верный')).toBeDefined();
     const call = vi.mocked(api).mock.calls.find((c) => String(c[0]).startsWith('/dkp/entries'));
     expect(call).toBeDefined();
   });
