@@ -150,6 +150,16 @@ export class OrgService {
     });
   }
 
+  /** Ник участника для аудита: ID остаются в entityType/entityId, в комментарии — имена. */
+  private async leaderName(tx: Tx, memberId: string | null): Promise<string> {
+    if (!memberId) return 'не назначен';
+    const member = await tx.member.findUnique({
+      where: { id: memberId },
+      select: { nickname: true },
+    });
+    return member?.nickname ?? 'участник недоступен';
+  }
+
   private async transferMember(tx: Tx, memberId: string, packId: string, actor: SessionUser) {
     const member = await tx.member.findUnique({ where: { id: memberId }, include: { pack: true } });
     if (!member) throw new NotFoundException('Участник не найден');
@@ -181,18 +191,18 @@ export class OrgService {
       'MEMBER_PACK_TRANSFER',
       'Member',
       memberId,
-      `Перенос из пака ${member.packId ?? 'без пака'} в пак ${packId}`,
+      `Перенос из пака «${member.pack?.name ?? 'без пака'}» в пак «${pack.name}»`,
     );
   }
 
   private async transferPack(tx: Tx, packId: string, kpId: string, actor: SessionUser) {
     const pack = await tx.pack.findUnique({
       where: { id: packId },
-      include: { members: { select: { id: true } } },
+      include: { kp: true, members: { select: { id: true } } },
     });
     if (!pack) throw new NotFoundException('Пак не найден');
-    if (!(await tx.kP.findUnique({ where: { id: kpId } })))
-      throw new NotFoundException('КП не найдена');
+    const targetKp = await tx.kP.findUnique({ where: { id: kpId } });
+    if (!targetKp) throw new NotFoundException('КП не найдена');
     if (pack.kpId === kpId) throw new ConflictException('Пак уже в этой КП');
     await tx.kP.updateMany({
       where: { id: pack.kpId, leaderId: { in: pack.members.map((m) => m.id) } },
@@ -215,7 +225,7 @@ export class OrgService {
       'PACK_KP_TRANSFER',
       'Pack',
       packId,
-      `Перенос из КП ${pack.kpId} в КП ${kpId}`,
+      `Перенос пака «${pack.name}» из КП «${pack.kp.name}» в КП «${targetKp.name}»`,
     );
   }
 
@@ -242,8 +252,8 @@ export class OrgService {
       this.db,
       async (tx) => {
         await this.authorize(tx, actor, input.kpId);
-        if (!(await tx.kP.findUnique({ where: { id: input.kpId } })))
-          throw new NotFoundException('КП не найдена');
+        const kp = await tx.kP.findUnique({ where: { id: input.kpId } });
+        if (!kp) throw new NotFoundException('КП не найдена');
         for (const memberId of input.memberIds) {
           const member = await tx.member.findUnique({
             where: { id: memberId },
@@ -261,7 +271,7 @@ export class OrgService {
           'PACK_CREATE',
           'Pack',
           pack.id,
-          `Создан пак «${pack.name}» в КП ${input.kpId}`,
+          `Создан пак «${pack.name}» в КП «${kp.name}»`,
         );
         return pack;
       },
@@ -318,7 +328,7 @@ export class OrgService {
           'KP_LEADER_CHANGE',
           'KP',
           kpId,
-          `Лидер КП: ${kp.leaderId ?? 'не назначен'} → ${input.memberId ?? 'не назначен'}`,
+          `Лидер КП «${kp.name}»: ${await this.leaderName(tx, kp.leaderId)} → ${await this.leaderName(tx, input.memberId)}`,
         );
         return { ok: true as const };
       },
@@ -347,7 +357,7 @@ export class OrgService {
           'PACK_LEADER_CHANGE',
           'Pack',
           packId,
-          `Лидер пака: ${pack.leaderId ?? 'не назначен'} → ${input.memberId ?? 'не назначен'}`,
+          `Лидер пака «${pack.name}»: ${await this.leaderName(tx, pack.leaderId)} → ${await this.leaderName(tx, input.memberId)}`,
         );
         return { ok: true as const };
       },

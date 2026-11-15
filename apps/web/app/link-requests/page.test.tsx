@@ -35,3 +35,14 @@ it.each([false, true])('Глава/резервный Админ загружа�
   expect(await screen.findByText('Новых заявок нет')).toBeDefined();
   expect(api).toHaveBeenCalledWith('/auth/link-requests');
 });
+it.each([false, true])(
+  'Глава/резервный Админ видит вкладку «Заблокированные» на заявках, isAdmin=%s (issue #183)',
+  async (isAdmin) => {
+    session(isAdmin ? null : 'GUILD_LEADER', isAdmin);
+    render(<LinkRequestsPage />);
+    expect(await screen.findByText('Новых заявок нет')).toBeDefined();
+    const tabs = screen.getByRole('navigation', { name: 'Вкладки состава' });
+    expect(tabs.textContent).toContain('Заявки');
+    expect(tabs.textContent).toContain('Заблокированные');
+  },
+);

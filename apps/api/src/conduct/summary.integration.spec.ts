@@ -14,6 +14,7 @@ const db = {
   event: {
     findUnique: async () => ({
       id: 'e',
+      name: 'Ивент',
       status: eventStatus,
       startsAt: new Date('2026-01-01'),
       endsAt: new Date('2026-01-02'),
