@@ -2,9 +2,10 @@
 set -eu
 cd "$(dirname "$0")/.."
 env_file=${PRODUCTION_ENV_FILE:-.env.production}
-# SHA сборки уходит в /api/health (контроль фактической версии стенда, #175);
-# вне git-checkout (например, релизный архив) — unknown.
-GIT_SHA=$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
+# SHA сборки уходит в /api/health (контроль фактической версии стенда, #175).
+# Workflow Deploy передаёт GIT_SHA явно (git archive без .git); при ручном
+# запуске в checkout берём rev-parse; вне git — unknown.
+GIT_SHA=${GIT_SHA:-$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)}
 export GIT_SHA
 compose() { docker compose --env-file "$env_file" -f docker-compose.prod.yml "$@"; }
 test -f "$env_file" || { echo 'Нет файла production env' >&2; exit 1; }
