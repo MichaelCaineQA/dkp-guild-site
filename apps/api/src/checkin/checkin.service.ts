@@ -50,7 +50,7 @@ interface StoredCode {
 export interface PlayerCheckInView {
   phase: CheckInPhase;
   windowState: CheckInWindowState;
-  /** Варианты кодов, перемешаны; присутствуют только в ACTIVE-окне. */
+  /** Варианты кодов, перемешаны; присутствуют только в ACTIVE-окне, стабильны в его пределах. */
   choices: string[];
   status: string;
 }
@@ -205,7 +205,9 @@ export class CheckInService {
 
   /**
    * Вид игрока: статус окна текущей фазы + перемешанные 4 варианта
-   * (верный + 3 обманки). Варианты отдаются только в активном окне.
+   * (верный + 3 обманки). Варианты отдаются только в активном окне
+   * и стабильны в его пределах (детерминированы солью кода) — повторные
+   * запросы не выдают верный код сменой обманок.
    */
   private async playerViewInTransaction(
     eventId: string,
@@ -236,7 +238,9 @@ export class CheckInService {
       phase,
       windowState,
       choices:
-        windowState === 'ACTIVE' && correctCode !== null ? buildCodeChoices(correctCode) : [],
+        windowState === 'ACTIVE' && correctCode !== null
+          ? buildCodeChoices(correctCode, stored.salt)
+          : [],
       status,
     };
   }
