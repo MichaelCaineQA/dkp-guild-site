@@ -7,10 +7,18 @@ import { PrismaService } from './prisma/prisma.service';
 @Controller()
 export class AppController {
   constructor(private readonly prisma: PrismaService) {}
-
-  /** Health отвечает всегда; доступность БД — отдельным полем (для мониторинга). */
+  /**
+   * Health отвечает всегда; доступность БД — отдельным полем (для мониторинга).
+   * commit — короткий SHA сборки (GIT_SHA из deploy-окружения, аудит F13/#175:
+   * контроль фактической версии на стенде); без переменной — null.
+   */
   @Get('health')
-  async getHealth(): Promise<{ status: string; db: 'up' | 'down'; uptime: number }> {
+  async getHealth(): Promise<{
+    status: string;
+    db: 'up' | 'down';
+    uptime: number;
+    commit: string | null;
+  }> {
     let db: 'up' | 'down' = 'down';
     try {
       await this.prisma.$queryRaw`SELECT 1`;
@@ -18,7 +26,7 @@ export class AppController {
     } catch {
       // БД недоступна — не роняем health, честно сигнализируем в поле db
     }
-    return { status: 'ok', db, uptime: process.uptime() };
+    return { status: 'ok', db, uptime: process.uptime(), commit: gitSha() };
   }
 
   @Get('meta/guild')
@@ -38,4 +46,10 @@ export class AppController {
   getCombatRoles(): Record<string, string> {
     return COMBAT_ROLE_LABELS;
   }
+}
+
+/** SHA сборки из deploy-окружения; считывается один раз на процесс. */
+function gitSha(): string | null {
+  const sha = process.env.GIT_SHA?.trim();
+  return sha ? sha : null;
 }

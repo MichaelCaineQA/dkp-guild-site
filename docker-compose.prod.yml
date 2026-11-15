@@ -25,6 +25,8 @@ services:
     command: ['node', 'dist/main.js']
     environment:
       NODE_ENV: production
+      # Короткий SHA сборки — виден в /api/health (deploy-prod.sh экспортирует)
+      GIT_SHA: ${GIT_SHA:-unknown}
       DATABASE_URL: ${DATABASE_URL:?Укажите DATABASE_URL}
       REDIS_URL: redis://redis:6379
       SESSION_SECRET: ${SESSION_SECRET:?Укажите SESSION_SECRET}
