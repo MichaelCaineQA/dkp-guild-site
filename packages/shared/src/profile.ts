@@ -70,13 +70,16 @@ export const AVATAR_COLORS = [
 export type AvatarColor = (typeof AVATAR_COLORS)[number];
 
 /**
- * Самостоятельно меняются роль и оружия; ник и ранг здесь запрещены.
+ * Самостоятельно меняются ник, роль и оружия; ранг здесь запрещён (для него
+ * отдельная ручка Главы/Админа). Ник — 2–40 символов, уникален (аудит F03:
+ * админский обход PATCH /members/:id удалён, ник меняет владелец сам).
  * Предпочитаемый предмет (план 2.4, решение 18) — один из справочника
  * аукциона, nullable (снятие выбора); смена роли и предмета ограничена
  * кулдауном (план 2.5).
  */
 export const updateOwnProfileSchema = z
   .object({
+    nickname: z.string().min(2).max(40).optional(),
     combatRole: z.enum(COMBAT_ROLES).optional(),
     weapons: weaponPairSchema.optional(),
     avatar: z.enum(AVATARS).nullable().optional(),

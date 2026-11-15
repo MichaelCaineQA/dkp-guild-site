@@ -49,6 +49,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [items, setItems] = useState<ItemRow[] | null>(null);
   const [error, setError] = useState('');
+  const [nickname, setNickname] = useState('');
   const [role, setRole] = useState<CombatRole | ''>('');
   const [preferredItem, setPreferredItem] = useState<string>('');
   const [avatar, setAvatar] = useState<AvatarId | null>(null);
@@ -58,6 +59,7 @@ export default function ProfilePage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [saveError, setSaveError] = useState('');
+  // Роль/оружия идут парой; ник — отдельное поле со своим признаком ник-грязный
   const otherFieldsChanged =
     !!profile &&
     (role !== (profile.combatRole ?? '') ||
@@ -76,6 +78,7 @@ export default function ProfilePage() {
       .then((data) => {
         if (active) {
           setProfile(data);
+          setNickname(data.nickname);
           setAvatar(data.avatar ?? null);
           setAvatarColor(data.avatarColor ?? null);
           setRole(data.combatRole ?? '');
@@ -112,7 +115,9 @@ export default function ProfilePage() {
     // Предпочитаемый предмет отправляем только при изменении (2.4): снятие
     // выбора и повторный выбор — тоже смена по кулдауну (решение 18).
     const preferredDirty = preferredItem !== ((profile?.preferredItem?.id ?? '') as string);
+    const nicknameDirty = nickname.trim() !== (profile?.nickname ?? '');
     const input = updateOwnProfileSchema.safeParse({
+      ...(nicknameDirty ? { nickname: nickname.trim() } : {}),
       ...(otherFieldsChanged ? { combatRole: role, weapons } : {}),
       ...(preferredDirty ? { preferredItemId: preferredItem || null } : {}),
       avatar,
@@ -125,7 +130,7 @@ export default function ProfilePage() {
       setSaveError('Выберите роль, два разных оружия и укажите комментарий от 3 до 500 символов');
       return;
     }
-    if ((otherFieldsChanged || preferredDirty) && !input.data.comment) {
+    if ((nicknameDirty || otherFieldsChanged || preferredDirty) && !input.data.comment) {
       setSaveError('Укажите комментарий от 3 до 500 символов');
       return;
     }
@@ -139,6 +144,7 @@ export default function ProfilePage() {
         current?.id === memberId
           ? {
               ...current,
+              nickname: input.data.nickname ?? current.nickname,
               combatRole: input.data.combatRole ?? current.combatRole,
               weapons: input.data.weapons ?? current.weapons,
               preferredItem:
@@ -313,6 +319,18 @@ export default function ProfilePage() {
                       <span className="text-sm text-secondary">Предпросмотр</span>
                     </div>
                   </fieldset>
+                  <Field label="Игровой ник">
+                    <Input
+                      value={nickname}
+                      onChange={(e) => setNickname(e.target.value)}
+                      minLength={2}
+                      maxLength={40}
+                      aria-label="Игровой ник"
+                    />
+                    <p className="text-sm text-secondary">
+                      Ник уникален; смена фиксируется в аудите с вашим комментарием.
+                    </p>
+                  </Field>
                   <Field label="Роль">
                     <Select
                       required={otherFieldsChanged}
@@ -366,6 +384,7 @@ export default function ProfilePage() {
                     type="submit"
                     variant="primary"
                     disabled={
+                      nickname.trim() === profile.nickname &&
                       role === (profile.combatRole ?? '') &&
                       avatar === (profile.avatar ?? null) &&
                       avatarColor === (profile.avatarColor ?? null) &&

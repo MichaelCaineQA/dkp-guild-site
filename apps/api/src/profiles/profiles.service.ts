@@ -53,9 +53,11 @@ export interface ProfileTransaction {
         primeTime: true;
       };
     }): Promise<(ProfileMember & { preferredItem: { id: string; name: string } | null }) | null>;
+    findFirst(args: { where: { nickname: string } }): Promise<{ id: string } | null>;
     update(args: {
       where: { id: string };
       data: {
+        nickname?: string;
         combatRole?: CombatRole;
         prevCombatRole?: CombatRole | null;
         combatRoleChangedAt?: Date | null;
@@ -272,6 +274,15 @@ export class ProfilesService {
       const roleChanged = input.combatRole !== undefined && input.combatRole !== member.combatRole;
       const preferredChanged =
         input.preferredItemId !== undefined && input.preferredItemId !== member.preferredItemId;
+      // Ник уникален (аудит F03): чужой занятый — 409, свой прежний — не смена
+      const nicknameChanged =
+        input.nickname !== undefined && input.nickname !== member.nickname;
+      if (nicknameChanged) {
+        const clash = await tx.member.findFirst({ where: { nickname: input.nickname! } });
+        if (clash && clash.id !== id) {
+          throw new ConflictException('Член с таким ником уже есть');
+        }
+      }
       const primeTimeChanged =
         input.primeTime !== undefined &&
         JSON.stringify(
@@ -284,6 +295,7 @@ export class ProfilesService {
       const timeZoneChanged = input.timeZone !== undefined && input.timeZone !== member.timeZone;
       const otherFieldsChanged =
         roleChanged ||
+        nicknameChanged ||
         (input.weapons !== undefined &&
           JSON.stringify(member.weapons ?? []) !== JSON.stringify(input.weapons)) ||
         preferredChanged ||
@@ -317,6 +329,7 @@ export class ProfilesService {
       await tx.member.update({
         where: { id },
         data: {
+          ...(nicknameChanged ? { nickname: input.nickname! } : {}),
           ...(input.combatRole !== undefined ? { combatRole: input.combatRole } : {}),
           ...(roleChanged ? { prevCombatRole: member.combatRole, combatRoleChangedAt: now } : {}),
           ...(input.weapons !== undefined ? { weapons: input.weapons } : {}),
@@ -338,7 +351,7 @@ export class ProfilesService {
           action: 'MEMBER_UPDATE',
           entityType: 'Member',
           entityId: id,
-          comment: `Роль: ${member.combatRole ?? 'не указана'} → ${input.combatRole ?? member.combatRole ?? 'не указана'}; оружия: ${formatWeapons(member.weapons ?? [])} → ${formatWeapons(input.weapons ?? member.weapons ?? [])}; предпочитаемый предмет: ${member.preferredItem ? `«${member.preferredItem.name}»` : 'не выбран'} → ${input.preferredItemId === undefined ? 'без изменений' : preferredName ? `«${preferredName}»` : 'не выбран'}; аватар: ${member.avatar ?? 'не выбран'} → ${input.avatar === undefined ? (member.avatar ?? 'не выбран') : (input.avatar ?? 'не выбран')}; фон: ${member.avatarColor ?? 'автоматически'} → ${input.avatarColor === undefined ? (member.avatarColor ?? 'автоматически') : (input.avatarColor ?? 'автоматически')}; прайм-тайм: ${primeTimeChanged ? 'изменён' : 'без изменений'}; таймзона: ${member.timeZone} → ${input.timeZone ?? member.timeZone}.${input.comment ? ` ${input.comment}` : ''}`,
+          comment: `ник: ${nicknameChanged ? `«${member.nickname}» → «${input.nickname}»` : 'без изменений'}; роль: ${member.combatRole ?? 'не указана'} → ${input.combatRole ?? member.combatRole ?? 'не указана'}; оружия: ${formatWeapons(member.weapons ?? [])} → ${formatWeapons(input.weapons ?? member.weapons ?? [])}; предпочитаемый предмет: ${member.preferredItem ? `«${member.preferredItem.name}»` : 'не выбран'} → ${input.preferredItemId === undefined ? 'без изменений' : preferredName ? `«${preferredName}»` : 'не выбран'}; аватар: ${member.avatar ?? 'не выбран'} → ${input.avatar === undefined ? (member.avatar ?? 'не выбран') : (input.avatar ?? 'не выбран')}; фон: ${member.avatarColor ?? 'автоматически'} → ${input.avatarColor === undefined ? (member.avatarColor ?? 'автоматически') : (input.avatarColor ?? 'автоматически')}; прайм-тайм: ${primeTimeChanged ? 'изменён' : 'без изменений'}; таймзона: ${member.timeZone} → ${input.timeZone ?? member.timeZone}.${input.comment ? ` ${input.comment}` : ''}`,
         },
       });
     });

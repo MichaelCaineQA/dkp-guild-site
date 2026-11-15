@@ -32,7 +32,6 @@ import {
   PageHeader,
   Select,
   Table,
-  WeaponPicker,
 } from '../../components/ui';
 
 import { Avatar } from '../../components/avatar';
@@ -485,7 +484,6 @@ export default function RosterPage() {
         <MemberCard
           row={selected}
           canAssignLeader={!!user?.isAdmin}
-          canManage={!!canManage}
           canBlock={!!canManage && (selected.rank === 'MEMBER' || selected.rank === 'OFFICER')}
           canChangeRank={
             !!user &&
@@ -505,11 +503,10 @@ export default function RosterPage() {
   );
 }
 
-/** Карточка члена: редактирование (офицер+), смена ранга и блокировка (Глава/Админ). */
+/** Карточка члена: начисление ДКП, смена ранга и блокировка (Глава/Админ). */
 function MemberCard({
   row,
   canAssignLeader,
-  canManage,
   canBlock,
   canChangeRank,
   onClose,
@@ -517,15 +514,11 @@ function MemberCard({
 }: {
   row: RosterRow;
   canAssignLeader: boolean;
-  canManage: boolean;
   canBlock: boolean;
   canChangeRank: boolean;
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const [nickname, setNickname] = useState(row.nickname);
-  const [weapons, setWeapons] = useState<Array<Weapon | ''>>(row.weapons ?? []);
-  const [combatRole, setCombatRole] = useState<CombatRole | ''>(row.combatRole ?? '');
   const [newRank, setNewRank] = useState<Rank>(row.rank);
   const [comment, setComment] = useState('');
   const [blockComment, setBlockComment] = useState('');
@@ -617,24 +610,6 @@ function MemberCard({
     }
   };
 
-  const save = async () => {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await api(`/members/${row.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ nickname, combatRole, weapons }),
-      });
-      setMessage('Сохранено');
-      onChanged();
-    } catch (err) {
-      const status = (err as { status?: number }).status;
-      setMessage(status === 409 ? 'Такой ник уже занят' : 'Не удалось сохранить');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const changeRank = async () => {
     setBusy(true);
     setMessage(null);
@@ -686,36 +661,6 @@ function MemberCard({
         {row.combatRole ? COMBAT_ROLE_LABELS[row.combatRole] : '—'}
       </p>
       <p>Класс: {formatWeapons(row.weapons ?? [])}</p>
-
-      {canManage && (
-        <div className="mt-4">
-          <h3 className="mb-2 font-semibold text-primary">Редактирование</h3>
-          <WeaponPicker value={weapons} onChange={setWeapons} />
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              placeholder="Игровой ник"
-              minLength={2}
-              maxLength={40}
-            />
-            <Select
-              value={combatRole}
-              onChange={(e) => setCombatRole(e.target.value as CombatRole | '')}
-            >
-              <option value="">роль —</option>
-              {COMBAT_ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {COMBAT_ROLE_LABELS[role]}
-                </option>
-              ))}
-            </Select>
-            <Button onClick={save} disabled={busy || nickname.length < 2}>
-              Сохранить
-            </Button>
-          </div>
-        </div>
-      )}
 
       {canBlock && (
         <div className="mt-4">

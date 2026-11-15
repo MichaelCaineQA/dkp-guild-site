@@ -28,7 +28,6 @@ const inputs: Record<string, unknown> = {
   OrgMovePack: shared.orgMovePackSchema,
   OrgLeader: shared.orgLeaderSchema,
   CreateMember: shared.createMemberSchema,
-  UpdateMember: shared.updateMemberSchema,
   ChangeRank: shared.changeRankSchema,
   BlockMember: shared.blockMemberSchema,
   RosterQuery: shared.rosterQuerySchema,

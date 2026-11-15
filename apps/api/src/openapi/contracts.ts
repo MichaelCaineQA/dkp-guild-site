@@ -275,12 +275,6 @@ export const contracts: Record<string, Contract> = {
     description:
       'Покинувшие гильдию (issue #149): свежие блокировки сверху. Основной состав их не видит; данные (ДКП, класс, лут) сохранены.',
   }),
-  Members_update: c('Изменить участника', 'Member', {
-    access: leader,
-    body: 'UpdateMember',
-    errors: [400, 404, 409],
-    description: 'Ник, роль и пара оружия обязательны; изменение фиксируется в аудите.',
-  }),
   Members_changeRank: c('Изменить ранг участника', 'Member', {
     access: leader,
     body: 'ChangeRank',

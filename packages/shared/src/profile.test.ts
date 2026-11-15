@@ -21,11 +21,26 @@ describe('самостоятельное редактирование профи
     expect(updateOwnProfileSchema.safeParse(valid).success).toBe(true);
     for (const body of [
       { ...valid, rank: 'ADMIN' },
-      { ...valid, nickname: 'Другой' },
+      { ...valid, gearScore: 5000 },
       { ...valid, combatRole: null },
       { ...valid, comment: '   ' },
     ]) {
       expect(updateOwnProfileSchema.safeParse(body).success).toBe(false);
     }
+  });
+
+  it('ник — своё поле (аудит F03): 2–40 символов, самостоятельная смена', () => {
+    expect(
+      updateOwnProfileSchema.safeParse({ nickname: 'Новенький', comment: 'Сменил ник' }).success,
+    ).toBe(true);
+    expect(
+      updateOwnProfileSchema.safeParse({ nickname: 'Я', comment: 'Слишком короткий' }).success,
+    ).toBe(false);
+    expect(
+      updateOwnProfileSchema.safeParse({
+        nickname: 'а'.repeat(41),
+        comment: 'Слишком длинный',
+      }).success,
+    ).toBe(false);
   });
 });

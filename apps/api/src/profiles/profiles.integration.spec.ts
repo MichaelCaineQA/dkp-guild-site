@@ -7,6 +7,7 @@ import { ProfilesController } from './profiles.controller';
 import { ProfilesService, type ProfilesDb, type ProfileTransaction } from './profiles.service';
 
 let role: CombatRole | null = 'DPS';
+let nickname = 'Игрок';
 let weapons: import('@dkp/shared').Weapon[] = ['STAFF', 'WAND'];
 let avatar: import('@dkp/shared').Avatar | null = null;
 let avatarColor: import('@dkp/shared').AvatarColor | null = null;
@@ -43,7 +44,7 @@ function member(id: string, combatRole: CombatRole | null) {
   return id === 'm1' || id === 'm2'
     ? {
         id,
-        nickname: 'Игрок',
+        nickname,
         timeZone,
         primeTime,
         rank: 'MEMBER' as const,
@@ -69,6 +70,12 @@ const db: ProfilesDb = {
   },
   member: {
     findUnique: async ({ where }) => member(where.id, role),
+    findFirst: async ({ where }) =>
+      where.nickname === nickname
+        ? { id: 'm1' }
+        : where.nickname === 'Занят'
+          ? { id: 'm-busy' }
+          : null,
     update: async () => {
       throw new Error('Изменение вне транзакции');
     },
@@ -111,6 +118,7 @@ const db: ProfilesDb = {
   $transaction: async (work) => {
     let draftRole = role;
     let draftRoleChangedAt = roleChangedAt;
+    let draftNickname = nickname;
     let draftWeapons = [...weapons];
     let draftAvatar = avatar;
     let draftAvatarColor = avatarColor;
@@ -126,6 +134,7 @@ const db: ProfilesDb = {
           return found
             ? {
                 ...found,
+                nickname: draftNickname,
                 weapons: draftWeapons,
                 avatar: draftAvatar,
                 avatarColor: draftAvatarColor,
@@ -138,7 +147,15 @@ const db: ProfilesDb = {
               }
             : null;
         },
+        // Занятые ники: текущий (может быть только своим) и чужой «Занят»
+        findFirst: async ({ where }) =>
+          where.nickname === draftNickname
+            ? { id: 'm1' }
+            : where.nickname === 'Занят'
+              ? { id: 'm-busy' }
+              : null,
         update: async ({ data }) => {
+          if (data.nickname !== undefined) draftNickname = data.nickname;
           if (data.combatRole !== undefined) draftRole = data.combatRole;
           if (data.combatRoleChangedAt !== undefined)
             draftRoleChangedAt = data.combatRoleChangedAt;
@@ -171,6 +188,7 @@ const db: ProfilesDb = {
     const result = await work(tx);
     role = draftRole;
     roleChangedAt = draftRoleChangedAt;
+    nickname = draftNickname;
     weapons = draftWeapons;
     avatar = draftAvatar;
     avatarColor = draftAvatarColor;
@@ -206,6 +224,7 @@ describe('профили через HTTP', () => {
   beforeEach(() => {
     actor = { userId: 'u1', username: 'Игрок', memberId: 'm1', rank: 'MEMBER', isAdmin: false, blocked: false };
     role = 'DPS';
+    nickname = 'Игрок';
     weapons = ['STAFF', 'WAND'];
     avatar = null;
     avatarColor = null;
@@ -358,6 +377,31 @@ describe('профили через HTTP', () => {
       action: 'MEMBER_UPDATE',
       comment: expect.stringContaining(body.comment),
     });
+  });
+
+  it('ник меняется самим владельцем с комментарием и аудитом; занятый — 409 (аудит F03)', async () => {
+    expect(
+      (await patch('m1', { nickname: 'Новенький', comment: 'Сменил ник в игре' })).status,
+    ).toBe(200);
+    expect(nickname).toBe('Новенький');
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({
+      action: 'MEMBER_UPDATE',
+      entityId: 'm1',
+      comment: expect.stringContaining('«Игрок» → «Новенький»'),
+    });
+
+    // Чужой занятый ник — 409: без изменения и без второй записи аудита
+    expect((await patch('m1', { nickname: 'Занят', comment: 'Хочу так' })).status).toBe(409);
+    expect(nickname).toBe('Новенький');
+    expect(audit).toHaveLength(1);
+  });
+
+  it('смена ника без комментария или с коротким ником — 400 без изменений', async () => {
+    expect((await patch('m1', { nickname: 'Безкоммент' })).status).toBe(400);
+    expect((await patch('m1', { nickname: 'Я', comment: 'Слишком короткий' })).status).toBe(400);
+    expect(nickname).toBe('Игрок');
+    expect(audit).toHaveLength(0);
   });
 
   it('смена только пары оружий сохраняется и журналируется', async () => {
