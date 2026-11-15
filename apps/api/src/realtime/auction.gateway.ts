@@ -20,12 +20,16 @@ import {
 import { readSessionUser } from '../auth/session';
 import type { AuctionEventsPort } from './auction-events';
 import { AuctionSnapshotService } from './auction-snapshot';
+import { SocketAccessService } from './socket-access.service';
 
 /** Комната одного лота. */
 export const roomOf = (auctionId: string): string => `auction:${auctionId}`;
 
 /** Общий канал: создание/закрытие лотов для списка аукциона. */
 export const AUCTIONS_ROOM = 'auctions';
+
+/** Комната всех сокетов пользователя — точка отзыва доступа (аудит F02). */
+export const userRoomOf = (userId: string): string => `user:${userId}`;
 
 /**
  * Realtime аукциона (issue #97, план §7): Socket.IO gateway + Redis adapter.
@@ -53,7 +57,10 @@ export class AuctionGateway
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly snapshots: AuctionSnapshotService) {}
+  constructor(
+    private readonly snapshots: AuctionSnapshotService,
+    private readonly access: SocketAccessService,
+  ) {}
 
   /** Redis adapter при REDIS_URL — события видны всем инстансам API (§7). */
   async afterInit(server: Server): Promise<void> {
@@ -75,20 +82,25 @@ export class AuctionGateway
     } catch {
       user = null;
     }
-    if (!user || (!user.memberId && !user.isAdmin) || user.blocked) {
+    // Снимок сессии мог устареть: блокировка и членство перечитываются
+    // из БД, как в AuthGuard для REST (аудит F02).
+    const fresh = user ? await this.access.refreshUser(user) : null;
+    if (!fresh || (!fresh.memberId && !fresh.isAdmin) || fresh.blocked) {
       // Мягкое отключение: пакет ошибки успевает уйти до закрытия; клиент
       // socket.io не переподключается после server-side disconnect.
       client.emit(
         'auction:error',
-        user?.blocked
+        user && (fresh === null || fresh.blocked)
           ? 'Гильдия закрыла свои врата'
           : 'Аукцион доступен членам гильдии после входа',
       );
       client.disconnect();
       return;
     }
-    client.data.user = user;
+    client.data.user = fresh;
     await client.join(AUCTIONS_ROOM);
+    // Комната пользователя — по ней блокировка/выход закрывают сокеты.
+    await client.join(userRoomOf(fresh.userId));
   }
 
   /** Подписка на лот: полный срез состояния взамен накопления (issue #97). */
@@ -97,6 +109,19 @@ export class AuctionGateway
     client: Socket,
     payload: unknown,
   ): Promise<{ event: string; data: unknown }> {
+    const base = client.data.user as SessionUser | undefined;
+    if (!base) {
+      return { event: 'auction:error', data: 'Соединение не авторизовано' };
+    }
+    // Допуск перечитывается на каждую подписку: открытый сокет не должен
+    // пережить блокировку, случившуюся после handshake (аудит F02).
+    const fresh = await this.access.refreshUser(base);
+    if (!fresh || fresh.blocked) {
+      client.emit('auction:error', 'Гильдия закрыла свои врата');
+      client.disconnect();
+      return { event: 'auction:error', data: 'Гильдия закрыла свои врата' };
+    }
+    client.data.user = fresh;
     const auctionId = parseJoinPayload(payload);
     if (!auctionId) {
       return { event: 'auction:error', data: 'Некорректный идентификатор лота' };
@@ -107,6 +132,18 @@ export class AuctionGateway
     }
     await client.join(roomOf(auctionId));
     return { event: AUCTION_SOCKET_EVENTS.state, data: state };
+  }
+
+  /**
+   * Доступ пользователя отозван (блокировка issue #149, выход): всем его
+   * сокетам уходит ошибка, затем они закрываются. Redis adapter разносит
+   * команду во все инстансы API — комнаты локальны для узла, но broadcast
+   * охватывает кластер.
+   */
+  userAccessRevoked(userId: string): void {
+    const room = userRoomOf(userId);
+    this.server.in(room).emit('auction:error', 'Гильдия закрыла свои врата');
+    this.server.in(room).disconnectSockets(true);
   }
 
   lotCreated(lot: AuctionLotRow): void {

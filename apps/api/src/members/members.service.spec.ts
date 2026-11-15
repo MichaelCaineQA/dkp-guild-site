@@ -11,6 +11,7 @@ function makeDb(
     rank: string;
     combatRole: string | null;
     blockedAt?: Date | null;
+    userId?: string | null;
     timeZone?: string;
     primeTime?: import('@dkp/shared').PrimeTimeSlot[];
   }>,
@@ -19,8 +20,8 @@ function makeDb(
   const members = seed.map((m) => ({
     weapons: ['STAFF', 'WAND'] as import('@dkp/shared').Weapon[],
     blockedAt: null as Date | null,
-    ...m,
     userId: null as string | null,
+    ...m,
   }));
   const bids = bidsSeed.map((b) => ({ ...b }));
   const audit: Array<Record<string, string | null>> = [];
@@ -380,21 +381,25 @@ describe('Ранги ADMIN/GUILD_LEADER не назначаются (решен�
 
 describe('MembersService.block/unblock (issue #149)', () => {
   const FIXED = new Date('2026-11-14T12:00:00Z');
-  /** Порт событий с записью вызовов bidsRemoved. */
+  /** Порт событий с записью вызовов bidsRemoved/userAccessRevoked. */
   const makeEvents = () => {
     const removed: string[] = [];
+    const revoked: string[] = [];
     const events: AuctionEventsPort = {
       ...NOOP_AUCTION_EVENTS,
       bidsRemoved: (auctionId) => {
         removed.push(auctionId);
       },
+      userAccessRevoked: (userId) => {
+        revoked.push(userId);
+      },
     };
-    return { events, removed };
+    return { events, removed, revoked };
   };
 
   it('блокирует, снимает активные ставки, шлёт срез лотов и пишет аудит', async () => {
     const { db, members, bids, audit } = makeDb(
-      [{ id: 'm-1', nickname: 'Ушёл', rank: 'MEMBER', combatRole: 'DPS' }],
+      [{ id: 'm-1', nickname: 'Ушёл', rank: 'MEMBER', combatRole: 'DPS', userId: 'u-1' }],
       [
         { auctionId: 'a-1', memberId: 'm-1', open: true },
         { auctionId: 'a-1', memberId: 'm-2', open: true },
@@ -402,7 +407,7 @@ describe('MembersService.block/unblock (issue #149)', () => {
         { auctionId: 'a-3', memberId: 'm-1', open: false },
       ],
     );
-    const { events, removed } = makeEvents();
+    const { events, removed, revoked } = makeEvents();
     const service = new MembersService(db, () => FIXED, events);
 
     const row = await service.block('m-1', { comment: 'Покинул гильдию' }, ACTOR);
@@ -416,20 +421,25 @@ describe('MembersService.block/unblock (issue #149)', () => {
     ]);
     // Один вызов на каждый затронутый лот (уникальные id)
     expect(removed).toEqual(['a-1', 'a-2']);
+    // Сокеты заблокированного пользователя закрываются (аудит F02)
+    expect(revoked).toEqual(['u-1']);
     expect(audit[0]).toMatchObject({ action: 'MEMBER_BLOCK', entityId: 'm-1' });
     expect(audit[0]!.comment).toContain('снято активных ставок: 2');
     expect(audit[0]!.comment).toContain('Покинул гильдию');
   });
 
-  it('без ставок — аудит без упоминания ставок, событий нет', async () => {
-    const { db, audit } = makeDb([{ id: 'm-1', nickname: 'Ушёл', rank: 'MEMBER', combatRole: null }]);
-    const { events, removed } = makeEvents();
+  it('без ставок — аудит без упоминания ставок, событий лотов нет', async () => {
+    const { db, audit } = makeDb([
+      { id: 'm-1', nickname: 'Ушёл', rank: 'MEMBER', combatRole: null, userId: 'u-1' },
+    ]);
+    const { events, removed, revoked } = makeEvents();
     const service = new MembersService(db, () => FIXED, events);
 
     await service.block('m-1', { comment: 'Ушёл сам' }, ACTOR);
 
     expect(audit[0]!.comment).not.toContain('ставок');
     expect(removed).toEqual([]);
+    expect(revoked).toEqual(['u-1']);
     expect(events).toBeDefined();
   });
 

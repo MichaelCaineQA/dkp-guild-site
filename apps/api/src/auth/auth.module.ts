@@ -6,6 +6,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { AuditModule } from '../audit/audit.module';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeModule } from '../realtime/realtime.module';
 import { AuthController } from './auth.controller';
 import { AuthService, type AuthDb } from './auth.service';
 import { AUTH_SERVICE, DiscordStrategy } from './discord.strategy';
@@ -15,6 +16,7 @@ import { LinkRequestService, type LinkRequestDb } from './link-request.service';
 @Module({
   imports: [
     AuditModule,
+    RealtimeModule, // закрытие сокетов пользователя при выходе (аудит F02)
     ConfigModule.forRoot({ isGlobal: true }),
     // Грубый глобальный троттлинг; на вход админа — свой @Throttle в контроллере
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
