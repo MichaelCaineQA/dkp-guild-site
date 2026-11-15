@@ -75,6 +75,17 @@ Production/staging и резервное копирование описаны �
   Серверная блокировка deploy/cron — `/run/lock/dkp-deploy.lock`.
   Прежний VPS 193.37.68.243 выведен
   из эксплуатации (docker-демон и SSH зависали у прошлого провайдера).
+- SSH (проверено 2026-11-16): root входит только по ключу. В
+  `/etc/ssh/sshd_config.d/00-dkp-key-only.conf` заданы
+  `PermitRootLogin prohibit-password`, `PasswordAuthentication no`,
+  `KbdInteractiveAuthentication no`, `AuthenticationMethods publickey`.
+  Настройки имеют приоритет над провайдерским `40-hosting.conf`.
+  Ключ оператора — `~/.ssh/dkp_stage` (alias `dkp-stage`); ключи деплоя
+  хранятся в environment Secrets `DEPLOY_SSH_KEY` для `staging` и
+  `production`. Приватные ключи и пароль администратора сайта в Git не пишутся.
+  После изменения sshd: `sshd -t`, reload `ssh`, затем проверка **нового**
+  соединения с ключом; соединение без ключа должно получить
+  `Permission denied (publickey)`.
 - Проверка: `https://stage.suneclipse.ru/api/health`; вход — резервный
   админ из серверного `.env.production`. Realtime (#97): engine.io-handshake —
   `curl '.../api/socket.io/?EIO=4&transport=polling'` (ответ `0{"sid":...}`);
