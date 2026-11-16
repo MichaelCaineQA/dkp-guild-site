@@ -11,6 +11,7 @@ import {
 import { api } from '../lib/api';
 import { useSession } from './session-context';
 import { EventCard } from './event-card';
+import { DashboardWeekSchedule } from './dashboard-week-schedule';
 import {
   AuditPreview,
   Button,
@@ -55,6 +56,7 @@ export function DashboardScreen() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<DashboardEvent | null>(null);
+  const [weekReloadSignal, setWeekReloadSignal] = useState(0);
   const [now, setNow] = useState(() => new Date());
   const [absences, setAbsences] = useState<DashboardAbsence[]>([]);
   const [absenceError, setAbsenceError] = useState(false);
@@ -172,6 +174,11 @@ export function DashboardScreen() {
         </div>
       )}
       <DashboardGrid>
+        <DashboardWeekSchedule
+          now={now}
+          onSelect={(event) => setSelected(event)}
+          reloadSignal={weekReloadSignal}
+        />
         <DashboardWidget className="md:col-span-2" title="События дня">
           {fallback ??
             (data?.events.length ? (
@@ -348,7 +355,11 @@ export function DashboardScreen() {
           canManage={canManageEvent(user, selected)}
           canConduct={can(user, 'events.conduct', selected)}
           onClose={() => setSelected(null)}
-          onChanged={load}
+          onChanged={() => {
+            // Изменение через общую карточку обновляет и дашборд, и недельное расписание (#203).
+            void load();
+            setWeekReloadSignal((signal) => signal + 1);
+          }}
         />
       )}
     </Page>

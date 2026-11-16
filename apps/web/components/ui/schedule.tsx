@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { WeekEvent } from '@dkp/shared';
+import { formatEventTimeRange } from '@dkp/shared';
 import { Button } from './controls';
 import { Badge } from './data';
 import type { DashboardEvent } from '@dkp/shared';
@@ -45,6 +46,69 @@ export function ScheduleColumns({ list, detail }: { list: ReactNode; detail: Rea
       <div className="min-w-0">{list}</div>
       <div className="min-w-0">{detail}</div>
     </div>
+  );
+}
+/**
+ * Сетка недельного расписания дашборда (issue #203): на компьютере семь
+ * колонок пн–вс, на телефоне дневные блоки идут одной колонкой.
+ */
+export function WeekScheduleGrid({ children }: { children: ReactNode }) {
+  return <div className="grid grid-cols-1 gap-2 md:grid-cols-7">{children}</div>;
+}
+/** Колонка одного дня недели; текущий день выделен рамкой акцентного цвета. */
+export function WeekScheduleDay({
+  header,
+  today,
+  children,
+}: {
+  header: string;
+  today: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={header}
+      className={`flex min-w-0 flex-col gap-2 rounded-lg border p-2 ${
+        today ? 'border-accent bg-accent-soft/40' : 'border-line bg-surface'
+      }`}
+    >
+      <h3 className={`text-sm font-semibold ${today ? 'text-accent' : 'text-secondary'}`}>
+        {header}
+      </h3>
+      {children}
+    </div>
+  );
+}
+/**
+ * Плитка события недельного расписания (issue #203): только название,
+ * интервал времени и плата ДКП; прошедшие приглушены.
+ */
+export function WeekScheduleEventButton({
+  event,
+  past,
+  onClick,
+}: {
+  event: DashboardEvent;
+  past: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full min-w-0 rounded-lg border border-line bg-surface px-2 py-1.5 text-left hover:bg-surface-muted ${
+        past ? 'opacity-50' : ''
+      }`}
+    >
+      <span className="block break-words text-sm font-medium">
+        {event.name || event.eventTypeName}
+      </span>
+      <span className="block text-xs text-secondary tabular-nums">
+        {formatEventTimeRange(event.startsAt, event.endsAt)}
+      </span>
+      <span className="block text-xs tabular-nums">{event.dkpReward} ДКП</span>
+    </button>
   );
 }
 export function WeekEventButton({
