@@ -62,6 +62,11 @@ Production/staging и резервное копирование описаны �
 
 ## Стенд stage.suneclipse.ru (переехал 2026-11-12)
 
+Деплой из сессии по команде — скиллы `.agents/skills/dkp-deploy-stage` и
+`.agents/skills/dkp-deploy-prod` (запуск workflow Deploy через GitHub API,
+ожидание run, контроль SHA в /api/health; прод — полный релизный цикл с тегом
+и Release).
+
 - VPS **188.120.225.204** (FirstVDS, root, ключ `~/.ssh/dkp_stage`, alias
   `dkp-stage`), Ubuntu 24.04, 4 vCPU / 8 ГБ / 99 ГБ NVMe, Docker Engine
   + Compose; checkout `/opt/dkp-guild-site` с серверным `.env.production`
