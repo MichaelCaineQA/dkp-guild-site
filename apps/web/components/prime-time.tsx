@@ -42,13 +42,13 @@ export function PrimeTime({ profile, editable }: { profile: PlayerProfile; edita
     finally { setBusy(false); }
   }
   return <Card><SectionTitle>Прайм-тайм</SectionTitle>
-    <p>Таймзона: {editable ? zone : profile.timeZone}</p>
+    <p>Таймзона прайм-тайма: {editable ? zone : profile.timeZone}</p>
     {slots.length === 0 ? <p>Не указан</p> : <ul>{slots.map((slot, index) => <li key={index}>
       {days[slot.weekday]}: {format(slot.fromMinute)}–{format(slot.toMinute)}{' '}
       {editable && <Button type="button" onClick={() => setSlots(slots.filter((_, i) => i !== index))}>Удалить</Button>}
     </li>)}</ul>}
     {editable && <form onSubmit={save}><Stack>
-      <Field label="Таймзона (IANA)"><Input value={zone} onChange={(event) => setZone(event.target.value)} /></Field>
+      <Field label="Таймзона прайм-тайма (IANA)"><Input value={zone} onChange={(event) => setZone(event.target.value)} /></Field>
       <Field label="День"><Select value={weekday} onChange={(event) => setWeekday(Number(event.target.value))}>{days.map((day, index) => <option key={day} value={index}>{day}</option>)}</Select></Field>
       <Field label="Начало"><Input value={from} onChange={(event) => setFrom(event.target.value)} placeholder="00:00" /></Field>
       <Field label="Конец"><Input value={to} onChange={(event) => setTo(event.target.value)} placeholder="24:00" /></Field>
