@@ -84,7 +84,7 @@ jobs:
             -e POSTGRES_USER=dkp -e POSTGRES_PASSWORD=dkp -e POSTGRES_DB=dkp_commit_test \
             postgres:16-alpine \
             -c synchronous_standby_names=dkp_bid_commit_test -c synchronous_commit=off
-          for attempt in $(seq 1 30); do
+          for ((probe_attempt=0; probe_attempt<30; probe_attempt++)); do
             if [ "$(docker inspect --format '{{.State.Health.Status}}' "$container_name")" = healthy ]; then
               break
             fi
