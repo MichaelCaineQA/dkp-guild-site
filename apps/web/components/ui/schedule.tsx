@@ -20,7 +20,7 @@ export function MobileCalendarList({
             key={event.id}
             type="button"
             onClick={() => onSelect(event)}
-            className="w-full rounded-lg border border-line bg-surface p-3 text-left"
+            className={`w-full rounded-lg border border-line bg-surface p-3 text-left ${+new Date(event.endsAt) <= Date.now() || event.status === 'FINISHED' ? 'opacity-60' : ''}`}
           >
             <span className="block text-xs text-secondary">
               {new Date(event.startsAt).toLocaleString('ru-RU', {
