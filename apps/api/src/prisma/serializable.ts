@@ -21,7 +21,11 @@ export async function serializable<TDb, T>(
     } catch (error) {
       const retry =
         error instanceof Prisma.PrismaClientKnownRequestError &&
-        (error.code === 'P2034' || (retryUnique && error.code === 'P2002'));
+        (error.code === 'P2034' ||
+          // У raw SQL Prisma сохраняет SQLSTATE в meta, оборачивая его в P2010.
+          (error.code === 'P2010' &&
+            (error.meta?.code === '40001' || error.meta?.code === '40P01')) ||
+          (retryUnique && error.code === 'P2002'));
       if (!retry) throw error;
       if (attempt === 2) throw new ConflictException('Данные изменились — повторите действие');
     }

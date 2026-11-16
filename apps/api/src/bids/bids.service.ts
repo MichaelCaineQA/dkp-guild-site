@@ -71,6 +71,7 @@ interface StoredMember {
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
 export interface BidsTx {
+  $queryRaw(query: TemplateStringsArray, ...values: unknown[]): Promise<unknown>;
   auction: {
     findUnique(args: {
       where: { id: string };
@@ -177,9 +178,12 @@ export class BidsService {
     }
     const amount = parsed.data.amount;
     const memberId = actor.memberId;
-    const now = this.now();
-
     const result = await serializable(this.db, async (tx) => {
+      // Ждём завершения конкурента до проверок и INSERT. Иначе при медленном
+      // COMMIT все три повтора могут читать прежний снимок и исчерпаться в 409.
+      // Serializable остаётся нужен для баланса и заморозки на других лотах.
+      await tx.$queryRaw`SELECT "id" FROM "Auction" WHERE "id" = ${auctionId} FOR UPDATE`;
+      const now = this.now();
       const auction = await tx.auction.findUnique({
         where: { id: auctionId },
         include: { lootDrop: { include: { item: true } } },

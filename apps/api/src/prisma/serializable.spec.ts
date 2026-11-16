@@ -4,6 +4,31 @@ import { serializable } from './serializable';
 const conflict = (code: string) =>
   new Prisma.PrismaClientKnownRequestError('conflict', { code, clientVersion: 'test' });
 describe('Повтор транзакции', () => {
+  it.each(['40001', '40P01'])('повторяет raw SQL при конфликте PostgreSQL %s', async (sqlState) => {
+    const transaction = jest
+      .fn()
+      .mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('raw conflict', {
+          code: 'P2010',
+          clientVersion: 'test',
+          meta: { code: sqlState },
+        }),
+      )
+      .mockResolvedValueOnce('committed');
+    await expect(
+      serializable({ $transaction: transaction }, async () => 'committed'),
+    ).resolves.toBe('committed');
+  });
+  it('не повторяет raw SQL при постоянной ошибке PostgreSQL', async () => {
+    const error = new Prisma.PrismaClientKnownRequestError('relation missing', {
+      code: 'P2010',
+      clientVersion: 'test',
+      meta: { code: '42P01' },
+    });
+    const transaction = jest.fn().mockRejectedValue(error);
+    await expect(serializable({ $transaction: transaction }, async () => true)).rejects.toBe(error);
+    expect(transaction).toHaveBeenCalledTimes(1);
+  });
   it('повторяет весь блок, включая проверки, после serialization failure', async () => {
     let attempts = 0;
     const work = jest.fn(async () => attempts);

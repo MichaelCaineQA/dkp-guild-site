@@ -88,9 +88,10 @@ suite('Ставки: настоящие транзакции PostgreSQL', () => 
       bids.place(auctionId, { amount: 100 }, { memberId: healerId, isAdmin: false }),
     ]);
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(
-      results.filter((r) => r.status === 'rejected' && r.reason instanceof BadRequestException),
-    ).toHaveLength(1);
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(rejected).toEqual([{ status: 'rejected', reason: expect.any(BadRequestException) }]);
+    expect(rejected[0].reason.getStatus()).toBe(400);
+    expect(rejected[0].reason.message).toBe('Минимальная ставка — 105');
     expect(await bidsOf(auctionId)).toHaveLength(1);
     expect(await db.auditLog.count({ where: { action: 'AUCTION_BID', entityId: auctionId } })).toBe(
       1,
