@@ -151,6 +151,13 @@ Production/staging и резервное копирование описаны �
 - gh-CLI нет: GitHub — REST с токеном из `git credential fill`. Тела
   PR/issue/merge с кириллицей пиши файлом в `$TEMP` и передавай
   `--data-binary @file` — inline-JSON с кириллицей из Git Bash ломается.
+  JSON удобно собрать python'ом в файл (без сети), отправку делать curl'ом:
+  managed-python агента не проходит TLS к api.github.com
+  (CERTIFICATE_VERIFY_FAILED, проверено 2026-11-16 на #203).
+- Эффекты дочерних компонентов выполняются раньше родительских (урок #203):
+  `mockResolvedValueOnce` в dashboard-тестах съедается первым запросом
+  виджета недели, а не `/dashboard`. В тестах экранов с несколькими
+  запросами используй path-моки (`mockImplementation` по пути).
 - Скриншоты: `scripts/dev-screenshot.sh up` / `down` (2026-11-11, урок #101) —
   поднимает web `:3090` + API `:3005` на тест-БД `dkp_test`
   (`AUTH_TEST_MODE=true`, миграции + сид test-юзеров применяет сам),

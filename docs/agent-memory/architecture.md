@@ -92,6 +92,16 @@
   (вкладка «Лут-лог»; глубокая ссылка `?loot-member=<id>` из профиля
   открывает её с фильтром), виджет — `components/dashboard.tsx`.
 - `packages/shared` — общие типы, zod-схемы и чистая логика ядра.
+- Виджет дашборда «Расписание на неделю» (#203, PR #204):
+  `apps/web/components/dashboard-week-schedule.tsx` (данные, навигация,
+  гонка ответов — поколение запросов + привязка событий к неделе) и
+  примитивы `WeekScheduleGrid`/`WeekScheduleDay`/`WeekScheduleEventButton`
+  в `apps/web/components/ui/schedule.tsx`; данные — существующий
+  `GET /schedule/week` без изменений API. Чистая логика — `weekDays`,
+  `groupEventsByLocalDay`, `formatEventTimeRange` в shared `week.ts`;
+  неделя пн–вс в таймзоне браузера (решение 20), клик открывает общую
+  EventCard, её `onChanged` обновляет виджет (проп `reloadSignal`)
+  и дашборд.
 - Свежесть GS (#147): `profile.gearScoreStaleDays` (по умолчанию 14 дней)
   читается при запросе; `isGearScoreStale` учитывает последнюю запись со
   скриншотом и строгую границу «старше». API выдаёт флаг только вместе с
