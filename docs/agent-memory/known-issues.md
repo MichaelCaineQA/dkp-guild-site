@@ -229,6 +229,22 @@
   (`isAdmin` проходит любые проверки `can()`); сессию удобно получить
   curl-кукой и перенести в браузер, либо логиниться прямо на web-origin
   через прокси `/api`.
+- Дополнение (#203, 2026-11-16): admin-login на стенде троттлится — после
+  нескольких входов подряд отдаёт 429. Для скриншотов без админских прав
+  используй test-login + `GET /auth/me`: `test-leader` сидится Главой,
+  `test-member` — Рядовым; test-leader подходит и для создания/удаления
+  ивентов и типов через API.
+
+## Git Bash: docker не на PATH
+
+- Источник: #203, 2026-11-16, Windows-хост владельца. Симптом:
+  `docker: command not found` в Git Bash при работающем Docker Desktop.
+- Причина: каталог Docker не добавлен в PATH Git Bash; бинарники лежат
+  в `/c/Program Files/Docker/Docker/resources/bin` (есть `docker.exe`).
+- Обход: `export PATH="/c/Program Files/Docker/Docker/resources/bin:$PATH"`
+  и вызывать `docker.exe compose up -d` (extensionless `docker` в том
+  каталоге печатает usage). Повторная проверка: `docker version --format
+  '{{.Server.Version}}'` возвращает версию движка.
 
 ## Локальный стенд dev-screenshot: сессии, секрет и realtime (приёмка #100)
 
