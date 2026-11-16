@@ -10,6 +10,9 @@
   Справочник предметов аукциона — модуль `apps/api/src/items` (issue #92);
   дроп и создание лота в проведении ивента — `apps/api/src/loot` (issue #93);
   ставки с заморозкой и анти-снайпом — `apps/api/src/bids` (issue #94);
+  приём ставки сначала блокирует строку лота (`SELECT FOR UPDATE`, #161),
+  затем читает данные и серверное время. `serializable()` повторяет P2034
+  и raw SQL P2010 с SQLSTATE 40001/40P01; остальные raw-ошибки не повторяет.
   скидка за предпочитаемый предмет (#101, PR #125): на `Member` хранятся
   `preferredItemId` + `prevPreferredItemId`/`preferredItemChangedAt` и
   `prevCombatRole`/`combatRoleChangedAt` — прежние поля сохраняются для
