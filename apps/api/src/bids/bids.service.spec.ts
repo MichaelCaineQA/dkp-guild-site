@@ -107,6 +107,7 @@ function makeDb(options: {
   const audit: Array<Record<string, unknown>> = [];
 
   const tx: BidsTx = {
+    $queryRaw: async () => [],
     auction: {
       findUnique: async ({ where }) => {
         const found = auctions.find((row) => row.id === where.id);
@@ -173,12 +174,34 @@ function makeDb(options: {
     ...tx,
     $transaction: async (work) => work(tx),
   };
-  return { db, auctions, bids, audit };
+  return { db, tx, auctions, bids, audit };
 }
 
 const service = (db: BidsDb) => new BidsService(db, () => NOW);
 
 describe('BidsService (issue #94)', () => {
+  it('проверяет окончание торгов по времени после ожидания блокировки лота', async () => {
+    const { db, tx, bids, audit } = makeDb({
+      auctions: [
+        {
+          ...LIVE_LOT,
+          timerFromFirstBid: false,
+          endsAt: new Date('2026-11-09T20:00:01Z'),
+        },
+      ],
+    });
+    let now = NOW;
+    tx.$queryRaw = async () => {
+      now = new Date('2026-11-09T20:00:02Z');
+      return [];
+    };
+    const queued = new BidsService(db, () => now);
+    await expect(queued.place('a-1', { amount: 100 }, ACTOR)).rejects.toThrow(
+      'Торги по лоту завершены',
+    );
+    expect(bids).toHaveLength(0);
+    expect(audit).toHaveLength(0);
+  });
   it('первая ставка живой раздачи запускает таймер и пишет аудит', async () => {
     const { db, auctions, bids, audit } = makeDb({});
     const result = await service(db).place('a-1', { amount: 100 }, ACTOR);

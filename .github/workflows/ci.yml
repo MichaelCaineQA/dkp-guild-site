@@ -71,6 +71,29 @@ jobs:
           ONBOARDING_TEST_DATABASE_URL: postgresql://dkp:dkp@127.0.0.1:5432/dkp_test?schema=public
         run: pnpm --filter @dkp/api exec jest --runInBand --testPathPattern=database.spec.ts
 
+      # Отдельный сервер: управляемая задержка COMMIT не затрагивает общую БД.
+      - name: PostgreSQL delayed commit regression
+        env:
+          BIDS_COMMIT_TEST_DATABASE_URL: postgresql://dkp:dkp@127.0.0.1:5433/dkp_commit_test?schema=public
+        run: |
+          container_name="dkp-bid-commit-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker rm -fv "$container_name" >/dev/null' EXIT
+          docker run -d --name "$container_name" -p 127.0.0.1:5433:5432 \
+            --health-cmd "pg_isready -U dkp -d dkp_commit_test" \
+            --health-interval 1s --health-timeout 3s --health-retries 30 \
+            -e POSTGRES_USER=dkp -e POSTGRES_PASSWORD=dkp -e POSTGRES_DB=dkp_commit_test \
+            postgres:16-alpine \
+            -c synchronous_standby_names=dkp_bid_commit_test -c synchronous_commit=off
+          for attempt in $(seq 1 30); do
+            if [ "$(docker inspect --format '{{.State.Health.Status}}' "$container_name")" = healthy ]; then
+              break
+            fi
+            sleep 1
+          done
+          test "$(docker inspect --format '{{.State.Health.Status}}' "$container_name")" = healthy
+          DATABASE_URL="$BIDS_COMMIT_TEST_DATABASE_URL" pnpm --filter @dkp/api exec prisma migrate deploy
+          pnpm --filter @dkp/api exec jest --runInBand --testPathPattern=bids-commit.database.spec.ts
+
       - name: Build
         run: pnpm build
 

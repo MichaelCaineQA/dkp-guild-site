@@ -125,6 +125,7 @@ function makeStore() {
   });
 
   const tx = {
+    $queryRaw: async () => [],
     auction: {
       findUnique: async ({ where }: { where: { id: string } }) => {
         const found = auctions.find((row) => row.id === where.id);
