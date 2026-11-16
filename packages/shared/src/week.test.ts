@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { countEventParticipants, getLocalWeekBounds, localDayKey, weekQuerySchema } from './week';
+import {
+  countEventParticipants,
+  formatEventTimeRange,
+  getLocalWeekBounds,
+  groupEventsByLocalDay,
+  localDayKey,
+  weekDays,
+  weekQuerySchema,
+} from './week';
 describe('Неделя расписания', () => {
   it('воскресенье относится к прошлому понедельнику, включая переход года', () => {
     const { start, end } = getLocalWeekBounds(new Date(2027, 0, 3, 23, 59));
@@ -26,6 +34,55 @@ describe('Неделя расписания', () => {
       { from, to: 'invalid' },
     ])
       expect(weekQuerySchema.safeParse(query).success).toBe(false);
+  });
+});
+describe('Недельное расписание дашборда (issue #203)', () => {
+  it('weekDays отдаёт семь дат пн–вс через границу месяца и года', () => {
+    const days = weekDays(new Date(2026, 11, 28));
+    expect(days).toHaveLength(7);
+    expect(days.map((d) => [d.getMonth(), d.getDate()])).toEqual([
+      [11, 28],
+      [11, 29],
+      [11, 30],
+      [11, 31],
+      [0, 1],
+      [0, 2],
+      [0, 3],
+    ]);
+    expect(days[0].getDay()).toBe(1);
+    expect(days[6].getDay()).toBe(0);
+  });
+  it('группирует события по локальному дню начала, внутри дня — по времени', () => {
+    const at = (y: number, m: number, d: number, h: number, min = 0) =>
+      new Date(y, m, d, h, min).toISOString();
+    const first = { id: 'late', startsAt: at(2026, 10, 16, 21) };
+    const second = { id: 'early', startsAt: at(2026, 10, 16, 9) };
+    const otherDay = { id: 'other', startsAt: at(2026, 10, 18, 9) };
+    const sameTimeA = { id: 'a', startsAt: at(2026, 10, 16, 9) };
+    const sameTimeB = { id: 'b', startsAt: at(2026, 10, 16, 9) };
+    const grouped = groupEventsByLocalDay([first, second, otherDay, sameTimeA, sameTimeB]);
+    expect([...grouped.keys()]).toEqual([
+      localDayKey(new Date(2026, 10, 16)),
+      localDayKey(new Date(2026, 10, 18)),
+    ]);
+    expect(grouped.get(localDayKey(new Date(2026, 10, 16)))!.map((e) => e.id)).toEqual([
+      'early',
+      'a',
+      'b',
+      'late',
+    ]);
+    expect(grouped.get(localDayKey(new Date(2026, 10, 18)))!.map((e) => e.id)).toEqual(['other']);
+  });
+  it('форматирует интервал; окончание в другой день — с датой', () => {
+    const start = new Date(2026, 10, 16, 20, 0);
+    expect(formatEventTimeRange(start, new Date(2026, 10, 16, 21, 30))).toBe('20:00–21:30');
+    const overnight = formatEventTimeRange(
+      new Date(2026, 10, 16, 23, 0),
+      new Date(2026, 10, 17, 1, 0),
+    );
+    expect(overnight.startsWith('23:00–01:00 (')).toBe(true);
+    expect(overnight).toContain('17');
+    expect(overnight.endsWith(')')).toBe(true);
   });
 });
 describe('Пойдут / приглашены', () => {

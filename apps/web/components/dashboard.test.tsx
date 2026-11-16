@@ -44,7 +44,7 @@ afterEach(() => {
 it('рядовой видит личный лог и пустые состояния', async () => {
   render(<DashboardScreen />);
   await screen.findByText('Сегодня отдыхаем!');
-  expect(screen.getAllByRole('region')).toHaveLength(6);
+  expect(screen.getAllByRole('region')).toHaveLength(7);
   expect(
     screen.getByText('Здесь появится информация о твоём паке после того, как тебя распределят'),
   ).toBeDefined();
@@ -55,37 +55,49 @@ it('рядовой видит личный лог и пустые состоян
 });
 it('Офицер видит 10 записей и переход в аудит', async () => {
   session('OFFICER');
-  vi.mocked(api).mockResolvedValueOnce({
-    ...summary,
-    audit: [
-      {
-        id: 'log',
-        actorName: 'Глава',
-        action: 'EVENT_CREATE',
-        createdAt: new Date().toISOString(),
-        comment: 'Ивент создан',
-      },
-    ],
-  });
+  vi.mocked(api).mockImplementation(async (path) =>
+    path === '/dashboard'
+      ? {
+          ...summary,
+          audit: [
+            {
+              id: 'log',
+              actorName: 'Глава',
+              action: 'EVENT_CREATE',
+              createdAt: new Date().toISOString(),
+              comment: 'Ивент создан',
+            },
+          ],
+        }
+      : path === '/dashboard/wallet'
+        ? null
+        : [],
+  );
   render(<DashboardScreen />);
   expect(await screen.findByText('Комментарий: Ивент создан')).toBeDefined();
   expect(screen.getByText('Перейти в лог действий')).toBeDefined();
 });
 it('событие открывает общую с календарём карточку', async () => {
-  vi.mocked(api).mockResolvedValueOnce({
-    ...summary,
-    events: [
-      {
-        id: 'e',
-        name: 'Поход',
-        eventTypeName: 'Гильдбосс',
-        startsAt: new Date().toISOString(),
-        endsAt: new Date(Date.now() + 3600000).toISOString(),
-        status: 'PLANNED',
-        raidLeadId: 'rl',
-      },
-    ],
-  });
+  vi.mocked(api).mockImplementation(async (path) =>
+    path === '/dashboard'
+      ? {
+          ...summary,
+          events: [
+            {
+              id: 'e',
+              name: 'Поход',
+              eventTypeName: 'Гильдбосс',
+              startsAt: new Date().toISOString(),
+              endsAt: new Date(Date.now() + 3600000).toISOString(),
+              status: 'PLANNED',
+              raidLeadId: 'rl',
+            },
+          ],
+        }
+      : path === '/dashboard/wallet'
+        ? null
+        : [],
+  );
   render(<DashboardScreen />);
   fireEvent.click(await screen.findByRole('button', { name: /Поход/ }));
   expect(screen.getByRole('dialog').textContent).toContain('Поход');
@@ -94,7 +106,7 @@ it('резервный Админ видит все виджеты, без ож�
   session(null, true);
   render(<DashboardScreen />);
   await screen.findByText('Сегодня отдыхаем!');
-  expect(screen.getAllByRole('region')).toHaveLength(6);
+  expect(screen.getAllByRole('region')).toHaveLength(7);
   expect(screen.getByText('Кошелёк доступен участникам гильдии.')).toBeDefined();
   expect(api).not.toHaveBeenCalledWith('/dashboard/wallet');
   expect(screen.getByText('Перейти в лог действий')).toBeDefined();
@@ -108,7 +120,7 @@ it('ошибка сервера не маскируется под пустое 
   render(<DashboardScreen />);
   expect(await screen.findByRole('alert')).toBeDefined();
   expect(screen.queryByText('Сегодня отдыхаем!')).toBeNull();
-  expect(screen.getAllByRole('region')).toHaveLength(6);
+  expect(screen.getAllByRole('region')).toHaveLength(7);
 });
 
 it('показывает до трёх активных отсутствий: текущие перед будущими, с локальными датами и отметкой', async () => {
