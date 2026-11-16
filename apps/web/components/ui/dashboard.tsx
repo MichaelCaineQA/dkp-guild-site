@@ -27,7 +27,7 @@ export function DashboardWidget({
   return (
     <section
       aria-label={title}
-      className={`flex min-h-0 min-w-0 flex-col rounded-xl border border-line bg-surface shadow-sm ${className}`}
+      className={`flex min-h-0 min-w-0 flex-col rounded-xl border border-line bg-surface shadow-card ${className}`}
     >
       <h2 className="border-b border-line px-5 py-4 text-lg font-semibold">{title}</h2>
       <div className="min-h-0 space-y-4 p-5 md:overflow-y-auto">{children}</div>

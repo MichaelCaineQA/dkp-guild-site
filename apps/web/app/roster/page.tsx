@@ -263,19 +263,21 @@ export default function RosterPage() {
           <tbody>
             {sortedRows.slice(pageOffset, pageOffset + PAGE_SIZE).map((row) => (
               <Table.Row key={row.id} onClick={() => setSelected(row)}>
-                <Table.Td className="font-medium">
-                  <Avatar
-                    avatar={row.avatar}
-                    avatarColor={row.avatarColor}
-                    nickname={row.nickname}
-                  />
-                  <a
-                    className="text-accent hover:underline"
-                    href={`/profiles/${encodeURIComponent(row.id)}`}
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    {row.nickname}
-                  </a>
+                <Table.Td>
+                  <span className="flex items-center gap-3">
+                    <Avatar
+                      avatar={row.avatar}
+                      avatarColor={row.avatarColor}
+                      nickname={row.nickname}
+                    />
+                    <a
+                      className="font-semibold text-primary hover:text-accent"
+                      href={`/profiles/${encodeURIComponent(row.id)}`}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {row.nickname}
+                    </a>
+                  </span>
                 </Table.Td>
                 <Table.Td>{RANK_LABELS[row.rank]}</Table.Td>
                 <Table.Td>

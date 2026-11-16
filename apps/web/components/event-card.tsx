@@ -88,9 +88,14 @@ export function EventCard({
             — {endsAt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}{' '}
           </p>
         </div>
-        <Button aria-label="Закрыть карточку" onClick={onClose}>
+        <button
+          type="button"
+          aria-label="Закрыть карточку"
+          onClick={onClose}
+          className="shrink-0 rounded-lg px-2.5 py-1 text-lg leading-none text-secondary transition-colors hover:bg-surface-hover hover:text-primary"
+        >
           ×
-        </Button>
+        </button>
       </div>
 
       {segments.length > 0 && (
@@ -163,36 +168,32 @@ export function EventCard({
       />
       <EventRoster key={`roster:${event.id}:${rosterVersion}`} eventId={event.id} />
 
-      {canConduct && event.status === 'PLANNED' && (
-        <div className="mt-3 flex gap-2">
-          <Button variant="primary" disabled={busy} onClick={() => changeStatus('RUNNING')}>
-            Начать ивент
-          </Button>
-          <a
-            href={`/schedule/${event.id}/conduct`}
-            className="rounded-lg border border-line bg-surface px-4 py-1.5 text-sm font-medium hover:bg-surface-muted"
-          >
-            Страница проведения
-          </a>
+      {(canConduct || (canManage && isEventEditable(event.status))) && (
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3 border-t border-line/60 pt-5">
+          {canConduct && event.status === 'PLANNED' && (
+            <Button variant="primary" disabled={busy} onClick={() => changeStatus('RUNNING')}>
+              Начать ивент
+            </Button>
+          )}
+          {canConduct && event.status === 'RUNNING' && (
+            <Button variant="primary" disabled={busy} onClick={() => changeStatus('FINISHED')}>
+              Завершить
+            </Button>
+          )}
+          {canConduct && (event.status === 'PLANNED' || event.status === 'RUNNING') && (
+            <a
+              href={`/schedule/${event.id}/conduct`}
+              className="rounded-xl border border-line bg-surface-elevated px-5 py-2.5 text-sm font-semibold text-primary transition-all hover:border-line-accent hover:bg-surface-hover"
+            >
+              Страница проведения
+            </a>
+          )}
+          {canManage && isEventEditable(event.status) && (
+            <Button variant="danger" disabled={busy} onClick={() => changeStatus('CANCELLED')}>
+              Отменить ивент
+            </Button>
+          )}
         </div>
-      )}
-      {canConduct && event.status === 'RUNNING' && (
-        <div className="mt-3 flex gap-2">
-          <Button variant="primary" disabled={busy} onClick={() => changeStatus('FINISHED')}>
-            Завершить
-          </Button>
-          <a
-            href={`/schedule/${event.id}/conduct`}
-            className="rounded-lg border border-line bg-surface px-4 py-1.5 text-sm font-medium hover:bg-surface-muted"
-          >
-            Страница проведения
-          </a>
-        </div>
-      )}
-      {canManage && isEventEditable(event.status) && (
-        <Button disabled={busy} onClick={() => changeStatus('CANCELLED')}>
-          Отменить
-        </Button>
       )}
       {!canConduct && !canManage && (
         <p className="mt-3 text-xs text-secondary">

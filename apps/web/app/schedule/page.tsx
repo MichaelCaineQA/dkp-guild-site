@@ -146,27 +146,34 @@ export default function SchedulePage() {
     <Page width="wide">
       <PageHeader title="Расписание ивентов" />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div role="group" aria-label="Вид расписания" className="flex gap-2">
-          <Button
-            aria-pressed={view === 'week'}
-            variant={view === 'week' ? 'primary' : undefined}
-            onClick={() => {
-              setView('week');
-              setSelectedId(null);
-            }}
-          >
-            События
-          </Button>
-          <Button
-            aria-pressed={view === 'calendar'}
-            variant={view === 'calendar' ? 'primary' : undefined}
-            onClick={() => {
-              setView('calendar');
-              setSelectedId(null);
-            }}
-          >
-            Календарь
-          </Button>
+        <div
+          role="group"
+          aria-label="Вид расписания"
+          className="flex gap-1 rounded-xl border border-line bg-surface-elevated p-1"
+        >
+          {(
+            [
+              { key: 'week', label: 'События' },
+              { key: 'calendar', label: 'Календарь' },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              aria-pressed={view === tab.key}
+              onClick={() => {
+                setView(tab.key);
+                setSelectedId(null);
+              }}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
+                view === tab.key
+                  ? 'bg-accent-soft text-accent shadow-sm'
+                  : 'text-secondary hover:text-primary'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
         {canManage && (
           <Button variant="primary" onClick={() => setCreating(true)}>
@@ -271,9 +278,24 @@ export default function SchedulePage() {
             }
             detail={
               detail ?? (
-                <Card>
-                  <Muted>Выберите событие из списка</Muted>
-                </Card>
+                <div className="flex min-h-72 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-line-subtle bg-surface/60 p-8 text-center">
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-10 w-10 text-text-muted"
+                  >
+                    <path d="M4 5h16v16H4zM4 9h16M8 3v4M16 3v4" />
+                  </svg>
+                  <p className="text-sm font-medium text-secondary">Выберите событие из списка</p>
+                  <p className="max-w-56 text-xs text-text-muted">
+                    Нажмите на событие слева, чтобы увидеть состав, фазы и управление
+                  </p>
+                </div>
               )
             }
           />

@@ -1,122 +1,327 @@
-/*
- * Палитра и шрифты сайта — только они. Спецификация дизайна (типографика,
- * отступы, компоненты, процесс редизайна) — в apps/web/DESIGN.md; вёрстка —
- * в components/ui. Палитра семантическая: имена говорят о роли (--surface —
- * фон карточек), а не о значении. Значения — стартовый прототип; финальную
- * палитру выберет дизайнер (issue #23) и согласует глава (#24).
- */
+@source "../app";
+@source "../components";
 @import 'tailwindcss';
 
+/* ==========================================================================
+   DESIGN SYSTEM & COLOR PALETTE (DKP HUB - Throne and Liberty)
+   Стиль: тёмная фэнтези-админка. Глубокий индиго-фон, тёмные карточки,
+   бирюзовый (teal) акцент для чисел и действий, фиолетовый — для редкости
+   и выделения, золото — для премиальных кнопок.
+   ========================================================================== */
+
 :root {
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light;
 
-  /* Светлая тема */
-  --bg-page: #f5f6f8;
-  --surface: #ffffff;
-  --surface-muted: #eceef1;
+  /* Font Families */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --font-mono: 'JetBrains Mono', Fira Code, Consolas, Monaco, monospace;
 
-  --text-primary: #1c2430;
-  --text-secondary: #5b6675;
-  --text-disabled: #9aa3b0;
+  /* LIGHT THEME — светлая версия той же системы: холодные серо-голубые
+     поверхности, приглушённый teal и фиолетовый для читаемости на белом. */
+  --bg-app: #eef1f8;
+  --bg-sidebar: #0d1226; /* Тёмный сайдбар остаётся и в светлой теме */
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #f3f5fc;
+  --bg-surface-hover: #e7ecf9;
+  --bg-surface-muted: #edf0f9;
 
-  --border: #d7dce2;
-  --border-strong: #b7bfc9;
+  /* Text Colors */
+  --text-primary: #141b33;
+  --text-secondary: #4d5878;
+  --text-muted: #8a93b2;
+  --text-inverse: #ffffff;
 
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --accent-contrast: #ffffff;
-  --accent-soft: #3b82f61a;
+  /* Borders & Lines */
+  --border-line: #dfe5f2;
+  --border-subtle: #c6cfe6;
+  --border-accent: rgba(13, 148, 136, 0.4);
 
-  --success: #15803d;
-  --success-soft: #16a34a1a;
-  --danger: #d32f2f;
-  --danger-soft: #d32f2f1a;
-  --warning: #b45309;
-  --warning-soft: #f59e0b1a;
+  /* Core Accent Colors */
+  --accent-cyan: #0d9488;
+  --accent-cyan-hover: #0f766e;
+  --accent-cyan-glow: rgba(13, 148, 136, 0.2);
+  --accent-soft: rgba(13, 148, 136, 0.1);
+
+  --accent-purple: #9333ea;
+  --accent-purple-hover: #7e22ce;
+  --accent-purple-glow: rgba(147, 51, 234, 0.2);
+  --accent-purple-soft: rgba(147, 51, 234, 0.1);
+
+  /* Status & Utility Colors */
+  --status-success: #16a34a;
+  --status-success-bg: rgba(22, 163, 74, 0.1);
+  --status-warning: #d97706;
+  --status-warning-bg: rgba(217, 119, 6, 0.1);
+  --status-danger: #dc2626;
+  --status-danger-bg: rgba(220, 38, 38, 0.1);
+  --status-info: #2563eb;
+  --status-info-bg: rgba(37, 99, 235, 0.1);
+
+  /* Interactive Elements & Buttons */
+  --btn-gold-from: #f2c53d;
+  --btn-gold-to: #d9a410;
+  --btn-gold-text: #241a02;
+
+  /* UI Shapes & Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
+
+  /* Elevation & Shadows */
+  --elevation-sm: 0 1px 2px 0 rgba(20, 27, 51, 0.06);
+  --elevation-card: 0 4px 20px -2px rgba(20, 27, 51, 0.1);
+  --glow-cyan: 0 0 16px rgba(13, 148, 136, 0.3);
+  --glow-purple: 0 0 18px rgba(147, 51, 234, 0.3);
+  --glow-gold: 0 0 16px rgba(217, 164, 16, 0.35);
+
+  /* Фон светлой темы — светлый арт замка под лёгкой светлой вуалью */
+  --bg-overlay: linear-gradient(rgba(238, 241, 248, 0.25), rgba(238, 241, 248, 0.55));
+  --bg-image: url('/art/bg-light.jpg');
 }
 
-/* Тёмная тема — те же роли, другие значения.
-   Включается: системной настройкой ИЛИ классом .dark на <html>
-   (переключатель в шапке; выбранный вручную режим главнее системного). */
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) {
-    --bg-page: #14181f;
-    --surface: #1c222c;
-    --surface-muted: #262e3a;
+/* DARK THEME — основной стиль по референсам DKP HUB:
+   глубокий индиго-фон с фиолетовым свечением, тёмные карточки,
+   бирюзовые числа и действия, фиолетовые акценты редкости. */
+html.dark {
+  color-scheme: dark;
 
-    --text-primary: #e8ecf1;
-    --text-secondary: #a2adbb;
-    --text-disabled: #64707f;
+  --bg-app: #090d1a;
+  --bg-sidebar: #0c1122;
+  --bg-surface: #131a2f;
+  --bg-surface-elevated: #1a2240;
+  --bg-surface-hover: #222c52;
+  --bg-surface-muted: #171f3a;
 
-    --border: #323b48;
-    --border-strong: #465364;
+  /* Text Colors */
+  --text-primary: #eef2fc;
+  --text-secondary: #9aa7cc;
+  --text-muted: #5f6b96;
+  --text-inverse: #0a0f1e;
 
-    --accent: #4f8ff7;
-    --accent-hover: #6ba1f9;
-    --accent-contrast: #0e1420;
-    --accent-soft: #4f8ff726;
+  /* Borders & Lines */
+  --border-line: #232c4d;
+  --border-subtle: #31406b;
+  --border-accent: rgba(45, 212, 191, 0.35);
 
-    --success: #4ade80;
-    --success-soft: #4ade8026;
-    --danger: #f87171;
-    --danger-soft: #f8717126;
-    --warning: #fbbf24;
-    --warning-soft: #fbbf2426;
+  /* Core Accent Colors */
+  --accent-cyan: #2dd4bf;
+  --accent-cyan-hover: #5eead4;
+  --accent-cyan-glow: rgba(45, 212, 191, 0.25);
+  --accent-soft: rgba(45, 212, 191, 0.12);
+
+  --accent-purple: #a855f7;
+  --accent-purple-hover: #c084fc;
+  --accent-purple-glow: rgba(168, 85, 247, 0.3);
+  --accent-purple-soft: rgba(168, 85, 247, 0.14);
+
+  /* Status & Utility Colors */
+  --status-success: #4ade80;
+  --status-success-bg: rgba(74, 222, 128, 0.14);
+  --status-warning: #fbbf24;
+  --status-warning-bg: rgba(251, 191, 36, 0.14);
+  --status-danger: #f87171;
+  --status-danger-bg: rgba(248, 113, 113, 0.14);
+  --status-info: #60a5fa;
+  --status-info-bg: rgba(96, 165, 250, 0.14);
+
+  /* Interactive Elements & Buttons */
+  --btn-gold-from: #fcd34d;
+  --btn-gold-to: #eab308;
+  --btn-gold-text: #231a03;
+
+  /* Elevation & Shadows */
+  --elevation-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --elevation-card: 0 10px 30px -4px rgba(2, 5, 16, 0.55);
+  --glow-cyan: 0 0 18px rgba(45, 212, 191, 0.35);
+  --glow-purple: 0 0 22px rgba(168, 85, 247, 0.4);
+  --glow-gold: 0 0 18px rgba(250, 204, 21, 0.4);
+
+  /* Фон: яркий арт замка под умеренной вуалью */
+  --bg-overlay: linear-gradient(rgba(9, 13, 26, 0.42), rgba(9, 13, 26, 0.6));
+  --bg-image: url('/art/bg-castle.jpg');
+}
+
+/* ==========================================================================
+   TAILWIND V4 INLINE MAPPING (@theme inline)
+   ========================================================================== */
+
+@theme inline {
+  --color-bg-app: var(--bg-app);
+  --color-bg-sidebar: var(--bg-sidebar);
+  --color-surface: var(--bg-surface);
+  --color-surface-elevated: var(--bg-surface-elevated);
+  --color-surface-hover: var(--bg-surface-hover);
+  --color-surface-muted: var(--bg-surface-muted);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-inverse: var(--text-inverse);
+
+  /* Короткие алиасы: text-primary / text-secondary / text-muted */
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+
+  --color-line: var(--border-line);
+  --color-line-subtle: var(--border-subtle);
+  --color-line-accent: var(--border-accent);
+
+  /* Акцент: бирюза */
+  --color-accent: var(--accent-cyan);
+  --color-accent-hover: var(--accent-cyan-hover);
+  --color-accent-contrast: var(--text-inverse);
+  --color-accent-soft: var(--accent-soft);
+  --color-cyan-accent: var(--accent-cyan);
+
+  /* Акцент: фиолетовый */
+  --color-purple-accent: var(--accent-purple);
+  --color-purple-accent-hover: var(--accent-purple-hover);
+  --color-purple-soft: var(--accent-purple-soft);
+
+  /* Статусы */
+  --color-status-success: var(--status-success);
+  --color-status-warning: var(--status-warning);
+  --color-status-danger: var(--status-danger);
+  --color-status-info: var(--status-info);
+
+  --color-success: var(--status-success);
+  --color-success-soft: var(--status-success-bg);
+  --color-warning: var(--status-warning);
+  --color-warning-soft: var(--status-warning-bg);
+  --color-danger: var(--status-danger);
+  --color-danger-soft: var(--status-danger-bg);
+  --color-info: var(--status-info);
+  --color-info-soft: var(--status-info-bg);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+
+  --color-btn-gold-from: var(--btn-gold-from);
+  --color-btn-gold-to: var(--btn-gold-to);
+  --color-btn-gold-text: var(--btn-gold-text);
+
+  --shadow-card: var(--elevation-card);
+  --shadow-glow-cyan: var(--glow-cyan);
+  --shadow-glow-purple: var(--glow-purple);
+  --shadow-glow-gold: var(--glow-gold);
+}
+
+/* ==========================================================================
+   BASE & RESET STYLES
+   ========================================================================== */
+
+*, ::before, ::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Фоновый арт замка под затемняющей вуалью (тёмная тема) */
+body {
+  background-image: var(--bg-overlay), var(--bg-image);
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+::selection {
+  background: var(--accent-cyan-glow);
+}
+
+/* Custom Scrollbars (Кастомный узкий скроллбар) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Base Dialog Reset — в слое base, чтобы не перекрывать утилиты Tailwind */
+@layer base {
+  dialog {
+    border: none;
+    padding: 0;
+    margin: auto;
+  }
+
+  dialog::backdrop {
+    background: rgba(2, 6, 23, 0.75);
+    backdrop-filter: blur(4px);
   }
 }
 
-/* Ручная тёмная тема (переключатель в шапке): класс сильнее системной. */
-html.dark {
-  --bg-page: #14181f;
-  --surface: #1c222c;
-  --surface-muted: #262e3a;
+/* Сайдбар с фэнтези-артом внизу (тёмная тема) */
+@layer components {
+  html.dark .sidebar-frame {
+    background-image:
+      linear-gradient(rgba(12, 17, 34, 0.82), rgba(12, 17, 34, 0.45) 55%, rgba(12, 17, 34, 0.2)),
+      url('/art/sidebar-castle.jpg');
+    background-size: cover;
+    background-position: center bottom;
+  }
 
-  --text-primary: #e8ecf1;
-  --text-secondary: #a2adbb;
-  --text-disabled: #64707f;
-
-  --border: #323b48;
-  --border-strong: #465364;
-
-  --accent: #4f8ff7;
-  --accent-hover: #6ba1f9;
-  --accent-contrast: #0e1420;
-  --accent-soft: #4f8ff726;
-
-  --success: #4ade80;
-  --success-soft: #4ade8026;
-  --danger: #f87171;
-  --danger-soft: #f8717126;
-  --warning: #fbbf24;
-  --warning-soft: #fbbf2426;
+  /* Кастомная стрелка селекта под дизайн-систему */
+  .dkp-select {
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2394a3b8%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.65rem center;
+  }
 }
 
-/* Палитра как Tailwind-цвета: bg-surface, text-secondary, border-line и т.п. */
-@theme inline {
-  --font-sans: var(--font-sans);
-  --color-page: var(--bg-page);
-  --color-surface: var(--surface);
-  --color-surface-muted: var(--surface-muted);
-  --color-primary: var(--text-primary);
-  --color-secondary: var(--text-secondary);
-  --color-disabled: var(--text-disabled);
-  --color-line: var(--border);
-  --color-line-strong: var(--border-strong);
-  --color-accent: var(--accent);
-  --color-accent-hover: var(--accent-hover);
-  --color-accent-contrast: var(--accent-contrast);
-  --color-accent-soft: var(--accent-soft);
-  --color-success: var(--success);
-  --color-success-soft: var(--success-soft);
-  --color-danger: var(--danger);
-  --color-danger-soft: var(--danger-soft);
-  --color-warning: var(--warning);
-  --color-warning-soft: var(--warning-soft);
-}
+/* Нативные элементы форм под тему */
+@layer base {
+  /* Выпадающий список селекта: тёмная подложка в тёмной теме */
+  select option {
+    background-color: var(--bg-surface-elevated);
+    color: var(--text-primary);
+  }
 
-body {
-  margin: 0;
-  font-family: var(--font-sans);
-  background: var(--bg-page);
-  color: var(--text-primary);
+  /* Чекбоксы и радио в цвет акцента */
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: var(--accent-cyan);
+  }
+
+  /* Иконка календаря у date-инпутов */
+  input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.7;
+  }
+
+  html.dark input::-webkit-calendar-picker-indicator {
+    filter: invert(0.75);
+    opacity: 0.85;
+  }
 }

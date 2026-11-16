@@ -43,7 +43,7 @@ export function SidebarFrame({ expanded, children }: { expanded: boolean; childr
     <aside
       aria-label="Боковая навигация"
       data-expanded={expanded}
-      className={`peer fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-line bg-surface md:flex ${expanded ? 'w-56' : 'w-16'}`}
+      className={`sidebar-frame peer fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-line bg-surface md:flex ${expanded ? 'w-56' : 'w-16'}`}
     >
       {children}
     </aside>
@@ -87,7 +87,7 @@ export function NavigationLinks({
           aria-label={item.label}
           aria-current={item.active ? 'page' : undefined}
           onClick={onNavigate}
-          className={`flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm ${item.active ? 'bg-accent-soft font-semibold text-accent' : 'text-secondary hover:bg-surface-muted hover:text-primary'}`}
+          className={`flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${item.active ? 'bg-accent-soft font-semibold text-accent shadow-[inset_3px_0_0_0_var(--accent-cyan)]' : 'text-secondary hover:bg-surface-muted hover:text-primary'}`}
         >
           <MenuIcon name={item.icon} />
           <span className={collapsed ? 'sr-only' : 'min-w-0 break-words'}>{item.label}</span>

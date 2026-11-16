@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { api, API_URL_VALUE } from '../lib/api';
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, loading } = useSession();
-  const [guildName, setGuildName] = useState('Гильдия');
+  const [guildName, setGuildName] = useState('SunEclipse');
   const [crestUrl, setCrestUrl] = useState<string | null>(null);
   useEffect(() => {
     if (user && (user.memberId || user.isAdmin)) {
