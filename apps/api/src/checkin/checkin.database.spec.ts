@@ -230,8 +230,7 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
         },
       })
     ).id;
-    const entries = () =>
-      db.dkpEntry.findMany({ where: { eventId: oddEventId, memberId } });
+    const entries = () => db.dkpEntry.findMany({ where: { eventId: oddEventId, memberId } });
     await conduct.manualCheckIn(
       oddEventId,
       { memberId, phase: 'START', comment: 'Проверка нечётной платы' },

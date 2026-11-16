@@ -23,6 +23,7 @@ import { useSession } from '../../../components/session-context';
 import { ScreenshotLinks } from '../../../components/onboarding';
 import { api } from '../../../lib/api';
 import { PrimeTime } from '../../../components/prime-time';
+import { GearScoreEditor } from '../../../components/gear-score-editor';
 import {
   Button,
   Card,
@@ -195,7 +196,14 @@ export default function ProfilePage() {
   return (
     <Page>
       <Stack>
-        <PageHeader title={<>Профиль: {profile.nickname}<GearScoreStale stale={profile.gearScore?.stale} /></>} />
+        <PageHeader
+          title={
+            <>
+              Профиль: {profile.nickname}
+              <GearScoreStale stale={profile.gearScore?.stale} />
+            </>
+          }
+        />
         <ProfileDetails profile={profile} />
         <PrimeTime
           key={profile.id}
@@ -210,6 +218,14 @@ export default function ProfilePage() {
             </p>
             <ScreenshotLinks ids={profile.gearScore.screenshotIds} />
           </Card>
+        )}
+        {canEditOwnProfile(actor, memberId) && (
+          <GearScoreEditor
+            memberId={memberId}
+            onSaved={async () => {
+              setProfile(await api<PlayerProfile>(`/profiles/${encodeURIComponent(memberId)}`));
+            }}
+          />
         )}
         {canEditOwnProfile(actor, memberId) && (
           <Card>

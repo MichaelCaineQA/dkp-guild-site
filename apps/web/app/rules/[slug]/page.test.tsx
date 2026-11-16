@@ -16,7 +16,14 @@ const current = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u1', username: 'Глава', memberId: 'm1', rank: 'GUILD_LEADER', isAdmin: false, blocked: false },
+    user: {
+      userId: 'u1',
+      username: 'Глава',
+      memberId: 'm1',
+      rank: 'GUILD_LEADER',
+      isAdmin: false,
+      blocked: false,
+    },
     loading: false,
     reload: vi.fn(),
   });
@@ -38,7 +45,14 @@ afterEach(cleanup);
 
 it('офицер читает правила без кнопки редактирования', async () => {
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u2', username: 'Офицер', memberId: 'm2', rank: 'OFFICER', isAdmin: false, blocked: false },
+    user: {
+      userId: 'u2',
+      username: 'Офицер',
+      memberId: 'm2',
+      rank: 'OFFICER',
+      isAdmin: false,
+      blocked: false,
+    },
     loading: false,
     reload: vi.fn(),
   });
@@ -49,7 +63,14 @@ it('офицер читает правила без кнопки редакти�
 
 it('непривязанный аккаунт не запрашивает правила', () => {
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u2', username: 'Новый', memberId: null, rank: null, isAdmin: false, blocked: false },
+    user: {
+      userId: 'u2',
+      username: 'Новый',
+      memberId: null,
+      rank: null,
+      isAdmin: false,
+      blocked: false,
+    },
     loading: false,
     reload: vi.fn(),
   });

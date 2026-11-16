@@ -45,11 +45,7 @@ export class LootController {
   /** Фиксация выпавшего предмета. */
   @Post('drops')
   @RequirePermission('members.view_roster')
-  createDrop(
-    @Param('eventId') eventId: string,
-    @Body() body: unknown,
-    @Req() req: AuthedRequest,
-  ) {
+  createDrop(@Param('eventId') eventId: string, @Body() body: unknown, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
     return this.loot.createDrop(
       eventId,

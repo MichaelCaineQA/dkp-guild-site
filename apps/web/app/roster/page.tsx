@@ -371,7 +371,9 @@ export default function RosterPage() {
               <Table.Th className="cursor-pointer select-none" onClick={() => toggleSort('pack')}>
                 Пак {sortIndicator('pack')}
               </Table.Th>
-              {(user.isAdmin || user.rank === 'GUILD_LEADER' || user.rank === 'ADMIN') && <Table.Th>GS</Table.Th>}
+              {(user.isAdmin || user.rank === 'GUILD_LEADER' || user.rank === 'ADMIN') && (
+                <Table.Th>GS</Table.Th>
+              )}
               {canManage && <Table.Th>Действия</Table.Th>}
             </tr>
           </thead>

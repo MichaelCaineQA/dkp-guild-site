@@ -20,7 +20,14 @@ const summary = {
 };
 const session = (rank: 'MEMBER' | 'OFFICER' | null, isAdmin = false) =>
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u', username: 'Игрок', memberId: isAdmin ? null : 'm', rank, isAdmin, blocked: false },
+    user: {
+      userId: 'u',
+      username: 'Игрок',
+      memberId: isAdmin ? null : 'm',
+      rank,
+      isAdmin,
+      blocked: false,
+    },
     loading: false,
     reload: vi.fn(),
   });
@@ -104,12 +111,12 @@ it('ошибка сервера не маскируется под пустое 
   expect(screen.getAllByRole('region')).toHaveLength(6);
 });
 
-  it('показывает до трёх активных отсутствий: текущие перед будущими, с локальными датами и отметкой', async () => {
-    const now = Date.now();
-    vi.mocked(api).mockImplementation(async (path) => {
-      if (path === '/dashboard') return summary;
-      if (path === '/dashboard/wallet') return null;
-      if (path === '/absences/mine')
+it('показывает до трёх активных отсутствий: текущие перед будущими, с локальными датами и отметкой', async () => {
+  const now = Date.now();
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === '/dashboard') return summary;
+    if (path === '/dashboard/wallet') return null;
+    if (path === '/absences/mine')
       return [
         {
           id: 'future',

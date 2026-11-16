@@ -51,6 +51,10 @@ export type CreateEventApiInput = z.infer<typeof createEventApiSchema>;
  */
 export const updateEventSchema = z.object({
   ...eventScopeSchema.partial().shape,
+  // PATCH не должен применять default GUILD при отсутствии scope (Zod 4).
+  scope: eventScopeSchema.shape.scope.removeDefault().optional(),
+  kpId: eventScopeSchema.shape.kpId.removeDefault().optional(),
+  packId: eventScopeSchema.shape.packId.removeDefault().optional(),
   name: z.string().trim().min(1).max(120).optional(),
   eventTypeId: z.string().min(1).optional(),
   mode: z.enum(EVENT_MODES).optional(),

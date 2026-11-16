@@ -200,7 +200,9 @@ export function LootLog({ initialMember = initialMemberFilter() }: { initialMemb
             <tr>
               <Table.Td colSpan={5}>
                 <Muted>
-                  {hasFilters ? 'По этим фильтрам лута нет' : 'Лута пока нет — выдачи появятся после завершения лотов'}
+                  {hasFilters
+                    ? 'По этим фильтрам лута нет'
+                    : 'Лута пока нет — выдачи появятся после завершения лотов'}
                 </Muted>
               </Table.Td>
             </tr>

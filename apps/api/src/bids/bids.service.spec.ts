@@ -90,10 +90,12 @@ function makeDb(options: {
       ...seed,
     });
   }
-  const members: Array<Required<MemberSeed>> = (options.members ?? [
-    { id: 'm-1', nickname: 'Воин', combatRole: 'DPS' as const },
-    { id: 'm-2', nickname: 'Целитель', combatRole: 'HEALER' as const },
-  ]).map((seed) => ({
+  const members: Array<Required<MemberSeed>> = (
+    options.members ?? [
+      { id: 'm-1', nickname: 'Воин', combatRole: 'DPS' as const },
+      { id: 'm-2', nickname: 'Целитель', combatRole: 'HEALER' as const },
+    ]
+  ).map((seed) => ({
     prevCombatRole: null,
     combatRoleChangedAt: null,
     preferredItemId: null,
@@ -112,7 +114,10 @@ function makeDb(options: {
         return {
           ...found,
           createdAt: found.createdAt ?? LOT_CREATED_AT,
-          lootDrop: { itemId: found.itemId ?? 'item-1', item: { name: found.itemName ?? 'Предмет' } },
+          lootDrop: {
+            itemId: found.itemId ?? 'item-1',
+            item: { name: found.itemName ?? 'Предмет' },
+          },
         } as never;
       },
       findMany: async ({ where }) =>
@@ -153,8 +158,7 @@ function makeDb(options: {
       },
     },
     member: {
-      findUnique: async ({ where }) =>
-        members.find((member) => member.id === where.id) ?? null,
+      findUnique: async ({ where }) => members.find((member) => member.id === where.id) ?? null,
     },
     dkpEntry: {
       findMany: async ({ where }) => [{ amount: dkp[where.memberId] ?? 0 }],
@@ -192,7 +196,9 @@ describe('BidsService (issue #94)', () => {
   });
 
   it('следующая ставка — не ниже текущей плюс шаг', async () => {
-    const { db } = makeDb({ bids: [{ auctionId: 'a-1', memberId: 'm-2', amount: 100, fullCost: 100 }] });
+    const { db } = makeDb({
+      bids: [{ auctionId: 'a-1', memberId: 'm-2', amount: 100, fullCost: 100 }],
+    });
     await expect(service(db).place('a-1', { amount: 104 }, ACTOR)).rejects.toThrow(
       BadRequestException,
     );
@@ -277,7 +283,9 @@ describe('BidsService (issue #94)', () => {
     // → 100 × 1,5 = 150 → 150 × 0,9 = 135.
     const { db, bids } = makeDb({
       dkp: { 'm-2': 1000 },
-      members: [{ id: 'm-2', nickname: 'Целитель', combatRole: 'HEALER', preferredItemId: 'item-1' }],
+      members: [
+        { id: 'm-2', nickname: 'Целитель', combatRole: 'HEALER', preferredItemId: 'item-1' },
+      ],
     });
     const ok = await service(db).place('a-1', { amount: 100 }, { memberId: 'm-2', isAdmin: false });
     expect(ok.bid).toMatchObject({
@@ -422,7 +430,8 @@ describe('BidsService (issue #94)', () => {
 describe('BidsService: события realtime (issue #97)', () => {
   const events = (): AuctionEventsPort => ({
     lotCreated: jest.fn(),
-    bidPlaced: jest.fn(), bidsRemoved: jest.fn(),
+    bidPlaced: jest.fn(),
+    bidsRemoved: jest.fn(),
     lotUpdated: jest.fn(),
     lotClosed: jest.fn(),
     userAccessRevoked: jest.fn(),

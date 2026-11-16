@@ -305,21 +305,33 @@ describe('снимок роли и предпочтения на момент с
   it('предпочтение без смены — текущее; смена после создания лота — прежнее', () => {
     expect(
       prefersItemAtLotCreation(
-        { preferredItemId: 'item-2', prevPreferredItemId: 'item-1', preferredItemChangedAt: changedAfter },
+        {
+          preferredItemId: 'item-2',
+          prevPreferredItemId: 'item-1',
+          preferredItemChangedAt: changedAfter,
+        },
         lotCreatedAt,
         'item-1',
       ),
     ).toBe(true);
     expect(
       prefersItemAtLotCreation(
-        { preferredItemId: 'item-2', prevPreferredItemId: 'item-1', preferredItemChangedAt: changedAfter },
+        {
+          preferredItemId: 'item-2',
+          prevPreferredItemId: 'item-1',
+          preferredItemChangedAt: changedAfter,
+        },
         lotCreatedAt,
         'item-2',
       ),
     ).toBe(false);
     expect(
       prefersItemAtLotCreation(
-        { preferredItemId: null, prevPreferredItemId: 'item-1', preferredItemChangedAt: changedAfter },
+        {
+          preferredItemId: null,
+          prevPreferredItemId: 'item-1',
+          preferredItemChangedAt: changedAfter,
+        },
         lotCreatedAt,
         'item-1',
       ),

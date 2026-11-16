@@ -21,6 +21,8 @@ import { AuctionManageModule } from './auction-manage/auction-manage.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { AuctionsModule } from './auctions/auctions.module';
 import { OrgModule } from './org/org.module';
+import { APP_FILTER } from '@nestjs/core';
+import { ValidationFilter } from './validation.filter';
 
 @Module({
   imports: [
@@ -47,5 +49,6 @@ import { OrgModule } from './org/org.module';
     OrgModule,
   ],
   controllers: [AppController],
+  providers: [{ provide: APP_FILTER, useClass: ValidationFilter }],
 })
 export class AppModule {}

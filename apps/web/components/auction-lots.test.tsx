@@ -100,9 +100,8 @@ afterEach(() => {
 
 describe('AuctionLots: список (issue #98)', () => {
   it('открытые лоты с ведущей ставкой и автором; пустой список — пояснение', async () => {
-    vi.mocked(api).mockImplementation(
-      async (path: string) =>
-        path === '/auctions?status=OPEN' ? [row()] : path === '/auctions?status=CLOSED' ? [] : [],
+    vi.mocked(api).mockImplementation(async (path: string) =>
+      path === '/auctions?status=OPEN' ? [row()] : path === '/auctions?status=CLOSED' ? [] : [],
     );
     render(<AuctionLots viewerMemberId="m-1" viewerRole="DPS" />);
 
@@ -135,7 +134,9 @@ describe('AuctionLots: список (issue #98)', () => {
     const cells = screen.getAllByRole('cell');
     expect(cells.some((cell) => cell.textContent === 'Целитель')).toBe(true);
     expect(
-      screen.getByText((_, el) => el?.textContent === 'Текущая ставка: 150 ДКП — Целитель' && el.tagName === 'DIV'),
+      screen.getByText(
+        (_, el) => el?.textContent === 'Текущая ставка: 150 ДКП — Целитель' && el.tagName === 'DIV',
+      ),
     ).toBeDefined();
     // форма: минимум от живой ведущей, итог с наценкой для «чужого»
     expect(screen.getByText('Ваша ставка (мин. 155 ДКП)')).toBeDefined();
@@ -205,20 +206,40 @@ describe('AuctionLots: список (issue #98)', () => {
     );
   });
 
+  it('до среза закрытого лота показывает загрузку результата', async () => {
+    vi.mocked(api).mockResolvedValue([row({ status: 'CLOSED' })]);
+    render(<AuctionLots viewerMemberId="m-1" viewerRole="DPS" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Открыть' }));
+    expect(await screen.findByText('Загрузка результата…')).toBeDefined();
+    expect(screen.queryByText(/Торги завершены без победителя/)).toBeNull();
+  });
+
   it('завершённый лот показывает победителя, формы нет', async () => {
     vi.mocked(api).mockResolvedValue([
       row({
         status: 'CLOSED',
         topBid: null,
         myBid: null,
-        winner: { memberId: 'm-2', memberName: 'Целитель', finalPrice: 225, markupPct: 50, discountPct: 0 },
+        winner: {
+          memberId: 'm-2',
+          memberName: 'Целитель',
+          finalPrice: 225,
+          markupPct: 50,
+          discountPct: 0,
+        },
         endsAt: '2026-11-10T18:01:31.000Z',
       }),
     ]);
     vi.mocked(useAuctionLot).mockReturnValue({
       state: state({
         lot: { ...state().lot, status: 'CLOSED', endsAt: '2026-11-10T18:01:31.000Z' },
-        winner: { memberId: 'm-2', memberName: 'Целитель', finalPrice: 225, markupPct: 50, discountPct: 0 },
+        winner: {
+          memberId: 'm-2',
+          memberName: 'Целитель',
+          finalPrice: 225,
+          markupPct: 50,
+          discountPct: 0,
+        },
       }),
       connection: { status: 'live' },
       rejoin: vi.fn(),
@@ -271,7 +292,12 @@ describe('AuctionLots: создание лота вне ивента (#137)', ()
             antiSnipeExtendSec: 30,
             noBidTimeoutSec: 120,
           },
-          long: { durationValue: 2, durationUnit: 'DAYS', antiSnipeSec: 600, antiSnipeExtendSec: 600 },
+          long: {
+            durationValue: 2,
+            durationUnit: 'DAYS',
+            antiSnipeSec: 600,
+            antiSnipeExtendSec: 600,
+          },
         };
       if (path === '/auctions' && init?.method === 'POST') {
         created = true;

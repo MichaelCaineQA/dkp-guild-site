@@ -114,7 +114,13 @@ function makeDb() {
     },
     auditLog: {
       create: async ({ data }) => {
-        audit.push({ actorMemberId: data.actorMemberId, action: data.action, entityType: data.entityType, entityId: data.entityId, comment: data.comment });
+        audit.push({
+          actorMemberId: data.actorMemberId,
+          action: data.action,
+          entityType: data.entityType,
+          entityId: data.entityId,
+          comment: data.comment,
+        });
       },
     },
   };

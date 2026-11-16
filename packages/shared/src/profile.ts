@@ -3,6 +3,12 @@ import { COMBAT_ROLES, type CombatRole, type Rank } from './domain';
 import { weaponPairSchema, type Weapon } from './weapons';
 import type { ProfileLootRow } from './loot-log';
 import { primeTimeSlotSchema, timeZoneSchema, type PrimeTimeSlot } from './prime-time';
+import { createLinkRequestSchema } from './auth';
+
+export const addGearScoreSchema = createLinkRequestSchema
+  .pick({ gearScore: true, screenshotIds: true })
+  .extend({ comment: z.string().trim().min(3).max(500) })
+  .strict();
 
 /** Свежесть последней записи, подтверждённой скриншотом. */
 export function isGearScoreStale(

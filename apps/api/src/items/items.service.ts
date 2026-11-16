@@ -4,12 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  itemInputSchema,
-  type ItemInput,
-  type ItemRow,
-  type ItemTargetRole,
-} from '@dkp/shared';
+import { itemInputSchema, type ItemInput, type ItemRow, type ItemTargetRole } from '@dkp/shared';
 import type { AuditWriter } from '../members/members.service';
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
@@ -109,9 +104,7 @@ export class ItemsService {
       'ITEM_DELETE',
       id,
       `Удалён предмет «${existing.name}»` +
-        (preferredBy > 0
-          ? `; предпочитаемый предмет очищен у ${preferredBy} игрок(ов)`
-          : ''),
+        (preferredBy > 0 ? `; предпочитаемый предмет очищен у ${preferredBy} игрок(ов)` : ''),
     );
     return { ok: true };
   }

@@ -27,7 +27,8 @@ function session(partial: Partial<SessionUser>): SessionUser {
     username: 'u',
     memberId: 'm1',
     rank: 'MEMBER',
-    isAdmin: false, blocked: false,
+    isAdmin: false,
+    blocked: false,
     ...partial,
   };
 }

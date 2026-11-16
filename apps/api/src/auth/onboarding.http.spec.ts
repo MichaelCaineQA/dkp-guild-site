@@ -37,7 +37,14 @@ describe('Первая анкета: HTTP-контракт', () => {
   });
   beforeEach(() => {
     jest.clearAllMocks();
-    actor = { userId: 'own', username: 'Новый', memberId: null, rank: null, isAdmin: false, blocked: false };
+    actor = {
+      userId: 'own',
+      username: 'Новый',
+      memberId: null,
+      rank: null,
+      isAdmin: false,
+      blocked: false,
+    };
   });
   it('отсутствующая анкета отдаёт JSON, а не пустое тело; userId берётся только из сессии', async () => {
     const response = await fetch(url + '/auth/link-request?userId=other');

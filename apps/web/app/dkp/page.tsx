@@ -131,7 +131,9 @@ export default function DkpPage() {
               title="Показать операции игрока"
             >
               <span>{row.memberName}</span>
-              <span className={`tabular-nums font-semibold ${row.balance < 0 ? 'text-danger' : 'text-success'}`}>
+              <span
+                className={`tabular-nums font-semibold ${row.balance < 0 ? 'text-danger' : 'text-success'}`}
+              >
                 {row.balance}
               </span>
             </button>
@@ -217,7 +219,14 @@ export default function DkpPage() {
                     minute: '2-digit',
                   })}
                 </Table.Td>
-                <Table.Td className="font-medium"><a className="text-accent hover:underline" href={`/profiles/${encodeURIComponent(row.memberId)}`}>{row.memberName}</a></Table.Td>
+                <Table.Td className="font-medium">
+                  <a
+                    className="text-accent hover:underline"
+                    href={`/profiles/${encodeURIComponent(row.memberId)}`}
+                  >
+                    {row.memberName}
+                  </a>
+                </Table.Td>
                 <Table.Td>
                   <Badge tone={row.type === 'ADJUSTMENT' ? 'warning' : 'neutral'}>
                     {TYPE_LABELS[row.type] ?? row.type}

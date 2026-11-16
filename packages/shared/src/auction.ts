@@ -55,7 +55,7 @@ export function lotDurationSec(value: number, unit: LotDurationUnit): number {
 
 const intField = (bounds: { min: number; max: number }, label: string) =>
   z
-    .number({ invalid_type_error: `${label} — число` })
+    .number({ error: `${label} — число` })
     .int(`${label} — целое число`)
     .min(bounds.min, `${label}: не меньше ${bounds.min}`)
     .max(bounds.max, `${label}: не больше ${bounds.max}`);
@@ -68,9 +68,7 @@ const lotParamsObject = z.object({
   startPrice: intField(LOT_LIMITS.startPrice, 'Стартовая цена'),
   step: intField(LOT_LIMITS.step, 'Шаг ставки'),
   timerKind: z.enum(LOT_TIMER_KINDS),
-  durationValue: z
-    .number({ invalid_type_error: 'Длительность — число' })
-    .positive('Длительность больше нуля'),
+  durationValue: z.number({ error: 'Длительность — число' }).positive('Длительность больше нуля'),
   durationUnit: z.enum(LOT_DURATION_UNITS),
   antiSnipeSec: intField(LOT_LIMITS.antiSnipeSec, 'Анти-снайп (окно)'),
   /** Продление окончания при снайп-ставке; по умолчанию — из настроек. */
@@ -78,10 +76,7 @@ const lotParamsObject = z.object({
   noBidTimeoutSec: intField(LOT_LIMITS.noBidTimeoutSec, 'Тайм-аут без ставок').nullish(),
 });
 
-const refineLotParams = (
-  input: z.infer<typeof lotParamsObject>,
-  ctx: z.RefinementCtx,
-): void => {
+const refineLotParams = (input: z.infer<typeof lotParamsObject>, ctx: z.RefinementCtx): void => {
   const sec = lotDurationSec(input.durationValue, input.durationUnit);
   const bounds =
     input.timerKind === 'FIRST_BID' ? LOT_LIMITS.liveDurationSec : LOT_LIMITS.longDurationSec;
@@ -255,7 +250,7 @@ export interface BidLotParams {
 /** Новая ставка. */
 export const placeBidSchema = z.object({
   amount: z
-    .number({ invalid_type_error: 'Ставка — число' })
+    .number({ error: 'Ставка — число' })
     .int('Ставка — целое число')
     .min(0, 'Ставка неотрицательная')
     .max(1_000_000, 'Ставка: не больше 1 000 000'),
@@ -527,7 +522,7 @@ export const LOT_MANAGE_LIMITS = {
 
 /** Причина ручного действия — обязательна и попадает в аудит (план 6, п. 8). */
 const reasonField = z
-  .string({ invalid_type_error: 'Причина — текст' })
+  .string({ error: 'Причина — текст' })
   .trim()
   .min(LOT_MANAGE_LIMITS.comment.min, 'Укажите причину действия')
   .max(LOT_MANAGE_LIMITS.comment.max, 'Причина: не длиннее 500 символов');
@@ -715,6 +710,8 @@ export interface AuctionListRow {
   discountPct: number;
   /** Предмет лота — предпочитаемый просматривающим на момент создания лота. */
   myPreferred: boolean;
+  /** Собственная роль из снимка лота, чтобы подсказка цены совпадала со ставкой. */
+  myCombatRole?: import('./domain').CombatRole | null;
   timerKind: LotTimerKind;
   antiSnipeSec: number;
   antiSnipeExtendSec: number;

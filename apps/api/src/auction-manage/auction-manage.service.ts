@@ -284,8 +284,7 @@ export class AuctionManageService {
         top.memberId,
         -top.fullCost,
         auctionId,
-        `Трата на аукционе: «${itemName}» за ${top.fullCost}` +
-          priceModifiers(top),
+        `Трата на аукционе: «${itemName}» за ${top.fullCost}` + priceModifiers(top),
       );
       await this.audit(
         tx,

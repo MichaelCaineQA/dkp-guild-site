@@ -12,10 +12,7 @@ import {
 
 /** Соединение живо и срез получен. */
 export type AuctionConnection =
-  | { status: 'connecting' }
-  | { status: 'live' }
-  | { status: 'unauthorized' }
-  | { status: 'error' };
+  { status: 'connecting' } | { status: 'live' } | { status: 'unauthorized' } | { status: 'error' };
 
 /**
  * Realtime лота (issue #97, план §6): ставки, таймеры и закрытие без
@@ -110,7 +107,9 @@ function applyBid(
 ): AuctionLiveState | null {
   if (!prev || event.auctionId !== lotId) return prev;
   if (prev.bids.some((bid) => bid.id === event.bid.id)) {
-    return event.endsAt === prev.lot.endsAt ? prev : { ...prev, lot: { ...prev.lot, endsAt: event.endsAt } };
+    return event.endsAt === prev.lot.endsAt
+      ? prev
+      : { ...prev, lot: { ...prev.lot, endsAt: event.endsAt } };
   }
   return {
     ...prev,

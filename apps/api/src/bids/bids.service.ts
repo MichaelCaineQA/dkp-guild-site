@@ -26,8 +26,10 @@ import {
 } from '@dkp/shared';
 import { serializable } from '../prisma/serializable';
 import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction-events';
+import { bidderProfileAtCreation, type BidderProfiles } from '@dkp/shared';
 
 interface StoredAuction {
+  bidderProfiles?: BidderProfiles;
   id: string;
   status: string;
   startPrice: number;
@@ -190,8 +192,7 @@ export class BidsService {
         orderBy: { createdAt: 'asc' },
         include: { member: true },
       });
-      const current =
-        existing.length === 0 ? null : Math.max(...existing.map((bid) => bid.amount));
+      const current = existing.length === 0 ? null : Math.max(...existing.map((bid) => bid.amount));
       const others = await tx.auction.findMany({
         where: { status: 'OPEN', id: { not: auctionId } },
         include: { bids: true },
@@ -213,8 +214,15 @@ export class BidsService {
 
       // Снимок на момент создания лота (план 6, п. 6, решение 18): смена роли
       // или предпочитаемого предмета после создания лота цену не меняет.
-      const roleThen = roleAtLotCreation(member, auction.createdAt);
-      const preferredThen = prefersItemAtLotCreation(member, auction.createdAt, auction.lootDrop.itemId);
+      const snapshot = auction.bidderProfiles
+        ? bidderProfileAtCreation(auction.bidderProfiles, memberId)
+        : null;
+      const roleThen = snapshot
+        ? snapshot.combatRole
+        : roleAtLotCreation(member, auction.createdAt);
+      const preferredThen = snapshot
+        ? snapshot.preferredItemId === auction.lootDrop.itemId
+        : prefersItemAtLotCreation(member, auction.createdAt, auction.lootDrop.itemId);
       const foreign = isForeignBidder(lot.targetRoles, roleThen);
       const discountPct = preferredThen ? auction.discountPct : 0;
       const fullCost = bidFullCost(amount, lot.markupPct, foreign, discountPct);
@@ -283,7 +291,9 @@ export class BidsService {
       status: auction.status as LotStatus,
       startPrice: auction.startPrice,
       step: auction.step,
-      timerKind: auction.timerFromFirstBid ? ('FIRST_BID' as LotTimerKind) : ('OPENING' as LotTimerKind),
+      timerKind: auction.timerFromFirstBid
+        ? ('FIRST_BID' as LotTimerKind)
+        : ('OPENING' as LotTimerKind),
       durationSec: auction.durationSec,
       antiSnipeSec: auction.antiSnipeSec,
       antiSnipeExtendSec: auction.antiSnipeExtendSec,

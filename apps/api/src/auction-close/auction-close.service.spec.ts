@@ -37,7 +37,13 @@ function makeDb(auctions: FakeAuction[]) {
       findUnique: async ({ where: { id } }: { where: { id: string } }) => store.get(id) ?? null,
       findMany: async ({ where: { status } }: { where: { status: string } }) =>
         [...store.values()].filter((a) => a.status === status),
-      update: async ({ where: { id }, data }: { where: { id: string }; data: { status: 'CLOSED' } }) => {
+      update: async ({
+        where: { id },
+        data,
+      }: {
+        where: { id: string };
+        data: { status: 'CLOSED' };
+      }) => {
         Object.assign(store.get(id)!, data);
       },
     },
@@ -84,8 +90,24 @@ describe('AuctionCloseService (issue #95)', () => {
     const { db, created } = makeDb([
       longLot({
         bids: [
-          { id: 'b1', memberId: 'm1', amount: 100, fullCost: 100, markupPct: 0, discountPct: 0, member: { nickname: 'ДД' } },
-          { id: 'b2', memberId: 'm2', amount: 150, fullCost: 225, markupPct: 50, discountPct: 0, member: { nickname: 'Хил' } },
+          {
+            id: 'b1',
+            memberId: 'm1',
+            amount: 100,
+            fullCost: 100,
+            markupPct: 0,
+            discountPct: 0,
+            member: { nickname: 'ДД' },
+          },
+          {
+            id: 'b2',
+            memberId: 'm2',
+            amount: 150,
+            fullCost: 225,
+            markupPct: 50,
+            discountPct: 0,
+            member: { nickname: 'Хил' },
+          },
         ],
       }),
     ]);
@@ -182,7 +204,14 @@ describe('AuctionCloseService (issue #95)', () => {
     const { db, created } = makeDb([
       longLot({
         bids: [
-          { id: 'b1', memberId: 'm1', amount: 100, fullCost: 100, markupPct: 0, member: { nickname: 'ДД' } },
+          {
+            id: 'b1',
+            memberId: 'm1',
+            amount: 100,
+            fullCost: 100,
+            markupPct: 0,
+            member: { nickname: 'ДД' },
+          },
         ],
       }),
     ]);
@@ -241,12 +270,26 @@ describe('AuctionCloseService: событие realtime (issue #97)', () => {
   it('закрытие отправляет lotClosed с победителем, повторный проход молчит', async () => {
     const events: AuctionEventsPort = {
       lotCreated: jest.fn(),
-      bidPlaced: jest.fn(), bidsRemoved: jest.fn(),
+      bidPlaced: jest.fn(),
+      bidsRemoved: jest.fn(),
       lotUpdated: jest.fn(),
       lotClosed: jest.fn(),
-    userAccessRevoked: jest.fn(),
+      userAccessRevoked: jest.fn(),
     };
-    const { db } = makeDb([longLot({ bids: [{ id: 'b1', memberId: 'm1', amount: 100, fullCost: 100, markupPct: 0, member: { nickname: 'ДД' } }] })]);
+    const { db } = makeDb([
+      longLot({
+        bids: [
+          {
+            id: 'b1',
+            memberId: 'm1',
+            amount: 100,
+            fullCost: 100,
+            markupPct: 0,
+            member: { nickname: 'ДД' },
+          },
+        ],
+      }),
+    ]);
     const svc = new AuctionCloseService(db, () => NOW, 0, events);
 
     await svc.closeExpiredLot('lot-1');

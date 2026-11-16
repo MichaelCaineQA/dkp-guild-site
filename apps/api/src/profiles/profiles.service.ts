@@ -275,8 +275,7 @@ export class ProfilesService {
       const preferredChanged =
         input.preferredItemId !== undefined && input.preferredItemId !== member.preferredItemId;
       // Ник уникален (аудит F03): чужой занятый — 409, свой прежний — не смена
-      const nicknameChanged =
-        input.nickname !== undefined && input.nickname !== member.nickname;
+      const nicknameChanged = input.nickname !== undefined && input.nickname !== member.nickname;
       if (nicknameChanged) {
         const clash = await tx.member.findFirst({ where: { nickname: input.nickname! } });
         if (clash && clash.id !== id) {

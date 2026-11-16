@@ -273,8 +273,8 @@ suite('AuctionsService: PostgreSQL', () => {
     });
     expect(changed.finalPrice).toBe(-newSpend!.amount);
     // старые записи журнала не тронуты — исправление не переписывает журнал
-    expect(
-      await db.dkpEntry.count({ where: { auctionId: lot.id, type: 'AUCTION_SPEND' } }),
-    ).toBe(3);
+    expect(await db.dkpEntry.count({ where: { auctionId: lot.id, type: 'AUCTION_SPEND' } })).toBe(
+      3,
+    );
   });
 });

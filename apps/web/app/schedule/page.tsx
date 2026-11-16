@@ -28,6 +28,7 @@ import {
   Select,
   ScheduleColumns,
   WeekEventButton,
+  MobileCalendarList,
 } from '../../components/ui';
 interface EventTypeRow {
   id: string;
@@ -351,56 +352,59 @@ function MonthGrid({
   }, [monthCursor]);
 
   return (
-    <div className="mt-3 grid grid-cols-7 gap-1 text-sm">
-      {WEEKDAYS.map((day) => (
-        <div key={day} className="pb-1 text-center text-xs font-semibold text-secondary">
-          {day}
-        </div>
-      ))}
-      {days.map((day) => {
-        const dayEvents = events.filter(
-          (event) => localDayKey(new Date(event.startsAt)) === localDayKey(day),
-        );
-        const inMonth = day.getMonth() === monthCursor.getMonth();
-        const isToday = localDayKey(day) === localDayKey(new Date());
-        return (
-          <div
-            key={day.toISOString()}
-            className={`min-h-24 rounded-lg border p-1 ${
-              inMonth ? 'border-line bg-surface' : 'border-line/40 bg-surface-muted/40'
-            } ${isToday ? 'ring-1 ring-accent' : ''}`}
-          >
-            <div className={`text-right text-xs ${inMonth ? 'text-secondary' : 'text-disabled'}`}>
-              {day.getDate()}
-            </div>
-            <div className="flex flex-col gap-0.5">
-              {(expandedDay === localDayKey(day) ? dayEvents : dayEvents.slice(0, 4)).map(
-                (event) => (
-                  <button
-                    key={event.id}
-                    type="button"
-                    onClick={() => onSelect(event)}
-                    className={`w-full text-left ${+new Date(event.endsAt) <= Date.now() || event.status === 'FINISHED' ? 'opacity-60' : ''}`}
-                    title={`${event.name || event.eventTypeName} · ${new Date(event.startsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · РЛ ${event.raidLeadName}`}
-                  >
-                    <EventPhaseBar event={event} gameTime={gameTime} />
-                  </button>
-                ),
-              )}
-              {dayEvents.length > 4 && expandedDay !== localDayKey(day) && (
-                <button
-                  type="button"
-                  className="text-left text-xs text-accent"
-                  onClick={() => setExpandedDay(localDayKey(day))}
-                >
-                  +{dayEvents.length - 4}
-                </button>
-              )}
-            </div>
+    <>
+      <MobileCalendarList events={events} onSelect={onSelect} />
+      <div className="mt-3 hidden grid-cols-7 gap-1 text-sm sm:grid">
+        {WEEKDAYS.map((day) => (
+          <div key={day} className="pb-1 text-center text-xs font-semibold text-secondary">
+            {day}
           </div>
-        );
-      })}
-    </div>
+        ))}
+        {days.map((day) => {
+          const dayEvents = events.filter(
+            (event) => localDayKey(new Date(event.startsAt)) === localDayKey(day),
+          );
+          const inMonth = day.getMonth() === monthCursor.getMonth();
+          const isToday = localDayKey(day) === localDayKey(new Date());
+          return (
+            <div
+              key={day.toISOString()}
+              className={`min-h-24 rounded-lg border p-1 ${
+                inMonth ? 'border-line bg-surface' : 'border-line/40 bg-surface-muted/40'
+              } ${isToday ? 'ring-1 ring-accent' : ''}`}
+            >
+              <div className={`text-right text-xs ${inMonth ? 'text-secondary' : 'text-disabled'}`}>
+                {day.getDate()}
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {(expandedDay === localDayKey(day) ? dayEvents : dayEvents.slice(0, 4)).map(
+                  (event) => (
+                    <button
+                      key={event.id}
+                      type="button"
+                      onClick={() => onSelect(event)}
+                      className={`w-full text-left ${+new Date(event.endsAt) <= Date.now() || event.status === 'FINISHED' ? 'opacity-60' : ''}`}
+                      title={`${event.name || event.eventTypeName} · ${new Date(event.startsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · РЛ ${event.raidLeadName}`}
+                    >
+                      <EventPhaseBar event={event} gameTime={gameTime} />
+                    </button>
+                  ),
+                )}
+                {dayEvents.length > 4 && expandedDay !== localDayKey(day) && (
+                  <button
+                    type="button"
+                    className="text-left text-xs text-accent"
+                    onClick={() => setExpandedDay(localDayKey(day))}
+                  >
+                    +{dayEvents.length - 4}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 

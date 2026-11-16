@@ -166,19 +166,28 @@ export class MembersService {
     const members = await this.db.member.findMany({
       where,
       orderBy: { nickname: 'asc' },
-      include: { user: { select: { username: true } }, ...(filters.availableNow ? { primeTime: true } : {}) },
+      include: {
+        user: { select: { username: true } },
+        ...(filters.availableNow ? { primeTime: true } : {}),
+      },
     });
     const now = this.now();
-    return members.filter((m) => !filters.availableNow || isAvailableAt(m.primeTime ?? [], m.timeZone ?? 'Europe/Moscow', now)).map((m) => ({
-      id: m.id,
-      avatar: m.avatar ?? null,
-      avatarColor: m.avatarColor ?? null,
-      nickname: m.nickname,
-      rank: m.rank,
-      combatRole: m.combatRole,
-      weapons: m.weapons ?? [],
-      discord: m.user?.username ?? null,
-    }));
+    return members
+      .filter(
+        (m) =>
+          !filters.availableNow ||
+          isAvailableAt(m.primeTime ?? [], m.timeZone ?? 'Europe/Moscow', now),
+      )
+      .map((m) => ({
+        id: m.id,
+        avatar: m.avatar ?? null,
+        avatarColor: m.avatarColor ?? null,
+        nickname: m.nickname,
+        rank: m.rank,
+        combatRole: m.combatRole,
+        weapons: m.weapons ?? [],
+        discord: m.user?.username ?? null,
+      }));
   }
 
   async getOne(id: string): Promise<RosterRow> {
@@ -200,6 +209,14 @@ export class MembersService {
 
   /** Создание члена (members.manage): до привязки Discord — «пустышка». */
   async create(body: unknown, actor: Actor): Promise<MemberRow> {
+    return serializable(
+      this.db,
+      (tx) => new MembersService(tx as MembersDb).createInTransaction(body, actor),
+      true,
+    );
+  }
+
+  private async createInTransaction(body: unknown, actor: Actor): Promise<MemberRow> {
     const parsed = createMemberSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException('Укажите ник, роль и два разных оружия');
     const input: CreateMemberInput = parsed.data;
@@ -282,30 +299,33 @@ export class MembersService {
       );
     }
 
-    const member = await this.mustExist(id);
-    if (member.rank === input.rank) {
-      throw new ConflictException('У члена уже этот ранг');
-    }
-    // Единственного Главу понизить нельзя — даже если ранг пришёл легитимным
-    // путём (защита не зависит от guard'а выше)
-    if (member.rank === 'GUILD_LEADER') {
-      const leaders = await this.db.member.count({ where: { rank: 'GUILD_LEADER' } });
-      if (leaders <= 1) {
-        throw new ConflictException('Нельзя понизить последнего Главу гильдии');
+    return serializable(this.db, async (tx) => {
+      const member = await tx.member.findUnique({ where: { id } });
+      if (!member) throw new NotFoundException('Член гильдии не найден');
+      if (member.rank === input.rank) {
+        throw new ConflictException('У члена уже этот ранг');
       }
-    }
+      // Единственного Главу понизить нельзя — даже если ранг пришёл легитимным
+      // путём (защита не зависит от guard'а выше)
+      if (member.rank === 'GUILD_LEADER') {
+        const leaders = await tx.member.count({ where: { rank: 'GUILD_LEADER' } });
+        if (leaders <= 1) {
+          throw new ConflictException('Нельзя понизить последнего Главу гильдии');
+        }
+      }
 
-    const updated = await this.db.member.update({
-      where: { id },
-      data: { rank: input.rank },
+      const updated = await tx.member.update({
+        where: { id },
+        data: { rank: input.rank },
+      });
+      await new MembersService(tx as MembersDb).audit(
+        actor,
+        'ROLE_CHANGE',
+        member.id,
+        `Ранг «${member.rank}» → «${updated.rank}». ${input.comment}`,
+      );
+      return updated;
     });
-    await this.audit(
-      actor,
-      'ROLE_CHANGE',
-      member.id,
-      `Ранг «${member.rank}» → «${updated.rank}». ${input.comment}`,
-    );
-    return updated;
   }
 
   /**

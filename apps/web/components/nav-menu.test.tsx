@@ -13,7 +13,14 @@ vi.mock('next/navigation', () => ({ usePathname: vi.fn() }));
 vi.mock('./session-context', () => ({ useSession: vi.fn() }));
 function session(rank: 'MEMBER' | 'OFFICER' | 'GUILD_LEADER' | null, isAdmin = false) {
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u', username: 'Тест', memberId: isAdmin ? null : 'm', rank, isAdmin, blocked: false },
+    user: {
+      userId: 'u',
+      username: 'Тест',
+      memberId: isAdmin ? null : 'm',
+      rank,
+      isAdmin,
+      blocked: false,
+    },
     loading: false,
     reload: vi.fn(),
   });

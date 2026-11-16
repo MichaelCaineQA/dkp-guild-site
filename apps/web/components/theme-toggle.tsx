@@ -19,7 +19,8 @@ export function ThemeToggle() {
   }, []);
 
   const toggle = () => {
-    const current = manual ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const current =
+      manual ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     const next = current === 'dark' ? 'light' : 'dark';
     setManual(next);
     window.localStorage.setItem('theme', next);

@@ -1,2 +1,9 @@
 # Shell-скрипты должны исполняться на Linux и после checkout на Windows.
 *.sh text eol=lf
+# Python, YAML и конфигурация развёртывания используются на Linux.
+*.py text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.conf text eol=lf
+Caddyfile* text eol=lf
+installer/dkp text eol=lf

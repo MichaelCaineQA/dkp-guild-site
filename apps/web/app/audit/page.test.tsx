@@ -9,7 +9,14 @@ vi.mock('../../components/session-context', () => ({ useSession: vi.fn() }));
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u1', username: 'Офицер', memberId: 'm1', rank: 'OFFICER', isAdmin: false, blocked: false },
+    user: {
+      userId: 'u1',
+      username: 'Офицер',
+      memberId: 'm1',
+      rank: 'OFFICER',
+      isAdmin: false,
+      blocked: false,
+    },
     loading: false,
     reload: vi.fn(),
   });
@@ -37,7 +44,14 @@ afterEach(cleanup);
 
 it('рядовой открывает личный журнал', async () => {
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u2', username: 'Игрок', memberId: 'm2', rank: 'MEMBER', isAdmin: false, blocked: false },
+    user: {
+      userId: 'u2',
+      username: 'Игрок',
+      memberId: 'm2',
+      rank: 'MEMBER',
+      isAdmin: false,
+      blocked: false,
+    },
     loading: false,
     reload: vi.fn(),
   });

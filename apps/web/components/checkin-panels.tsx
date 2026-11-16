@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { Modal, Button, Stack, Muted } from './ui';
 
 interface PlayerCheckInView {
   phase: 'START' | 'END';
@@ -117,38 +118,22 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
 
       {/* Модалка подтверждения (план 2.2): случайный клик не тратит попытку */}
       {picked !== null && (
-        <div
-          className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setPicked(null)}
+        <Modal
+          title={`Код ${picked} — подтвердить?`}
+          onClose={() => {
+            if (!busy) setPicked(null);
+          }}
         >
-          <div
-            className="w-full max-w-xs rounded-xl border border-line bg-surface p-5 shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p className="text-center text-lg font-semibold">Код {picked} — подтвердить?</p>
-            <p className="mt-1 text-center text-xs text-secondary">
-              Попытка одна: ошибётесь — отметит только РЛ вручную
-            </p>
-            <div className="mt-4 flex justify-center gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={confirm}
-                className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
-              >
-                Подтвердить
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setPicked(null)}
-                className="rounded-lg border border-line bg-surface px-4 py-1.5 text-sm hover:bg-surface-muted"
-              >
-                Назад
-              </button>
-            </div>
-          </div>
-        </div>
+          <Stack>
+            <Muted>Попытка одна: ошибётесь — отметит только РЛ вручную</Muted>
+            <Button type="button" disabled={busy} onClick={confirm}>
+              Подтвердить
+            </Button>
+            <Button type="button" disabled={busy} onClick={() => setPicked(null)}>
+              Назад
+            </Button>
+          </Stack>
+        </Modal>
       )}
     </div>
   );

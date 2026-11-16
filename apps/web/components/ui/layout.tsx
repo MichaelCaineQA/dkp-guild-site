@@ -54,7 +54,9 @@ export function PageHeader({ title, subtitle }: { title: ReactNode; subtitle?: s
 /** Карточка — основной контейнер контента. */
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <section className={`rounded-xl border border-line bg-surface p-5 shadow-sm ${className}`}>
+    <section
+      className={`min-w-0 rounded-xl border border-line bg-surface p-5 shadow-sm ${className}`}
+    >
       {children}
     </section>
   );

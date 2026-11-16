@@ -1,9 +1,4 @@
-import type {
-  AuctionCloseReason,
-  AuctionLotRow,
-  BidRow,
-  LotAwardRow,
-} from '@dkp/shared';
+import type { AuctionCloseReason, AuctionLotRow, BidRow, LotAwardRow } from '@dkp/shared';
 
 /**
  * Порт событий аукциона (issue #97, план §7). Сервисы сообщают об изменениях
@@ -28,11 +23,7 @@ export interface AuctionEventsPort {
    * срез (актуальный статус, ставки, выдача); в канале списка — лёгкое
    * событие без перезагрузки строки лота.
    */
-  lotClosed(
-    auctionId: string,
-    winner: LotAwardRow | null,
-    reason: AuctionCloseReason,
-  ): void;
+  lotClosed(auctionId: string, winner: LotAwardRow | null, reason: AuctionCloseReason): void;
   /**
    * Доступ пользователя отозван — блокировка (issue #149) или выход:
    * все сокеты пользователя закрываются (аудит F02), включая другие

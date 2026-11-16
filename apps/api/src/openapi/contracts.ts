@@ -257,7 +257,7 @@ export const contracts: Record<string, Contract> = {
     access: 'Вошедший Discord-аккаунт.',
     errors: [400, 413],
     description:
-      'Поле file: PNG, JPG/JPEG или WebP до 10 МБ включительно. Возвращённый id указывается в screenshotIds анкеты. Проверяется сигнатура формата.',
+      'Поле file: PNG, JPG/JPEG или WebP до 10 МБ включительно и 40 млн пикселей. Возвращённый id указывается в screenshotIds анкеты или записи GS. Изображение полностью декодируется до записи.',
   }),
   Screenshots_download: c(
     'Открыть приватный скриншот',
@@ -450,6 +450,12 @@ export const contracts: Record<string, Contract> = {
     errors: [400],
   }),
   Audit_actions: c('Получить доступные действия аудита', array(str)),
+  Profiles_addGearScore: c('Добавить свой GS со скриншотами', 'Ok', {
+    body: 'AddGearScore',
+    errors: [400, 403],
+    description:
+      'Только владелец профиля. Скриншоты должны принадлежать его аккаунту. История GS сохраняется.',
+  }),
   Profiles_get: c('Получить профиль игрока', 'Profile', {
     errors: [404],
     description:

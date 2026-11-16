@@ -1,12 +1,21 @@
-import { Body, Controller, Get, Param, Patch, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard';
 import { PermissionsGuard, RequirePermission } from '../permissions/permissions.guard';
 import { ProfilesService } from './profiles.service';
+import { GearScoreService } from './gear-score.service';
 
 @Controller('profiles')
 @UseGuards(AuthGuard, PermissionsGuard)
 export class ProfilesController {
-  constructor(private readonly profiles: ProfilesService) {}
+  constructor(
+    private readonly profiles: ProfilesService,
+    private readonly gearScores: GearScoreService,
+  ) {}
+  @Post(':id/gear-score')
+  @RequirePermission('profile.edit_own')
+  addGearScore(@Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest) {
+    return this.gearScores.add(id, body, req.session!.user!);
+  }
   @Get(':id')
   @RequirePermission('profile.view')
   get(@Param('id') id: string, @Req() req: AuthedRequest) {

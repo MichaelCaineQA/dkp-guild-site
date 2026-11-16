@@ -31,7 +31,14 @@ const LEADER_NICK = 'Дарсиэль';
 function at(offsetDays: number, hourUtc = 18, minute = 0): Date {
   const now = new Date();
   return new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + offsetDays, hourUtc, minute, 0),
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() + offsetDays,
+      hourUtc,
+      minute,
+      0,
+    ),
   );
 }
 
@@ -42,24 +49,78 @@ function sid(kind: string, key: string | number): string {
 const PACK_NAMES = ['Вальхалла', 'Асгард', 'Фолькванг'];
 
 const KP_STRUCTURE: Record<string, string[]> = {
-  'Авангард': ['Вальхалла', 'Асгард'],
-  'Бастион': ['Фолькванг'],
+  Авангард: ['Вальхалла', 'Асгард'],
+  Бастион: ['Фолькванг'],
 };
 
 const PACK_LEADER_NICKS: Record<string, string> = {
-  'Вальхалла': 'Дарсиэль',
-  'Асгард': 'Дрейкар',
-  'Фолькванг': 'Хельга',
+  Вальхалла: 'Дарсиэль',
+  Асгард: 'Дрейкар',
+  Фолькванг: 'Хельга',
 };
 
 const NICKS: string[] = [
-  'Дарсиэль', 'Хельга', 'Дрейкар', 'Мирелла', 'Гром', 'Айвор', 'Торвальд', 'Сирена', 'Лираэль',
-  'Тэлон', 'Кайра', 'Фрост', 'Рагнар', 'Грим', 'Никс', 'Орвин', 'Брандт', 'Селена',
-  'Аэлин', 'Валорис', 'Веспер', 'Гилдан', 'Дагни', 'Эйра', 'Ивар', 'Йорунн', 'Кальдра',
-  'Лейф', 'Магни', 'Ньёрд', 'Один', 'Пелла', 'Рюрик', 'Сигурд', 'Тира', 'Ульв', 'Фенрир',
-  'Хальдир', 'Хеймдаль', 'Хильда', 'Эгиль', 'Эрна', 'Ярл', 'Астрид', 'Бьорн', 'Вермунд',
-  'Гуннар', 'Диса', 'Ингвар', 'Йордис', 'Кетиль', 'Лейв', 'Мюр', 'Нанна', 'Олаф',
-  'Рагнхильд', 'Свейн', 'Трюггви', 'Ульвар', 'Харальд', 'Эльва',
+  'Дарсиэль',
+  'Хельга',
+  'Дрейкар',
+  'Мирелла',
+  'Гром',
+  'Айвор',
+  'Торвальд',
+  'Сирена',
+  'Лираэль',
+  'Тэлон',
+  'Кайра',
+  'Фрост',
+  'Рагнар',
+  'Грим',
+  'Никс',
+  'Орвин',
+  'Брандт',
+  'Селена',
+  'Аэлин',
+  'Валорис',
+  'Веспер',
+  'Гилдан',
+  'Дагни',
+  'Эйра',
+  'Ивар',
+  'Йорунн',
+  'Кальдра',
+  'Лейф',
+  'Магни',
+  'Ньёрд',
+  'Один',
+  'Пелла',
+  'Рюрик',
+  'Сигурд',
+  'Тира',
+  'Ульв',
+  'Фенрир',
+  'Хальдир',
+  'Хеймдаль',
+  'Хильда',
+  'Эгиль',
+  'Эрна',
+  'Ярл',
+  'Астрид',
+  'Бьорн',
+  'Вермунд',
+  'Гуннар',
+  'Диса',
+  'Ингвар',
+  'Йордис',
+  'Кетиль',
+  'Лейв',
+  'Мюр',
+  'Нанна',
+  'Олаф',
+  'Рагнхильд',
+  'Свейн',
+  'Трюггви',
+  'Ульвар',
+  'Харальд',
+  'Эльва',
 ];
 
 const WEAPON_PAIRS_BY_ROLE: Record<CombatRole, Weapon[][]> = {
@@ -150,48 +211,297 @@ interface ItemSpec {
 }
 
 const ITEMS_REAL: ItemSpec[] = [
-  { name: 'Зачарованный клинок королевы Белландир', rarity: 'ARCHBOSS', slot: 'WEAPON', targetRoles: ['TANK'], defaultStartPrice: 320 },
-  { name: 'Боевой клинок Тевента', rarity: 'ARCHBOSS', slot: 'WEAPON', targetRoles: ['TANK', 'DPS'], defaultStartPrice: 300 },
-  { name: 'Гнев Морокая', rarity: 'WORLD_BOSS', slot: 'WEAPON', targetRoles: ['TANK', 'DPS'], defaultStartPrice: 220 },
-  { name: 'Меч Ковазана из песка', rarity: 'WORLD_BOSS', slot: 'WEAPON', targetRoles: ['TANK', 'DPS'], defaultStartPrice: 200 },
-  { name: 'Клык лунного волка', rarity: 'EPIC', slot: 'WEAPON', targetRoles: ['DPS'], defaultStartPrice: 160 },
-  { name: 'Посох Лунного света', rarity: 'EPIC', slot: 'WEAPON', targetRoles: ['HEALER', 'DPS'], defaultStartPrice: 150 },
-  { name: 'Жезл Звёздного света', rarity: 'EPIC', slot: 'WEAPON', targetRoles: ['HEALER'], defaultStartPrice: 140 },
-  { name: 'Арбалет Убийцы драконов', rarity: 'EPIC', slot: 'WEAPON', targetRoles: ['DPS'], defaultStartPrice: 160 },
-  { name: 'Лук Феникса', rarity: 'EPIC', slot: 'WEAPON', targetRoles: ['DPS'], defaultStartPrice: 160 },
-  { name: 'Копьё Вихря', rarity: 'EPIC', slot: 'WEAPON', targetRoles: ['DPS'], defaultStartPrice: 150 },
-  { name: 'Клинок Багрового заката', rarity: 'EPIC', slot: 'WEAPON', targetRoles: ['DPS'], defaultStartPrice: 130 },
-  { name: 'Щит Каменной стражи', rarity: 'EPIC', slot: 'OFFHAND', targetRoles: ['TANK'], defaultStartPrice: 120 },
-  { name: 'Жезл Древнего древа', rarity: 'EPIC', slot: 'WEAPON', targetRoles: ['HEALER'], defaultStartPrice: 130 },
-  { name: 'Кинжал Ночного шепота', rarity: 'EPIC', slot: 'WEAPON', targetRoles: ['DPS'], defaultStartPrice: 110 },
-  { name: 'Молот Титана', rarity: 'EPIC', slot: 'WEAPON', targetRoles: ['TANK'], defaultStartPrice: 140 },
-  { name: 'Топор Павшего короля', rarity: 'EPIC', slot: 'WEAPON', targetRoles: ['DPS'], defaultStartPrice: 125 },
-  { name: 'Амулет Вечности', rarity: 'EPIC', slot: 'NECK', targetRoles: ['ALL'], defaultStartPrice: 90 },
-  { name: 'Кольцо Кровавой луны', rarity: 'EPIC', slot: 'RING', targetRoles: ['DPS'], defaultStartPrice: 100 },
-  { name: 'Кольцо Морского змея', rarity: 'RARE', slot: 'RING', targetRoles: ['ALL'], defaultStartPrice: 60 },
-  { name: 'Кольцо Титана', rarity: 'EPIC', slot: 'RING', targetRoles: ['TANK'], defaultStartPrice: 95 },
-  { name: 'Ожерелье Лунной жрицы', rarity: 'EPIC', slot: 'NECK', targetRoles: ['HEALER'], defaultStartPrice: 105 },
-  { name: 'Пояс Вулкана', rarity: 'EPIC', slot: 'BELT', targetRoles: ['TANK'], defaultStartPrice: 90 },
-  { name: 'Пояс Проклятого лорда', rarity: 'EPIC', slot: 'BELT', targetRoles: ['DPS'], defaultStartPrice: 85 },
-  { name: 'Наручи Титана', rarity: 'RARE', slot: 'BRACERS', targetRoles: ['TANK', 'DPS'], defaultStartPrice: 70 },
-  { name: 'Браслеты Огня', rarity: 'RARE', slot: 'BRACERS', targetRoles: ['ALL'], defaultStartPrice: 65 },
-  { name: 'Шлем Немезиды', rarity: 'EPIC', slot: 'HELMET', targetRoles: ['ALL'], defaultStartPrice: 80 },
-  { name: 'Корона Мёртвого короля', rarity: 'EPIC', slot: 'HELMET', targetRoles: ['ALL'], defaultStartPrice: 110 },
-  { name: 'Накидка Тени', rarity: 'RARE', slot: 'CLOAK', targetRoles: ['DPS'], defaultStartPrice: 65 },
+  {
+    name: 'Зачарованный клинок королевы Белландир',
+    rarity: 'ARCHBOSS',
+    slot: 'WEAPON',
+    targetRoles: ['TANK'],
+    defaultStartPrice: 320,
+  },
+  {
+    name: 'Боевой клинок Тевента',
+    rarity: 'ARCHBOSS',
+    slot: 'WEAPON',
+    targetRoles: ['TANK', 'DPS'],
+    defaultStartPrice: 300,
+  },
+  {
+    name: 'Гнев Морокая',
+    rarity: 'WORLD_BOSS',
+    slot: 'WEAPON',
+    targetRoles: ['TANK', 'DPS'],
+    defaultStartPrice: 220,
+  },
+  {
+    name: 'Меч Ковазана из песка',
+    rarity: 'WORLD_BOSS',
+    slot: 'WEAPON',
+    targetRoles: ['TANK', 'DPS'],
+    defaultStartPrice: 200,
+  },
+  {
+    name: 'Клык лунного волка',
+    rarity: 'EPIC',
+    slot: 'WEAPON',
+    targetRoles: ['DPS'],
+    defaultStartPrice: 160,
+  },
+  {
+    name: 'Посох Лунного света',
+    rarity: 'EPIC',
+    slot: 'WEAPON',
+    targetRoles: ['HEALER', 'DPS'],
+    defaultStartPrice: 150,
+  },
+  {
+    name: 'Жезл Звёздного света',
+    rarity: 'EPIC',
+    slot: 'WEAPON',
+    targetRoles: ['HEALER'],
+    defaultStartPrice: 140,
+  },
+  {
+    name: 'Арбалет Убийцы драконов',
+    rarity: 'EPIC',
+    slot: 'WEAPON',
+    targetRoles: ['DPS'],
+    defaultStartPrice: 160,
+  },
+  {
+    name: 'Лук Феникса',
+    rarity: 'EPIC',
+    slot: 'WEAPON',
+    targetRoles: ['DPS'],
+    defaultStartPrice: 160,
+  },
+  {
+    name: 'Копьё Вихря',
+    rarity: 'EPIC',
+    slot: 'WEAPON',
+    targetRoles: ['DPS'],
+    defaultStartPrice: 150,
+  },
+  {
+    name: 'Клинок Багрового заката',
+    rarity: 'EPIC',
+    slot: 'WEAPON',
+    targetRoles: ['DPS'],
+    defaultStartPrice: 130,
+  },
+  {
+    name: 'Щит Каменной стражи',
+    rarity: 'EPIC',
+    slot: 'OFFHAND',
+    targetRoles: ['TANK'],
+    defaultStartPrice: 120,
+  },
+  {
+    name: 'Жезл Древнего древа',
+    rarity: 'EPIC',
+    slot: 'WEAPON',
+    targetRoles: ['HEALER'],
+    defaultStartPrice: 130,
+  },
+  {
+    name: 'Кинжал Ночного шепота',
+    rarity: 'EPIC',
+    slot: 'WEAPON',
+    targetRoles: ['DPS'],
+    defaultStartPrice: 110,
+  },
+  {
+    name: 'Молот Титана',
+    rarity: 'EPIC',
+    slot: 'WEAPON',
+    targetRoles: ['TANK'],
+    defaultStartPrice: 140,
+  },
+  {
+    name: 'Топор Павшего короля',
+    rarity: 'EPIC',
+    slot: 'WEAPON',
+    targetRoles: ['DPS'],
+    defaultStartPrice: 125,
+  },
+  {
+    name: 'Амулет Вечности',
+    rarity: 'EPIC',
+    slot: 'NECK',
+    targetRoles: ['ALL'],
+    defaultStartPrice: 90,
+  },
+  {
+    name: 'Кольцо Кровавой луны',
+    rarity: 'EPIC',
+    slot: 'RING',
+    targetRoles: ['DPS'],
+    defaultStartPrice: 100,
+  },
+  {
+    name: 'Кольцо Морского змея',
+    rarity: 'RARE',
+    slot: 'RING',
+    targetRoles: ['ALL'],
+    defaultStartPrice: 60,
+  },
+  {
+    name: 'Кольцо Титана',
+    rarity: 'EPIC',
+    slot: 'RING',
+    targetRoles: ['TANK'],
+    defaultStartPrice: 95,
+  },
+  {
+    name: 'Ожерелье Лунной жрицы',
+    rarity: 'EPIC',
+    slot: 'NECK',
+    targetRoles: ['HEALER'],
+    defaultStartPrice: 105,
+  },
+  {
+    name: 'Пояс Вулкана',
+    rarity: 'EPIC',
+    slot: 'BELT',
+    targetRoles: ['TANK'],
+    defaultStartPrice: 90,
+  },
+  {
+    name: 'Пояс Проклятого лорда',
+    rarity: 'EPIC',
+    slot: 'BELT',
+    targetRoles: ['DPS'],
+    defaultStartPrice: 85,
+  },
+  {
+    name: 'Наручи Титана',
+    rarity: 'RARE',
+    slot: 'BRACERS',
+    targetRoles: ['TANK', 'DPS'],
+    defaultStartPrice: 70,
+  },
+  {
+    name: 'Браслеты Огня',
+    rarity: 'RARE',
+    slot: 'BRACERS',
+    targetRoles: ['ALL'],
+    defaultStartPrice: 65,
+  },
+  {
+    name: 'Шлем Немезиды',
+    rarity: 'EPIC',
+    slot: 'HELMET',
+    targetRoles: ['ALL'],
+    defaultStartPrice: 80,
+  },
+  {
+    name: 'Корона Мёртвого короля',
+    rarity: 'EPIC',
+    slot: 'HELMET',
+    targetRoles: ['ALL'],
+    defaultStartPrice: 110,
+  },
+  {
+    name: 'Накидка Тени',
+    rarity: 'RARE',
+    slot: 'CLOAK',
+    targetRoles: ['DPS'],
+    defaultStartPrice: 65,
+  },
   { name: 'Плащ Бури', rarity: 'EPIC', slot: 'CLOAK', targetRoles: ['ALL'], defaultStartPrice: 90 },
-  { name: 'Доспех Ледяного великана', rarity: 'EPIC', slot: 'CHEST', targetRoles: ['TANK'], defaultStartPrice: 130 },
-  { name: 'Перчатки Павшего ангела', rarity: 'EPIC', slot: 'GLOVES', targetRoles: ['HEALER'], defaultStartPrice: 85 },
-  { name: 'Сандалии Ветра', rarity: 'RARE', slot: 'BOOTS', targetRoles: ['ALL'], defaultStartPrice: 55 },
-  { name: 'Сапоги Скорохода', rarity: 'RARE', slot: 'BOOTS', targetRoles: ['ALL'], defaultStartPrice: 50 },
-  { name: 'Щит Бастиона', rarity: 'EPIC', slot: 'OFFHAND', targetRoles: ['TANK'], defaultStartPrice: 100 },
-  { name: 'Меч Вихря', rarity: 'EPIC', slot: 'WEAPON', targetRoles: ['DPS', 'TANK'], defaultStartPrice: 115 },
+  {
+    name: 'Доспех Ледяного великана',
+    rarity: 'EPIC',
+    slot: 'CHEST',
+    targetRoles: ['TANK'],
+    defaultStartPrice: 130,
+  },
+  {
+    name: 'Перчатки Павшего ангела',
+    rarity: 'EPIC',
+    slot: 'GLOVES',
+    targetRoles: ['HEALER'],
+    defaultStartPrice: 85,
+  },
+  {
+    name: 'Сандалии Ветра',
+    rarity: 'RARE',
+    slot: 'BOOTS',
+    targetRoles: ['ALL'],
+    defaultStartPrice: 55,
+  },
+  {
+    name: 'Сапоги Скорохода',
+    rarity: 'RARE',
+    slot: 'BOOTS',
+    targetRoles: ['ALL'],
+    defaultStartPrice: 50,
+  },
+  {
+    name: 'Щит Бастиона',
+    rarity: 'EPIC',
+    slot: 'OFFHAND',
+    targetRoles: ['TANK'],
+    defaultStartPrice: 100,
+  },
+  {
+    name: 'Меч Вихря',
+    rarity: 'EPIC',
+    slot: 'WEAPON',
+    targetRoles: ['DPS', 'TANK'],
+    defaultStartPrice: 115,
+  },
 ];
 
 function buildTemplateItems(): ItemSpec[] {
-  const adjectives = ['Багряный', 'Ледяной', 'Тенистый', 'Огненный', 'Звёздный', 'Древний', 'Проклятый', 'Святой', 'Лунный', 'Солнечный'];
-  const nouns = ['Клинок', 'Посох', 'Кинжал', 'Щит', 'Лук', 'Арбалет', 'Жезл', 'Копьё', 'Молот', 'Топор', 'Наруч'];
-  const suffixes = ['дракона', 'ветра', 'бури', 'тьмы', 'света', 'титана', 'короля', 'хаоса', 'бездны', 'звёзд'];
-  const slots = ['WEAPON', 'CHEST', 'RING', 'NECK', 'BOOTS', 'HELMET', 'CLOAK', 'BELT', 'GLOVES', 'BRACERS'];
+  const adjectives = [
+    'Багряный',
+    'Ледяной',
+    'Тенистый',
+    'Огненный',
+    'Звёздный',
+    'Древний',
+    'Проклятый',
+    'Святой',
+    'Лунный',
+    'Солнечный',
+  ];
+  const nouns = [
+    'Клинок',
+    'Посох',
+    'Кинжал',
+    'Щит',
+    'Лук',
+    'Арбалет',
+    'Жезл',
+    'Копьё',
+    'Молот',
+    'Топор',
+    'Наруч',
+  ];
+  const suffixes = [
+    'дракона',
+    'ветра',
+    'бури',
+    'тьмы',
+    'света',
+    'титана',
+    'короля',
+    'хаоса',
+    'бездны',
+    'звёзд',
+  ];
+  const slots = [
+    'WEAPON',
+    'CHEST',
+    'RING',
+    'NECK',
+    'BOOTS',
+    'HELMET',
+    'CLOAK',
+    'BELT',
+    'GLOVES',
+    'BRACERS',
+  ];
   const roles: ItemTargetRole[][] = [['DPS'], ['HEALER'], ['TANK'], ['ALL']];
   const result: ItemSpec[] = [];
   for (let i = 0; i < 22; i++) {
@@ -226,17 +536,27 @@ interface EventSpec {
 
 function buildEvents(): EventSpec[] {
   const specs: EventSpec[] = [];
-  const weekTemplate: Array<Array<{
-    type: string;
-    hour: number;
-    minute: number;
-    dur: number;
-    scope: EventScope;
-    pack?: string;
-    reward: number;
-  }>> = [
+  const weekTemplate: Array<
+    Array<{
+      type: string;
+      hour: number;
+      minute: number;
+      dur: number;
+      scope: EventScope;
+      pack?: string;
+      reward: number;
+    }>
+  > = [
     [
-      { type: 'Подземелье T2', hour: 18, minute: 0, dur: 120, scope: 'PACK', pack: 'Вальхалла', reward: 10 },
+      {
+        type: 'Подземелье T2',
+        hour: 18,
+        minute: 0,
+        dur: 120,
+        scope: 'PACK',
+        pack: 'Вальхалла',
+        reward: 10,
+      },
       { type: 'Гильдейские контракты', hour: 21, minute: 0, dur: 60, scope: 'GUILD', reward: 10 },
     ],
     [
@@ -245,7 +565,15 @@ function buildEvents(): EventSpec[] {
     ],
     [
       { type: 'Осада Boonstone', hour: 19, minute: 30, dur: 60, scope: 'GUILD', reward: 20 },
-      { type: 'Подземелье T2', hour: 18, minute: 0, dur: 120, scope: 'PACK', pack: 'Фолькванг', reward: 10 },
+      {
+        type: 'Подземелье T2',
+        hour: 18,
+        minute: 0,
+        dur: 120,
+        scope: 'PACK',
+        pack: 'Фолькванг',
+        reward: 10,
+      },
     ],
     [
       { type: 'Гейбосс', hour: 18, minute: 0, dur: 60, scope: 'GUILD', reward: 15 },
@@ -253,7 +581,15 @@ function buildEvents(): EventSpec[] {
     ],
     [
       { type: 'Архбосс', hour: 20, minute: 0, dur: 60, scope: 'GUILD', reward: 25 },
-      { type: 'Гильдейские контракты', hour: 18, minute: 0, dur: 60, scope: 'PACK', pack: 'Асгард', reward: 10 },
+      {
+        type: 'Гильдейские контракты',
+        hour: 18,
+        minute: 0,
+        dur: 60,
+        scope: 'PACK',
+        pack: 'Асгард',
+        reward: 10,
+      },
     ],
     [
       { type: 'Осада замка', hour: 18, minute: 0, dur: 60, scope: 'GUILD', reward: 30 },
@@ -375,7 +711,10 @@ async function main(): Promise<void> {
   await prisma.$transaction(
     async (tx) => {
       // 1. ИТЕМЫ
-      const itemsByKey = new Map<number, { id: string; targetRoles: ItemTargetRole[]; startPrice: number }>();
+      const itemsByKey = new Map<
+        number,
+        { id: string; targetRoles: ItemTargetRole[]; startPrice: number }
+      >();
       for (let i = 0; i < ITEMS.length; i++) {
         const spec = ITEMS[i];
         const item = await tx.item.upsert({
@@ -456,7 +795,8 @@ async function main(): Promise<void> {
 
       // 5. ЛИДЕР
       const existingLeader = await tx.member.findFirst({ where: { rank: 'GUILD_LEADER' } });
-      const someoneElseIsLeader = existingLeader !== null && existingLeader.nickname !== LEADER_NICK;
+      const someoneElseIsLeader =
+        existingLeader !== null && existingLeader.nickname !== LEADER_NICK;
 
       // 6. ПОЛЬЗОВАТЕЛИ и ЧЛЕНЫ
       const memberIdByNickname = new Map<string, string>();
@@ -473,9 +813,15 @@ async function main(): Promise<void> {
         DPS: null,
       };
       for (const spec of ITEMS_REAL) {
-        if (spec.name === 'Пояс Вулкана') preferredIdByRole.TANK = (await tx.item.findUnique({ where: { name: spec.name } }))?.id ?? null;
-        if (spec.name === 'Жезл Звёздного света') preferredIdByRole.HEALER = (await tx.item.findUnique({ where: { name: spec.name } }))?.id ?? null;
-        if (spec.name === 'Кольцо Кровавой луны') preferredIdByRole.DPS = (await tx.item.findUnique({ where: { name: spec.name } }))?.id ?? null;
+        if (spec.name === 'Пояс Вулкана')
+          preferredIdByRole.TANK =
+            (await tx.item.findUnique({ where: { name: spec.name } }))?.id ?? null;
+        if (spec.name === 'Жезл Звёздного света')
+          preferredIdByRole.HEALER =
+            (await tx.item.findUnique({ where: { name: spec.name } }))?.id ?? null;
+        if (spec.name === 'Кольцо Кровавой луны')
+          preferredIdByRole.DPS =
+            (await tx.item.findUnique({ where: { name: spec.name } }))?.id ?? null;
       }
       void preferredItemByRole;
 
@@ -612,7 +958,7 @@ async function main(): Promise<void> {
         const isPast = spec.offsetDays < 0;
         const status: EventStatus = isPast ? 'FINISHED' : 'PLANNED';
         const eventTypeId = eventTypeIdByName.get(spec.typeName)!;
-        const packId = spec.packName ? packIdByName.get(spec.packName) ?? null : null;
+        const packId = spec.packName ? (packIdByName.get(spec.packName) ?? null) : null;
         const mode = EVENT_TYPES.find((e) => e.name === spec.typeName)?.mode ?? 'PVE';
         const raidLeadId = memberIdByNickname.get(spec.raidLeadNick) ?? leaderIdForAudit;
         const eventId = sid('evt', String(spec.key).padStart(3, '0'));
@@ -807,9 +1153,10 @@ async function main(): Promise<void> {
           update: {},
           create: { id: dropId, itemId: item.id, eventId: null },
         });
-        const endsAt = spec.status === 'OPEN'
-          ? new Date(Date.now() + 18 * HOUR_MS)
-          : new Date(Date.now() - 6 * HOUR_MS);
+        const endsAt =
+          spec.status === 'OPEN'
+            ? new Date(Date.now() + 18 * HOUR_MS)
+            : new Date(Date.now() - 6 * HOUR_MS);
 
         const auction = await tx.auction.upsert({
           where: { lootDropId: drop.id },
@@ -827,7 +1174,8 @@ async function main(): Promise<void> {
             markupPct: 10,
             discountPct: 10,
             targetRoles: item.targetRoles,
-            firstBidAt: spec.bidderMemberIdxs.length > 0 ? new Date(Date.now() - 6 * HOUR_MS) : null,
+            firstBidAt:
+              spec.bidderMemberIdxs.length > 0 ? new Date(Date.now() - 6 * HOUR_MS) : null,
             endsAt,
           },
         });
@@ -926,7 +1274,13 @@ async function main(): Promise<void> {
 
       // 14. АУДИТ
       for (let i = 0; i < 60; i++) {
-        const actions = ['ROLE_CHANGE', 'MANUAL_ATTENDANCE', 'AUCTION_ASSIGN_WINNER', 'DKP_GRANT', 'PROFILE_UPDATE'];
+        const actions = [
+          'ROLE_CHANGE',
+          'MANUAL_ATTENDANCE',
+          'AUCTION_ASSIGN_WINNER',
+          'DKP_GRANT',
+          'PROFILE_UPDATE',
+        ];
         const entityTypes = ['Member', 'Event', 'Auction', 'Member', 'Member'];
         await tx.auditLog.upsert({
           where: { id: sid('audit', i) },

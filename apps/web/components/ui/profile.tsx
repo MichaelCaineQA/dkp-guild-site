@@ -118,9 +118,7 @@ export function ProfileLoot({
                     {award.itemName}
                     {award.rarity ? ` (${award.rarity})` : ''}
                   </Table.Td>
-                  <Table.Td>
-                    {award.eventName ?? <Muted>Хранилище гильдии</Muted>}
-                  </Table.Td>
+                  <Table.Td>{award.eventName ?? <Muted>Хранилище гильдии</Muted>}</Table.Td>
                   <Table.Td className="tabular-nums">
                     {award.finalPrice}
                     {award.markupPct > 0 ? ` (+${award.markupPct}%)` : ''}

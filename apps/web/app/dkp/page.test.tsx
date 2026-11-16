@@ -84,7 +84,8 @@ describe('DkpPage', () => {
       username: 'test-member',
       memberId: 'm-1',
       rank: 'MEMBER',
-      isAdmin: false, blocked: false,
+      isAdmin: false,
+      blocked: false,
     });
 
     render(<DkpPage />);
@@ -103,7 +104,8 @@ describe('DkpPage', () => {
       username: 'test-member2',
       memberId: 'm-2',
       rank: 'MEMBER',
-      isAdmin: false, blocked: false,
+      isAdmin: false,
+      blocked: false,
     });
 
     render(<DkpPage />);

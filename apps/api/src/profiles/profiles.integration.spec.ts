@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import type { Request, Response, NextFunction } from 'express';
 import type { CombatRole, SessionUser } from '@dkp/shared';
 import { ProfilesController } from './profiles.controller';
+import { GearScoreService } from './gear-score.service';
 import { ProfilesService, type ProfilesDb, type ProfileTransaction } from './profiles.service';
 
 let role: CombatRole | null = 'DPS';
@@ -93,7 +94,7 @@ const db: ProfilesDb = {
     },
   },
   dkpEntry: { findMany: async () => entries },
-      lootAward: {
+  lootAward: {
     findMany: async ({ take }) =>
       loot.slice(0, take).map((award, index) => ({
         id: award.id,
@@ -157,8 +158,7 @@ const db: ProfilesDb = {
         update: async ({ data }) => {
           if (data.nickname !== undefined) draftNickname = data.nickname;
           if (data.combatRole !== undefined) draftRole = data.combatRole;
-          if (data.combatRoleChangedAt !== undefined)
-            draftRoleChangedAt = data.combatRoleChangedAt;
+          if (data.combatRoleChangedAt !== undefined) draftRoleChangedAt = data.combatRoleChangedAt;
           if (data.weapons !== undefined) draftWeapons = data.weapons;
           if (data.avatar !== undefined) draftAvatar = data.avatar;
           if (data.avatarColor !== undefined) draftAvatarColor = data.avatarColor;
@@ -202,7 +202,10 @@ const db: ProfilesDb = {
 };
 @Module({
   controllers: [ProfilesController],
-  providers: [{ provide: ProfilesService, useValue: new ProfilesService(db) }],
+  providers: [
+    { provide: ProfilesService, useValue: new ProfilesService(db) },
+    { provide: GearScoreService, useValue: {} },
+  ],
 })
 class TestModule {}
 
@@ -222,7 +225,14 @@ describe('профили через HTTP', () => {
     await app.close();
   });
   beforeEach(() => {
-    actor = { userId: 'u1', username: 'Игрок', memberId: 'm1', rank: 'MEMBER', isAdmin: false, blocked: false };
+    actor = {
+      userId: 'u1',
+      username: 'Игрок',
+      memberId: 'm1',
+      rank: 'MEMBER',
+      isAdmin: false,
+      blocked: false,
+    };
     role = 'DPS';
     nickname = 'Игрок';
     weapons = ['STAFF', 'WAND'];
@@ -246,11 +256,21 @@ describe('профили через HTTP', () => {
 
   it('сохраняет свой прайм-тайм и пишет изменение в аудит', async () => {
     const slots = [{ weekday: 0, fromMinute: 1380, toMinute: 1440 }];
-    const result = await patch('m1', { timeZone: 'Europe/Riga', primeTime: slots, comment: 'Новое расписание' });
+    const result = await patch('m1', {
+      timeZone: 'Europe/Riga',
+      primeTime: slots,
+      comment: 'Новое расписание',
+    });
     expect(result.status).toBe(200);
     const profile = await (await fetch(`${url}/profiles/m1`)).json();
     expect(profile).toMatchObject({ timeZone: 'Europe/Riga', primeTime: slots });
-    expect(audit).toEqual([expect.objectContaining({ action: 'MEMBER_UPDATE', actorMemberId: 'm1', comment: expect.stringContaining('прайм-тайм: изменён') })]);
+    expect(audit).toEqual([
+      expect.objectContaining({
+        action: 'MEMBER_UPDATE',
+        actorMemberId: 'm1',
+        comment: expect.stringContaining('прайм-тайм: изменён'),
+      }),
+    ]);
   });
 
   it('запрещает менять чужой прайм-тайм', async () => {
@@ -261,7 +281,14 @@ describe('профили через HTTP', () => {
   it('анониму — 401, непривязанному аккаунту — 403', async () => {
     actor = undefined;
     expect((await fetch(`${url}/profiles/m1`)).status).toBe(401);
-    actor = { userId: 'u3', username: 'Новый', memberId: null, rank: null, isAdmin: false, blocked: false };
+    actor = {
+      userId: 'u3',
+      username: 'Новый',
+      memberId: null,
+      rank: null,
+      isAdmin: false,
+      blocked: false,
+    };
     expect((await fetch(`${url}/profiles/m1`)).status).toBe(403);
   });
 
@@ -330,7 +357,14 @@ describe('профили через HTTP', () => {
       'gearScore.value',
       1234,
     );
-    actor = { userId: 'admin:a', username: 'a', isAdmin: true, memberId: null, rank: null, blocked: false };
+    actor = {
+      userId: 'admin:a',
+      username: 'a',
+      isAdmin: true,
+      memberId: null,
+      rank: null,
+      blocked: false,
+    };
     expect(await (await fetch(`${url}/profiles/m2`)).json()).toHaveProperty(
       'gearScore.value',
       1234,
@@ -489,7 +523,14 @@ describe('профили через HTTP', () => {
 
   it('несуществующий профиль — 404; резервный админ может читать', async () => {
     expect((await fetch(`${url}/profiles/missing`)).status).toBe(404);
-    actor = { userId: 'admin:admin', username: 'Админ', memberId: null, rank: null, isAdmin: true, blocked: false };
+    actor = {
+      userId: 'admin:admin',
+      username: 'Админ',
+      memberId: null,
+      rank: null,
+      isAdmin: true,
+      blocked: false,
+    };
     expect((await fetch(`${url}/profiles/m1`)).status).toBe(200);
     expect(
       (await patch('m1', { weapons: ['STAFF', 'WAND'], combatRole: 'TANK', comment: 'Новая роль' }))
@@ -514,9 +555,7 @@ describe('профили через HTTP', () => {
     expect(audit).toHaveLength(1);
 
     // Смена до истечения интервала — 409 (решение 18: раз в 2 недели по умолчанию).
-    expect((await patch('m1', { preferredItemId: null, comment: 'Снять выбор' })).status).toBe(
-      409,
-    );
+    expect((await patch('m1', { preferredItemId: null, comment: 'Снять выбор' })).status).toBe(409);
     expect(preferredItemId).toBe('item-1');
 
     // После истечения интервала смена разрешена, включая снятие.
@@ -529,7 +568,9 @@ describe('профили через HTTP', () => {
   });
 
   it('предпочитаемый предмет: несуществующий — 404, без комментария — 400', async () => {
-    expect((await patch('m1', { preferredItemId: 'item-missing', comment: 'Нет такого' })).status).toBe(404);
+    expect(
+      (await patch('m1', { preferredItemId: 'item-missing', comment: 'Нет такого' })).status,
+    ).toBe(404);
     expect((await patch('m1', { preferredItemId: 'item-1' })).status).toBe(400);
     expect(preferredItemId).toBeNull();
     expect(audit).toHaveLength(0);
@@ -549,9 +590,7 @@ describe('профили через HTTP', () => {
         })
       ).status,
     ).toBe(409);
-    expect((await patch('m1', { preferredItemId: 'item-1', comment: 'Предмет' })).status).toBe(
-      200,
-    );
+    expect((await patch('m1', { preferredItemId: 'item-1', comment: 'Предмет' })).status).toBe(200);
     expect(role).toBe('TANK');
     expect(preferredItemId).toBe('item-1');
   });

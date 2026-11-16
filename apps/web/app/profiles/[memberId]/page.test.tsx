@@ -24,7 +24,14 @@ const profile = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u1', username: 'alister', memberId: 'm1', rank: 'MEMBER', isAdmin: false, blocked: false },
+    user: {
+      userId: 'u1',
+      username: 'alister',
+      memberId: 'm1',
+      rank: 'MEMBER',
+      isAdmin: false,
+      blocked: false,
+    },
     loading: false,
     reload: vi.fn(),
   });
@@ -61,7 +68,9 @@ it('смену ника отправляет PATCH с комментарием (
   render(<ProfilePage />);
   await screen.findByText('Профиль: Алистер');
   fireEvent.change(screen.getByLabelText('Игровой ник'), { target: { value: 'Новенький' } });
-  fireEvent.change(screen.getByLabelText('Комментарий'), { target: { value: 'Сменил ник в игре' } });
+  fireEvent.change(screen.getByLabelText('Комментарий'), {
+    target: { value: 'Сменил ник в игре' },
+  });
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить профиль' }));
   expect(await screen.findByRole('status')).toHaveProperty('textContent', 'Профиль сохранён');
   expect(api).toHaveBeenCalledWith('/profiles/m1', {
@@ -77,7 +86,14 @@ it('смену ника отправляет PATCH с комментарием (
 
 it('непривязанному аккаунту не загружает профиль', () => {
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u2', username: 'guest', memberId: null, rank: null, isAdmin: false, blocked: false },
+    user: {
+      userId: 'u2',
+      username: 'guest',
+      memberId: null,
+      rank: null,
+      isAdmin: false,
+      blocked: false,
+    },
     loading: false,
     reload: vi.fn(),
   });
@@ -111,7 +127,14 @@ it('показывает профиль, баланс и сохраняет св
 
 it('в чужом профиле нет формы самостоятельного редактирования', async () => {
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u2', username: 'other', memberId: 'm2', rank: 'MEMBER', isAdmin: false, blocked: false },
+    user: {
+      userId: 'u2',
+      username: 'other',
+      memberId: 'm2',
+      rank: 'MEMBER',
+      isAdmin: false,
+      blocked: false,
+    },
     loading: false,
     reload: vi.fn(),
   });
@@ -233,7 +256,5 @@ it('отказ кулдауна с сервера показывается в ф
   });
   fireEvent.change(screen.getByLabelText('Комментарий'), { target: { value: 'Мой предмет' } });
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить профиль' }));
-  await waitFor(() =>
-    expect(screen.getByRole('alert').textContent).toContain('раз в 14 дн.'),
-  );
+  await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('раз в 14 дн.'));
 });

@@ -43,7 +43,7 @@ interface DropSeed {
 
 function makeDb(options: {
   event?: { id: string; status: string; raidLeadId: string; creatorId?: string | null } | null;
-  items?: typeof ITEM[];
+  items?: (typeof ITEM)[];
   drops?: DropSeed[];
 }) {
   const event =
@@ -62,9 +62,10 @@ function makeDb(options: {
   };
 
   const db: LootDb = {
+    $transaction: async (work) => work(db),
+    member: { findMany: async () => [] },
     event: {
-      findUnique: async ({ where }) =>
-        event && event.id === where.id ? { ...event } : null,
+      findUnique: async ({ where }) => (event && event.id === where.id ? { ...event } : null),
     },
     item: {
       findUnique: async ({ where }) => {
@@ -162,9 +163,9 @@ describe('LootService (issue #93)', () => {
   it('резервный админ фиксирует дроп без Member', async () => {
     const { db } = makeDb({});
     const service = new LootService(db);
-    await expect(service.createDrop('e-1', { itemId: 'i-1' }, ADMIN, null)).resolves.toMatchObject(
-      { itemName: 'Клинок рассвета' },
-    );
+    await expect(service.createDrop('e-1', { itemId: 'i-1' }, ADMIN, null)).resolves.toMatchObject({
+      itemName: 'Клинок рассвета',
+    });
   });
 
   it('на завершённом и отменённом ивенте дроп не фиксируется — 409 (2.6)', async () => {

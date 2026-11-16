@@ -5,7 +5,9 @@ export function Badge({
   tone = 'neutral',
   className = '',
   ...props
-}: HTMLAttributes<HTMLSpanElement> & { tone?: 'neutral' | 'accent' | 'success' | 'danger' | 'warning' }) {
+}: HTMLAttributes<HTMLSpanElement> & {
+  tone?: 'neutral' | 'accent' | 'success' | 'danger' | 'warning';
+}) {
   const tones = {
     neutral: 'bg-surface-muted text-secondary',
     accent: 'bg-accent-soft text-accent',
@@ -18,7 +20,8 @@ export function Badge({
       className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]} ${className}`}
       {...props}
     />
-  );}
+  );
+}
 
 interface TableProps {
   children: ReactNode;

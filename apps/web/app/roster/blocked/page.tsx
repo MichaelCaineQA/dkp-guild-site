@@ -47,7 +47,8 @@ export default function BlockedMembersPage() {
 
   const canManage = useMemo(
     () =>
-      !!user && can({ rank: user.rank, isAdmin: user.isAdmin, memberId: user.memberId }, 'members.manage'),
+      !!user &&
+      can({ rank: user.rank, isAdmin: user.isAdmin, memberId: user.memberId }, 'members.manage'),
     [user],
   );
 
@@ -208,11 +209,7 @@ function UnblockCard({
           maxLength={500}
           className="w-80"
         />
-        <Button
-          variant="primary"
-          onClick={unblock}
-          disabled={busy || comment.trim().length < 3}
-        >
+        <Button variant="primary" onClick={unblock} disabled={busy || comment.trim().length < 3}>
           Разблокировать
         </Button>
         <Button onClick={onClose} disabled={busy}>

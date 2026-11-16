@@ -10,6 +10,8 @@ import type { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
+import sharp from 'sharp';
+export const SCREENSHOT_MAX_PIXELS = 40_000_000;
 export interface ScreenshotFile {
   buffer: Buffer;
   size: number;
@@ -49,6 +51,14 @@ export class ScreenshotsService {
     const mime = imageMime(file.buffer);
     if (!mime || file.mimetype !== mime)
       throw new BadRequestException('Допустимы только изображения PNG, JPG и WebP');
+    try {
+      // metadata() проверяет лишь заголовок. raw() заставляет декодировать все пиксели.
+      await sharp(file.buffer, { limitInputPixels: SCREENSHOT_MAX_PIXELS, failOn: 'warning' })
+        .raw()
+        .toBuffer();
+    } catch {
+      throw new BadRequestException('Изображение повреждено или превышает 40 млн пикселей');
+    }
     const user = await this.db.user.findUnique({
       where: { id: userId },
       select: { discordId: true, member: { select: { id: true } } },

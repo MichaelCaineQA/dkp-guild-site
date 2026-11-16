@@ -25,22 +25,23 @@ function session(partial: Partial<SessionUser>): SessionUser {
     username: 'u',
     memberId: 'm1',
     rank: 'MEMBER',
-    isAdmin: false, blocked: false,
+    isAdmin: false,
+    blocked: false,
     ...partial,
   };
 }
 
 describe('PermissionsGuard', () => {
   it('без сессии — 401', () => {
-    expect(() =>
-      makeGuard('members.manage').canActivate(makeContext(undefined)),
-    ).toThrow(UnauthorizedException);
+    expect(() => makeGuard('members.manage').canActivate(makeContext(undefined))).toThrow(
+      UnauthorizedException,
+    );
   });
 
   it('рядовой на members.manage — 403 (вошёл, но нельзя)', () => {
-    expect(() =>
-      makeGuard('members.manage').canActivate(makeContext(session({}))),
-    ).toThrow(ForbiddenException);
+    expect(() => makeGuard('members.manage').canActivate(makeContext(session({})))).toThrow(
+      ForbiddenException,
+    );
   });
 
   it('офицер на members.manage получает 403', () => {
