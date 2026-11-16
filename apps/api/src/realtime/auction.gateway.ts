@@ -49,9 +49,7 @@ export const userRoomOf = (userId: string): string => `user:${userId}`;
   addTrailingSlash: false,
   cors: { origin: process.env.WEB_URL ?? 'http://localhost:3000', credentials: true },
 })
-export class AuctionGateway
-  implements AuctionEventsPort, OnGatewayInit, OnGatewayConnection
-{
+export class AuctionGateway implements AuctionEventsPort, OnGatewayInit, OnGatewayConnection {
   private readonly logger = new Logger(AuctionGateway.name);
 
   @WebSocketServer()
@@ -105,10 +103,7 @@ export class AuctionGateway
 
   /** Подписка на лот: полный срез состояния взамен накопления (issue #97). */
   @SubscribeMessage(AUCTION_SOCKET_EVENTS.join)
-  async handleJoin(
-    client: Socket,
-    payload: unknown,
-  ): Promise<{ event: string; data: unknown }> {
+  async handleJoin(client: Socket, payload: unknown): Promise<{ event: string; data: unknown }> {
     const base = client.data.user as SessionUser | undefined;
     if (!base) {
       return { event: 'auction:error', data: 'Соединение не авторизовано' };
@@ -153,11 +148,7 @@ export class AuctionGateway
     });
   }
 
-  bidPlaced(
-    auctionId: string,
-    bid: BidRow,
-    endsAt: string | null,
-  ): void {
+  bidPlaced(auctionId: string, bid: BidRow, endsAt: string | null): void {
     this.server.to(roomOf(auctionId)).emit(AUCTION_SOCKET_EVENTS.bid, {
       auctionId,
       bid,
@@ -176,11 +167,7 @@ export class AuctionGateway
       .catch(() => undefined);
   }
 
-  lotUpdated(
-    auctionId: string,
-    lot: AuctionLotRow,
-    winner: LotAwardRow | null,
-  ): void {
+  lotUpdated(auctionId: string, lot: AuctionLotRow, winner: LotAwardRow | null): void {
     this.server.to(roomOf(auctionId)).emit(AUCTION_SOCKET_EVENTS.lot, {
       auctionId,
       lot,
@@ -189,11 +176,7 @@ export class AuctionGateway
     });
   }
 
-  lotClosed(
-    auctionId: string,
-    winner: LotAwardRow | null,
-    reason: AuctionCloseReason,
-  ): void {
+  lotClosed(auctionId: string, winner: LotAwardRow | null, reason: AuctionCloseReason): void {
     // Комнате лота — свежий полный срез после фиксации (статус, ставки,
     // выдача); срез читается уже после коммита закрывшего сервиса.
     void this.snapshots
@@ -202,15 +185,12 @@ export class AuctionGateway
         if (state) this.server.to(roomOf(auctionId)).emit(AUCTION_SOCKET_EVENTS.state, state);
       })
       .catch(() => undefined);
-    this.server
-      .to(roomOf(auctionId))
-      .to(AUCTIONS_ROOM)
-      .emit(AUCTION_SOCKET_EVENTS.closed, {
-        auctionId,
-        winner,
-        reason,
-        serverTime: new Date().toISOString(),
-      });
+    this.server.to(roomOf(auctionId)).to(AUCTIONS_ROOM).emit(AUCTION_SOCKET_EVENTS.closed, {
+      auctionId,
+      winner,
+      reason,
+      serverTime: new Date().toISOString(),
+    });
   }
 }
 

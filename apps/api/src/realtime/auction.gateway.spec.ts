@@ -328,9 +328,7 @@ describe('AuctionGateway (issue #97)', () => {
 
     it('членство перечитывается: blocked и rank свежие; Member нет — null', async () => {
       const findUnique = jest.fn(async ({ where }: { where: { userId: string } }) =>
-        where.userId === 'u-1'
-          ? { id: 'm-1', rank: 'OFFICER', blockedAt: new Date() }
-          : null,
+        where.userId === 'u-1' ? { id: 'm-1', rank: 'OFFICER', blockedAt: new Date() } : null,
       );
       const access = new SocketAccessService({ member: { findUnique } } as never);
       const user: SessionUser = {

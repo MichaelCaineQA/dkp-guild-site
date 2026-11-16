@@ -17,7 +17,11 @@ export const packMembershipHistorySchema = z.object({
 export type MemberPackHistory = z.infer<typeof memberPackHistorySchema>;
 export type PackMembershipHistory = z.infer<typeof packMembershipHistorySchema>;
 
-function valueAt<T>(current: T, changes: readonly { previous: T; next: T; changedAt: Date }[], at: Date): T {
+function valueAt<T>(
+  current: T,
+  changes: readonly { previous: T; next: T; changedAt: Date }[],
+  at: Date,
+): T {
   const sorted = [...changes].sort((a, b) => a.changedAt.getTime() - b.changedAt.getTime());
   let value = sorted.length ? sorted[0].previous : current;
   for (const change of sorted) {
@@ -28,11 +32,27 @@ function valueAt<T>(current: T, changes: readonly { previous: T; next: T; change
 }
 
 /** Pass only records for the member being resolved. */
-export function memberPackAt(currentPackId: string | null, history: readonly MemberPackHistory[], at: Date): string | null {
-  return valueAt(currentPackId, history.map((h) => ({ previous: h.previousPackId, next: h.packId, changedAt: h.changedAt })), at);
+export function memberPackAt(
+  currentPackId: string | null,
+  history: readonly MemberPackHistory[],
+  at: Date,
+): string | null {
+  return valueAt(
+    currentPackId,
+    history.map((h) => ({ previous: h.previousPackId, next: h.packId, changedAt: h.changedAt })),
+    at,
+  );
 }
 
 /** Pass only records for the pack being resolved. */
-export function packKpAt(currentKpId: string, history: readonly PackMembershipHistory[], at: Date): string {
-  return valueAt(currentKpId, history.map((h) => ({ previous: h.previousKpId, next: h.kpId, changedAt: h.changedAt })), at);
+export function packKpAt(
+  currentKpId: string,
+  history: readonly PackMembershipHistory[],
+  at: Date,
+): string {
+  return valueAt(
+    currentKpId,
+    history.map((h) => ({ previous: h.previousKpId, next: h.kpId, changedAt: h.changedAt })),
+    at,
+  );
 }

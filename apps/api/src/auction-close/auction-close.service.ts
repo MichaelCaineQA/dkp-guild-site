@@ -1,9 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-  lotExpired,
-  winningBid,
-  type LotCloseResult,
-} from '@dkp/shared';
+import { lotExpired, winningBid, type LotCloseResult } from '@dkp/shared';
 import { serializable } from '../prisma/serializable';
 import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction-events';
 
@@ -209,9 +205,7 @@ export class AuctionCloseService {
           type: 'AUCTION_SPEND',
           amount: -top.fullCost,
           auctionId,
-          comment:
-            `Трата на аукционе: «${itemName}» за ${top.fullCost}` +
-            priceModifiers(top),
+          comment: `Трата на аукционе: «${itemName}» за ${top.fullCost}` + priceModifiers(top),
         },
       });
       await tx.auditLog.create({

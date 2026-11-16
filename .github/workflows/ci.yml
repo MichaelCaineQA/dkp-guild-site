@@ -53,6 +53,12 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Formatting
+        run: pnpm format:check
+
+      - name: Core coverage (80%)
+        run: pnpm test:coverage
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -68,6 +74,16 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Install browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Browser business smoke
+        env:
+          AUTH_TEST_MODE: 'true'
+          NODE_ENV: test
+          SESSION_SECRET: ci-test-session-secret-at-least-32-characters
+          CHECKIN_ENC_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        run: pnpm test:e2e
+
       - name: Audit dependencies
         run: pnpm audit --prod
-        continue-on-error: true # TODO: сделать обязательным после стабилизации зависимостей

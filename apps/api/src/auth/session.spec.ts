@@ -16,7 +16,8 @@ const USER: SessionUser = {
   username: 'test-member',
   memberId: 'm-1',
   rank: 'MEMBER',
-  isAdmin: false, blocked: false,
+  isAdmin: false,
+  blocked: false,
 };
 
 function reqWithCookie(cookie: string): IncomingMessage {
@@ -46,19 +47,23 @@ describe('readSessionUser (приёмка #100)', () => {
   it('подписанная кука находит сессию по неподписанному ключу store', async () => {
     await putSession('sid-1');
 
-    await expect(readSessionUser(reqWithCookie(sessionCookie('sid-1', 'test-secret')))).resolves.toEqual(
-      USER,
-    );
+    await expect(
+      readSessionUser(reqWithCookie(sessionCookie('sid-1', 'test-secret'))),
+    ).resolves.toEqual(USER);
   });
 
   it('чужая подпись не открывает сессию', async () => {
     await putSession('sid-2');
 
-    await expect(readSessionUser(reqWithCookie(sessionCookie('sid-2', 'wrong-secret')))).resolves.toBeNull();
+    await expect(
+      readSessionUser(reqWithCookie(sessionCookie('sid-2', 'wrong-secret'))),
+    ).resolves.toBeNull();
   });
 
   it('без куки и без сессии в store — null', async () => {
     await expect(readSessionUser(reqWithCookie(''))).resolves.toBeNull();
-    await expect(readSessionUser(reqWithCookie(sessionCookie('nope', 'test-secret')))).resolves.toBeNull();
+    await expect(
+      readSessionUser(reqWithCookie(sessionCookie('nope', 'test-secret'))),
+    ).resolves.toBeNull();
   });
 });

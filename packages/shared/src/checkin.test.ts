@@ -14,7 +14,9 @@ describe('checkInWindowState', () => {
   const closes = new Date('2026-03-03T17:00:00Z');
 
   it('до окна — NOT_OPEN_YET, в окне — ACTIVE, после — CLOSED', () => {
-    expect(checkInWindowState(new Date('2026-03-03T16:50:00Z'), opens, closes)).toBe('NOT_OPEN_YET');
+    expect(checkInWindowState(new Date('2026-03-03T16:50:00Z'), opens, closes)).toBe(
+      'NOT_OPEN_YET',
+    );
     expect(checkInWindowState(new Date('2026-03-03T16:57:00Z'), opens, closes)).toBe('ACTIVE');
     expect(checkInWindowState(new Date('2026-03-03T16:59:59Z'), opens, closes)).toBe('ACTIVE');
     expect(checkInWindowState(new Date('2026-03-03T17:00:01Z'), opens, closes)).toBe('CLOSED');
@@ -46,7 +48,9 @@ describe('checkInShareAmount', () => {
   it('произвольные доли тоже дают сумму = плате', () => {
     const shares = { startSharePct: 30, endSharePct: 70 };
     for (const reward of [1, 7, 10, 11, 33]) {
-      expect(checkInShareAmount(reward, 'START', shares) + checkInShareAmount(reward, 'END', shares)).toBe(reward);
+      expect(
+        checkInShareAmount(reward, 'START', shares) + checkInShareAmount(reward, 'END', shares),
+      ).toBe(reward);
     }
     expect(checkInShareAmount(11, 'START', shares)).toBe(3);
     expect(checkInShareAmount(11, 'END', shares)).toBe(8);

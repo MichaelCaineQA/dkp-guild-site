@@ -28,10 +28,7 @@ export interface LotParamsState {
 }
 
 /** Начальные значения полей из дефолтов для выбранного типа таймера. */
-export function lotParamsFromDefaults(
-  kind: LotTimerKind,
-  defaults: LotDefaults,
-): LotParamsState {
+export function lotParamsFromDefaults(kind: LotTimerKind, defaults: LotDefaults): LotParamsState {
   if (kind === 'FIRST_BID') {
     return {
       timerKind: kind,
@@ -92,8 +89,7 @@ export function lotParamsPayload(state: LotParamsState) {
     durationValue: Number(state.durationValue),
     durationUnit: state.durationUnit,
     antiSnipeSec: Number(state.antiSnipeSec),
-    noBidTimeoutSec:
-      state.timerKind === 'FIRST_BID' ? Number(state.noBidTimeoutSec) : undefined,
+    noBidTimeoutSec: state.timerKind === 'FIRST_BID' ? Number(state.noBidTimeoutSec) : undefined,
   };
 }
 
@@ -113,7 +109,9 @@ export function LotParamsFields({
       <Field label="Тип таймера">
         <Select
           value={state.timerKind}
-          onChange={(e) => onChange(switchLotParams(state, defaults, e.target.value as LotTimerKind))}
+          onChange={(e) =>
+            onChange(switchLotParams(state, defaults, e.target.value as LotTimerKind))
+          }
         >
           {LOT_TIMER_KINDS.map((kind) => (
             <option key={kind} value={kind}>
@@ -185,8 +183,8 @@ export function LotParamsFields({
         </Field>
       )}
       <Muted>
-        Наценка «чужим» классам по настройкам гильдии: {defaults.markupPct}% —
-        зафиксируется на лоте при создании.
+        Наценка «чужим» классам по настройкам гильдии: {defaults.markupPct}% — зафиксируется на лоте
+        при создании.
       </Muted>
     </>
   );

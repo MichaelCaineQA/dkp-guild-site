@@ -21,6 +21,9 @@ import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction
 import { readAuctionSettings } from '../settings/auction-settings';
 import type { EventsActor } from '../events/events.service';
 import type { AuditWriter } from '../members/members.service';
+import { snapshotBidderProfiles, type BidderProfilesDb } from '../auctions/bidder-profiles';
+import type { BidderProfiles } from '@dkp/shared';
+import { serializable } from '../prisma/serializable';
 
 interface StoredItem {
   id: string;
@@ -58,7 +61,11 @@ interface StoredDrop {
 }
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
-export interface LootDb {
+export interface LootDb extends BidderProfilesDb {
+  $transaction<T>(
+    work: (tx: LootDb) => Promise<T>,
+    options: { isolationLevel: 'Serializable'; timeout?: number },
+  ): Promise<T>;
   event: {
     findUnique(args: { where: { id: string } }): Promise<{
       id: string;
@@ -98,6 +105,7 @@ export interface LootDb {
         markupPct: number;
         discountPct: number;
         targetRoles: ItemTargetRole[];
+        bidderProfiles: BidderProfiles;
         endsAt: Date | null;
       };
     }): Promise<StoredAuction>;
@@ -161,6 +169,17 @@ export class LootService {
     actor: EventsActor,
     actorRank: string | null,
   ): Promise<LootDropRow> {
+    return serializable(this.db, (tx) =>
+      new LootService(tx).createDropInTransaction(eventId, body, actor, actorRank),
+    );
+  }
+
+  private async createDropInTransaction(
+    eventId: string,
+    body: unknown,
+    actor: EventsActor,
+    actorRank: string | null,
+  ): Promise<LootDropRow> {
     const parsed = createDropSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException('Выберите предмет из справочника');
     await this.assertCanConduct(eventId, actor, actorRank, true);
@@ -186,6 +205,20 @@ export class LootService {
    * Наценка и разметка предмета фиксируются на лоте (план 6, п. 6).
    */
   async createLot(
+    eventId: string,
+    dropId: string,
+    body: unknown,
+    actor: EventsActor,
+    actorRank: string | null,
+  ): Promise<AuctionLotRow> {
+    const lot = await serializable(this.db, (tx) =>
+      new LootService(tx).createLotInTransaction(eventId, dropId, body, actor, actorRank),
+    );
+    this.events.lotCreated(lot);
+    return lot;
+  }
+
+  private async createLotInTransaction(
     eventId: string,
     dropId: string,
     body: unknown,
@@ -227,6 +260,7 @@ export class LootService {
         markupPct: settings.foreignClassMarkupPct,
         discountPct: settings.preferredItemDiscountPct,
         targetRoles: drop.item.targetRoles,
+        bidderProfiles: await snapshotBidderProfiles(this.db),
         endsAt: fromFirstBid ? null : new Date(Date.now() + durationSec * 1000),
       },
     });
@@ -243,10 +277,7 @@ export class LootService {
         }, анти-снайп ${input.antiSnipeSec} сек (продление ${antiSnipeExtendSec} сек), ` +
         `наценка ${settings.foreignClassMarkupPct}%, скидка ${settings.preferredItemDiscountPct}%`,
     );
-    const lot = this.toLotRow(auction);
-    // Новый лот — в общий канал списка сразу после фиксации (issue #97).
-    this.events.lotCreated(lot);
-    return lot;
+    return this.toLotRow(auction);
   }
 
   /**
@@ -271,9 +302,7 @@ export class LootService {
       throw new ForbiddenException('Дроп и лоты — Главе, Админу и управляющим ивента');
     }
     if (forWrite && event.status !== 'PLANNED' && event.status !== 'RUNNING') {
-      throw new ConflictException(
-        'Дроп и лоты фиксируются на запланированном или идущем ивенте',
-      );
+      throw new ConflictException('Дроп и лоты фиксируются на запланированном или идущем ивенте');
     }
     return event;
   }

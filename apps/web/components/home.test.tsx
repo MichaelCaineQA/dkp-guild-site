@@ -55,16 +55,19 @@ it('приветствует гостя названием гильдии из �
   ).toBeTruthy();
 });
 
-it.each([null, '', '   '])('без названия гильдии (%j) сохраняет общее приветствие', async (name) => {
-  vi.mocked(api).mockImplementation(async (path) =>
-    path === '/meta/guild-name' ? { name } : { discord: true },
-  );
-  render(<HomePage />);
-  await screen.findByRole('link', { name: 'Связать с Discord' });
-  expect(
-    screen.getByRole('heading', { name: 'Добро пожаловать в ДКП-систему гильдии' }),
-  ).toBeTruthy();
-});
+it.each([null, '', '   '])(
+  'без названия гильдии (%j) сохраняет общее приветствие',
+  async (name) => {
+    vi.mocked(api).mockImplementation(async (path) =>
+      path === '/meta/guild-name' ? { name } : { discord: true },
+    );
+    render(<HomePage />);
+    await screen.findByRole('link', { name: 'Связать с Discord' });
+    expect(
+      screen.getByRole('heading', { name: 'Добро пожаловать в ДКП-систему гильдии' }),
+    ).toBeTruthy();
+  },
+);
 
 it('при ошибке загрузки названия сохраняет общее приветствие и доступ к входу', async () => {
   vi.mocked(api).mockImplementation(async (path) => {

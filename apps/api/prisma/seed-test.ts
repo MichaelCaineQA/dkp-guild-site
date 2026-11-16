@@ -72,7 +72,9 @@ async function main(): Promise<void> {
 
     const member =
       (await prisma.member.findFirst({ where: { nickname } })) ??
-      (await prisma.member.create({ data: { nickname, rank, userId: user.id, combatRole, weapons: [...weapons] } }));
+      (await prisma.member.create({
+        data: { nickname, rank, userId: user.id, combatRole, weapons: [...weapons] },
+      }));
 
     await prisma.member.update({
       where: { id: member.id },

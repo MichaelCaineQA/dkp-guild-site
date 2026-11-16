@@ -117,7 +117,7 @@ export function AuctionLots({
               Создать лот
             </Button>
           )}
-          <div className="flex gap-2" role="tablist" aria-label="Состояния лотов">
+          <div className="flex flex-wrap gap-2" role="tablist" aria-label="Состояния лотов">
             {STATUS_TABS.map(([key, label]) => (
               <Button key={key} onClick={() => setStatus(key)} aria-pressed={status === key}>
                 {label}
@@ -158,10 +158,7 @@ export function AuctionLots({
       )}
 
       {creating && (
-        <CreateLotDialog
-          onClose={() => setCreating(false)}
-          onCreated={() => void load(status)}
-        />
+        <CreateLotDialog onClose={() => setCreating(false)} onCreated={() => void load(status)} />
       )}
     </Card>
   );
@@ -169,13 +166,14 @@ export function AuctionLots({
 
 function LotCard({ row, onOpen }: { row: AuctionListRow; onOpen: () => void }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-(--border) p-3">
+    <div
+      role="group"
+      aria-label={`Лот ${row.itemName}`}
+      className="flex flex-wrap items-center justify-between gap-3 rounded border border-(--border) p-3"
+    >
       <div className="flex flex-col gap-1">
         <span className="font-medium">
-          {row.itemName}{' '}
-          {row.rarity && (
-            <Badge tone="neutral">{row.rarity}</Badge>
-          )}{' '}
+          {row.itemName} {row.rarity && <Badge tone="neutral">{row.rarity}</Badge>}{' '}
           <Badge tone={row.status === 'OPEN' ? 'accent' : 'neutral'}>
             {LOT_STATUS_LABELS[row.status]}
           </Badge>
@@ -218,7 +216,7 @@ function LotCard({ row, onOpen }: { row: AuctionListRow; onOpen: () => void }) {
 function LotModal({
   row,
   viewerMemberId,
-  viewerRole,
+  viewerRole: currentViewerRole,
   onClose,
 }: {
   row: AuctionListRow;
@@ -227,6 +225,7 @@ function LotModal({
   onClose: () => void;
 }) {
   const { state, connection } = useAuctionLot(row.id);
+  const viewerRole = row.myCombatRole === undefined ? currentViewerRole : row.myCombatRole;
   const lot = state?.lot ?? null;
   const bids = state?.bids ?? null;
   const winner = state?.winner ?? null;
@@ -234,7 +233,7 @@ function LotModal({
   const status = lot?.status ?? row.status;
 
   return (
-    <Modal title={`Лот: ${row.itemName}`} onClose={onClose}>
+    <Modal title={`Лот: ${row.itemName}`} onClose={onClose} wide>
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={status === 'OPEN' ? 'accent' : 'neutral'}>{LOT_STATUS_LABELS[status]}</Badge>
@@ -256,8 +255,14 @@ function LotModal({
             label="Наценка «чужим»"
             value={row.markupPct > 0 ? `+${row.markupPct}%` : 'нет'}
           />
-          <Detail label="Скидка за предмет" value={row.discountPct > 0 ? `−${row.discountPct}%` : 'нет'} />
-          <Detail label="Анти-снайп" value={`${row.antiSnipeSec} с (+${row.antiSnipeExtendSec} с)`} />
+          <Detail
+            label="Скидка за предмет"
+            value={row.discountPct > 0 ? `−${row.discountPct}%` : 'нет'}
+          />
+          <Detail
+            label="Анти-снайп"
+            value={`${row.antiSnipeSec} с (+${row.antiSnipeExtendSec} с)`}
+          />
           <Detail
             label="Класс предмета"
             value={
@@ -290,7 +295,9 @@ function LotModal({
             />
           </>
         ) : status === 'CLOSED' ? (
-          winner ? (
+          !state ? (
+            <Muted>Загрузка результата…</Muted>
+          ) : winner ? (
             <div>
               Торги завершены: предмет получил <strong>{winner.memberName}</strong> за{' '}
               <span className="tabular-nums">{winner.finalPrice} ДКП</span>

@@ -56,7 +56,11 @@ export class EventsController {
   @RequirePermission('members.view_roster')
   deleteSeries(@Param('seriesId') seriesId: string, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
-    return this.events.deleteSeries(seriesId, { memberId: user.memberId, isAdmin: user.isAdmin, rank: user.rank });
+    return this.events.deleteSeries(seriesId, {
+      memberId: user.memberId,
+      isAdmin: user.isAdmin,
+      rank: user.rank,
+    });
   }
 
   /** Удаление одиночного ивента — только PLANNED, с проверкой ранга/назначения. */
@@ -64,7 +68,11 @@ export class EventsController {
   @RequirePermission('members.view_roster')
   deleteOne(@Param('id') id: string, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
-    return this.events.deleteOne(id, { memberId: user.memberId, isAdmin: user.isAdmin, rank: user.rank });
+    return this.events.deleteOne(id, {
+      memberId: user.memberId,
+      isAdmin: user.isAdmin,
+      rank: user.rank,
+    });
   }
 
   /**
@@ -88,6 +96,10 @@ export class EventsController {
   @RequirePermission('members.view_roster')
   changeStatus(@Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
-    return this.events.changeStatus(id, body, { memberId: user.memberId, isAdmin: user.isAdmin, rank: user.rank });
+    return this.events.changeStatus(id, body, {
+      memberId: user.memberId,
+      isAdmin: user.isAdmin,
+      rank: user.rank,
+    });
   }
 }

@@ -1,5 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { computeBalance, dkpQuerySchema, type DkpBalanceRow, type DkpEntryRow, type DkpQuery } from '@dkp/shared';
+import {
+  computeBalance,
+  dkpQuerySchema,
+  type DkpBalanceRow,
+  type DkpEntryRow,
+  type DkpQuery,
+} from '@dkp/shared';
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
 export interface DkpDb {

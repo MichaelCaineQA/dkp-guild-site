@@ -22,9 +22,17 @@ describe('membership at a date', () => {
     expect(memberPackAt(null, transfers, second)).toBeNull();
   });
   it('resolves a pack’s former KP before its transfer', () => {
-    expect(packKpAt('new', [{ packId: 'p', previousKpId: 'old', kpId: 'new', changedAt: first }], new Date('2026-01-01Z'))).toBe('old');
+    expect(
+      packKpAt(
+        'new',
+        [{ packId: 'p', previousKpId: 'old', kpId: 'new', changedAt: first }],
+        new Date('2026-01-01Z'),
+      ),
+    ).toBe('old');
   });
   it('resolves a pack’s new KP at its transfer', () => {
-    expect(packKpAt('new', [{ packId: 'p', previousKpId: 'old', kpId: 'new', changedAt: first }], first)).toBe('new');
+    expect(
+      packKpAt('new', [{ packId: 'p', previousKpId: 'old', kpId: 'new', changedAt: first }], first),
+    ).toBe('new');
   });
 });

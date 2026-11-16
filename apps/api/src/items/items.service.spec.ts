@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import type { ItemInput } from '@dkp/shared';
 import { ItemsService, type ItemsActor, type ItemsDb } from './items.service';
 
@@ -81,8 +77,22 @@ describe('ItemsService (issue #92)', () => {
   it('list возвращает предметы по алфавиту с числом лотов', async () => {
     const { db } = makeDb(
       [
-        { id: 'i-1', name: 'Щит', rarity: null, slot: null, targetRoles: ['ALL'], defaultStartPrice: null },
-        { id: 'i-2', name: 'Меч', rarity: null, slot: null, targetRoles: ['DPS'], defaultStartPrice: 50 },
+        {
+          id: 'i-1',
+          name: 'Щит',
+          rarity: null,
+          slot: null,
+          targetRoles: ['ALL'],
+          defaultStartPrice: null,
+        },
+        {
+          id: 'i-2',
+          name: 'Меч',
+          rarity: null,
+          slot: null,
+          targetRoles: ['DPS'],
+          defaultStartPrice: 50,
+        },
       ],
       { 'i-2': 3 },
     );
@@ -109,7 +119,14 @@ describe('ItemsService (issue #92)', () => {
 
   it('дубликат названия — 409', async () => {
     const { db } = makeDb([
-      { id: 'i-1', name: 'Меч', rarity: null, slot: null, targetRoles: ['ALL'], defaultStartPrice: null },
+      {
+        id: 'i-1',
+        name: 'Меч',
+        rarity: null,
+        slot: null,
+        targetRoles: ['ALL'],
+        defaultStartPrice: null,
+      },
     ]);
     const service = new ItemsService(db);
 
@@ -133,7 +150,14 @@ describe('ItemsService (issue #92)', () => {
 
   it('обновляет предмет и пишет аудит с переходом названия', async () => {
     const { db, audit } = makeDb([
-      { id: 'i-1', name: 'Меч', rarity: null, slot: null, targetRoles: ['ALL'], defaultStartPrice: null },
+      {
+        id: 'i-1',
+        name: 'Меч',
+        rarity: null,
+        slot: null,
+        targetRoles: ['ALL'],
+        defaultStartPrice: null,
+      },
     ]);
     const service = new ItemsService(db);
 
@@ -145,8 +169,22 @@ describe('ItemsService (issue #92)', () => {
 
   it('переименование в занятое название — 409', async () => {
     const { db } = makeDb([
-      { id: 'i-1', name: 'Меч', rarity: null, slot: null, targetRoles: ['ALL'], defaultStartPrice: null },
-      { id: 'i-2', name: 'Щит', rarity: null, slot: null, targetRoles: ['ALL'], defaultStartPrice: null },
+      {
+        id: 'i-1',
+        name: 'Меч',
+        rarity: null,
+        slot: null,
+        targetRoles: ['ALL'],
+        defaultStartPrice: null,
+      },
+      {
+        id: 'i-2',
+        name: 'Щит',
+        rarity: null,
+        slot: null,
+        targetRoles: ['ALL'],
+        defaultStartPrice: null,
+      },
     ]);
     const service = new ItemsService(db);
 
@@ -165,7 +203,14 @@ describe('ItemsService (issue #92)', () => {
 
   it('удаляет свободный предмет с аудитом', async () => {
     const { db, items, audit } = makeDb([
-      { id: 'i-1', name: 'Меч', rarity: null, slot: null, targetRoles: ['ALL'], defaultStartPrice: null },
+      {
+        id: 'i-1',
+        name: 'Меч',
+        rarity: null,
+        slot: null,
+        targetRoles: ['ALL'],
+        defaultStartPrice: null,
+      },
     ]);
     const service = new ItemsService(db);
 
@@ -177,7 +222,14 @@ describe('ItemsService (issue #92)', () => {
   it('занятый лотами предмет не удаляется — история лотов сохраняется', async () => {
     const { db, items } = makeDb(
       [
-        { id: 'i-1', name: 'Меч', rarity: null, slot: null, targetRoles: ['ALL'], defaultStartPrice: null },
+        {
+          id: 'i-1',
+          name: 'Меч',
+          rarity: null,
+          slot: null,
+          targetRoles: ['ALL'],
+          defaultStartPrice: null,
+        },
       ],
       { 'i-1': 2 },
     );

@@ -1,5 +1,5 @@
 import * as shared from '@dkp/shared';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { z } from 'zod';
 import type { ReferenceObject, SchemaObject } from '@nestjs/swagger';
 
 export const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` });
@@ -51,6 +51,7 @@ const inputs: Record<string, unknown> = {
   AdminDkpGrant: shared.adminDkpGrantSchema,
   AuditQuery: shared.auditQuerySchema,
   UpdateOwnProfile: shared.updateOwnProfileSchema,
+  AddGearScore: shared.addGearScoreSchema,
   UpdateRules: shared.updateRulesSchema,
   RestoreRules: shared.restoreRulesSchema,
   GameTimeSettings: shared.gameTimeSettingsSchema,
@@ -66,9 +67,16 @@ const inputs: Record<string, unknown> = {
 };
 // Не разворачиваем union всех Zod-типов shared в типах конвертера.
 function convert(schema: unknown): SchemaObject {
-  return zodToJsonSchema(schema as Parameters<typeof zodToJsonSchema>[0], {
-    target: 'openApi3',
-    $refStrategy: 'none',
+  return z.toJSONSchema(schema as z.ZodType, {
+    target: 'openapi-3.0',
+    io: 'input',
+    unrepresentable: 'any',
+    override: ({ zodSchema, jsonSchema }) => {
+      if (zodSchema._zod.def.type === 'date') {
+        jsonSchema.type = 'string';
+        jsonSchema.format = 'date-time';
+      }
+    },
   }) as SchemaObject;
 }
 const generated = Object.fromEntries(
@@ -264,6 +272,7 @@ export const schemas: Record<string, SchemaObject> = {
       description:
         'Предмет лота — предпочитаемый просматривающим на момент создания лота (снимок, решение 18).',
     },
+    myCombatRole: role,
     timerKind: enumeration(['FIRST_BID', 'OPENING']),
     antiSnipeSec: num,
     antiSnipeExtendSec: num,
@@ -415,10 +424,21 @@ export const schemas: Record<string, SchemaObject> = {
     },
   }),
   Id: object({ id: str }),
-  Error: object({ statusCode: num, message: { oneOf: [str, array(str)] }, error: str }, [
-    'statusCode',
-    'message',
-  ]),
+  Error: object(
+    {
+      statusCode: num,
+      message: { oneOf: [str, array(str)] },
+      error: str,
+      errors: array(
+        object({
+          path: array({ oneOf: [str, num] }),
+          code: str,
+          message: { oneOf: [str, array(str)] },
+        }),
+      ),
+    },
+    ['statusCode', 'message'],
+  ),
   Health: object({
     status: { type: 'string', enum: ['ok'] },
     db: enumeration(['up', 'down']),

@@ -14,7 +14,14 @@ beforeEach(() => {
 afterEach(cleanup);
 const session = (rank: 'MEMBER' | 'OFFICER' | 'GUILD_LEADER' | null, isAdmin = false) => {
   vi.mocked(useSession).mockReturnValue({
-    user: { userId: 'u1', username: 'Тест', memberId: isAdmin ? null : 'm1', rank, isAdmin, blocked: false },
+    user: {
+      userId: 'u1',
+      username: 'Тест',
+      memberId: isAdmin ? null : 'm1',
+      rank,
+      isAdmin,
+      blocked: false,
+    },
     loading: false,
     reload: vi.fn(),
   });

@@ -54,9 +54,7 @@ export class AuctionsController {
   /** Начальные значения лота вне ивента по предмету (#137). */
   @Get('lot-defaults/:itemId')
   @RequirePermission('auctions.create')
-  lotDefaults(
-    @Param('itemId') itemId: string,
-  ): ReturnType<AuctionsService['defaultsForItem']> {
+  lotDefaults(@Param('itemId') itemId: string): ReturnType<AuctionsService['defaultsForItem']> {
     return this.auctions.defaultsForItem(itemId);
   }
 

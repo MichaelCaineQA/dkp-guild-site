@@ -25,12 +25,10 @@ export function BlockedScreen() {
   return (
     <Page width="narrow">
       <Card className="mt-16 text-center">
-        <h1 className="text-2xl font-semibold text-primary">
-          Гильдия закрыла свои врата для тебя
-        </h1>
+        <h1 className="text-2xl font-semibold text-primary">Гильдия закрыла свои врата для тебя</h1>
         <p className="mt-3 text-secondary">
-          Твоя учётная запись заблокирована. Если вернёшься в гильдию, руководство
-          восстановит доступ — история ДКП, класса и выкупленных лотов сохранена.
+          Твоя учётная запись заблокирована. Если вернёшься в гильдию, руководство восстановит
+          доступ — история ДКП, класса и выкупленных лотов сохранена.
         </p>
         <p className="mt-2 text-sm text-secondary">Вход в гильдию — через руководство в игре.</p>
         <Button className="mt-6" variant="secondary" onClick={logout} disabled={busy}>

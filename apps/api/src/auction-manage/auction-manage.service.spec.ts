@@ -503,10 +503,11 @@ describe('AuctionManageService: события realtime (issue #97)', () => {
   it('отмена лота отправляет lotClosed(CANCELLED), продление — lotUpdated', async () => {
     const events: AuctionEventsPort = {
       lotCreated: jest.fn(),
-      bidPlaced: jest.fn(), bidsRemoved: jest.fn(),
+      bidPlaced: jest.fn(),
+      bidsRemoved: jest.fn(),
       lotUpdated: jest.fn(),
       lotClosed: jest.fn(),
-    userAccessRevoked: jest.fn(),
+      userAccessRevoked: jest.fn(),
     };
     const { db } = makeDb({ auctions: [{ ...LOT, endsAt: new Date(NOW.getTime() + 60_000) }] });
     const svc = new AuctionManageService(db, () => NOW, events);
@@ -516,10 +517,22 @@ describe('AuctionManageService: события realtime (issue #97)', () => {
 
     const { db: db2 } = makeDb({
       auctions: [
-        { ...LOT, firstBidAt: new Date(NOW.getTime() - 30_000), endsAt: new Date(NOW.getTime() + 60_000) },
+        {
+          ...LOT,
+          firstBidAt: new Date(NOW.getTime() - 30_000),
+          endsAt: new Date(NOW.getTime() + 60_000),
+        },
       ],
     });
-    await new AuctionManageService(db2, () => NOW, events).extend('a-1', { extendSec: 60, comment: 'сеть лагает' }, RAID_LEAD);
-    expect(events.lotUpdated).toHaveBeenCalledWith('a-1', expect.objectContaining({ id: 'a-1' }), null);
+    await new AuctionManageService(db2, () => NOW, events).extend(
+      'a-1',
+      { extendSec: 60, comment: 'сеть лагает' },
+      RAID_LEAD,
+    );
+    expect(events.lotUpdated).toHaveBeenCalledWith(
+      'a-1',
+      expect.objectContaining({ id: 'a-1' }),
+      null,
+    );
   });
 });

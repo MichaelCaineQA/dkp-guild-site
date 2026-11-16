@@ -17,7 +17,10 @@ interface StoredLot {
 const findLots = jest.fn(async () => [] as StoredLot[]);
 const findEntries = jest.fn(async () => [] as Array<{ amount: number }>);
 const service = new DashboardService(
-  { auction: { findMany: findLots }, dkpEntry: { findMany: findEntries } } as unknown as DashboardDb,
+  {
+    auction: { findMany: findLots },
+    dkpEntry: { findMany: findEntries },
+  } as unknown as DashboardDb,
   {} as unknown as AuditService,
   {} as unknown as AuctionsService,
 );
@@ -45,9 +48,7 @@ describe('Кошелёк дашборда (issue #81, план 2.8 и 6 п. 5)',
     const wallet = await service.wallet(actor);
     expect(wallet).toEqual({ balance: 55, frozen: 0, available: 55, lots: [] });
     // только открытые лоты: отменённые и завершённые в заморозку не попадают
-    expect(findLots).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { status: 'OPEN' } }),
-    );
+    expect(findLots).toHaveBeenCalledWith(expect.objectContaining({ where: { status: 'OPEN' } }));
   });
 
   it('заморожено — ведущие ставки с наценкой; лоты по ближайшему окончанию', async () => {

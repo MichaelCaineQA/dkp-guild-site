@@ -1,5 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import type { AuctionLiveState, AuctionLotRow, BidRow, ItemTargetRole, LotStatus, LotTimerKind } from '@dkp/shared';
+import type {
+  AuctionLiveState,
+  AuctionLotRow,
+  BidRow,
+  ItemTargetRole,
+  LotStatus,
+  LotTimerKind,
+} from '@dkp/shared';
 
 interface StoredBid {
   id: string;

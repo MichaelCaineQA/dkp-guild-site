@@ -13,9 +13,8 @@ import { DashboardService } from './dashboard.service';
     {
       provide: DashboardService,
       inject: [PrismaService, AuditService, AuctionsService],
-      useFactory:
-        (db: PrismaService, audit: AuditService, auctions: AuctionsService) =>
-          new DashboardService(db, audit, auctions),
+      useFactory: (db: PrismaService, audit: AuditService, auctions: AuctionsService) =>
+        new DashboardService(db, audit, auctions),
     },
   ],
 })

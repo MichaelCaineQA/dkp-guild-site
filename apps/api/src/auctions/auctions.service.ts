@@ -21,6 +21,9 @@ import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction
 import { readAuctionSettings, type AuctionSettingsDb } from '../settings/auction-settings';
 import type { EventsActor } from '../events/events.service';
 import type { AuditWriter } from '../members/members.service';
+import { snapshotBidderProfiles, type BidderProfilesDb } from './bidder-profiles';
+import { bidderProfileAtCreation, type BidderProfiles } from '@dkp/shared';
+import { serializable } from '../prisma/serializable';
 
 interface StoredBid {
   id: string;
@@ -31,6 +34,8 @@ interface StoredBid {
 }
 
 interface StoredLot {
+  targetRoles?: ItemTargetRole[];
+  bidderProfiles?: BidderProfiles;
   id: string;
   status: string;
   startPrice: number;
@@ -105,6 +110,10 @@ interface StoredAuction {
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
 export interface AuctionsDb extends AuctionSettingsDb {
+  $transaction<T>(
+    work: (tx: AuctionsDb) => Promise<T>,
+    options: { isolationLevel: 'Serializable'; timeout?: number },
+  ): Promise<T>;
   item: {
     findUnique(args: { where: { id: string } }): Promise<StoredItem | null>;
   };
@@ -136,16 +145,17 @@ export interface AuctionsDb extends AuctionSettingsDb {
         markupPct: number;
         discountPct: number;
         targetRoles: ItemTargetRole[];
+        bidderProfiles: BidderProfiles;
         endsAt: Date | null;
       };
     }): Promise<StoredAuction>;
   };
   member: {
-    findUnique(args: {
-      where: { id: string };
-    }): Promise<{
+    findMany: BidderProfilesDb['member']['findMany'];
+    findUnique(args: { where: { id: string } }): Promise<{
       id: string;
       preferredItemId: string | null;
+      combatRole?: import('@dkp/shared').CombatRole | null;
       prevPreferredItemId: string | null;
       preferredItemChangedAt: Date | null;
     } | null>;
@@ -184,9 +194,7 @@ export class AuctionsService {
   /** Лоты одной вкладки: открытые — по ближайшему окончанию, архив — новые сверху. */
   async list(status: AuctionListStatus, viewerMemberId: string | null): Promise<AuctionListRow[]> {
     const orderBy: Array<{ endsAt?: 'asc' | 'desc'; createdAt?: 'asc' | 'desc' }> =
-      status === 'OPEN'
-        ? [{ endsAt: 'asc' }, { createdAt: 'asc' }]
-        : [{ createdAt: 'desc' }];
+      status === 'OPEN' ? [{ endsAt: 'asc' }, { createdAt: 'asc' }] : [{ createdAt: 'desc' }];
     const [lots, viewer] = await Promise.all([
       this.db.auction.findMany({
         where: { status },
@@ -218,6 +226,14 @@ export class AuctionsService {
    * проверены гардом на контроллере — цели-ивента здесь нет.
    */
   async createLot(body: unknown, actor: EventsActor): Promise<AuctionLotRow> {
+    const lot = await serializable(this.db, (tx) =>
+      new AuctionsService(tx).createLotInTransaction(body, actor),
+    );
+    this.events.lotCreated(lot);
+    return lot;
+  }
+
+  private async createLotInTransaction(body: unknown, actor: EventsActor): Promise<AuctionLotRow> {
     const parsed = createStandaloneLotSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(
@@ -248,6 +264,7 @@ export class AuctionsService {
         markupPct: settings.foreignClassMarkupPct,
         discountPct: settings.preferredItemDiscountPct,
         targetRoles: item.targetRoles,
+        bidderProfiles: await snapshotBidderProfiles(this.db),
         endsAt: fromFirstBid ? null : new Date(Date.now() + durationSec * 1000),
       },
     });
@@ -264,10 +281,7 @@ export class AuctionsService {
         }, анти-снайп ${input.antiSnipeSec} сек (продление ${antiSnipeExtendSec} сек), ` +
         `наценка ${settings.foreignClassMarkupPct}%, скидка ${settings.preferredItemDiscountPct}%`,
     );
-    const lot = this.toLotRow(auction);
-    // Новый лот — в общий канал списка сразу после фиксации (issue #97).
-    this.events.lotCreated(lot);
-    return lot;
+    return this.toLotRow(auction);
   }
 
   /**
@@ -294,9 +308,7 @@ export class AuctionsService {
       rarity: mine.lootDrop.item.rarity,
       status: 'OPEN',
       endsAt: mine.endsAt?.toISOString() ?? null,
-      topBid: top
-        ? { amount: top.amount, memberName: top.member.nickname }
-        : null,
+      topBid: top ? { amount: top.amount, memberName: top.member.nickname } : null,
     };
   }
 
@@ -412,25 +424,30 @@ export class AuctionsService {
     viewer: Awaited<ReturnType<AuctionsDb['member']['findUnique']>>,
   ): AuctionListRow {
     const top = winningBid(lot.bids);
+    const viewerSnapshot =
+      lot.bidderProfiles && viewer ? bidderProfileAtCreation(lot.bidderProfiles, viewer.id) : null;
     const mine = viewerMemberId
-      ? lot.bids
+      ? (lot.bids
           .filter((bid) => bid.memberId === viewerMemberId)
           .sort((a, b) => a.amount - b.amount)
-          .pop() ?? null
+          .pop() ?? null)
       : null;
     return {
       id: lot.id,
       status: lot.status as AuctionListRow['status'],
       itemName: lot.lootDrop.item.name,
       rarity: lot.lootDrop.item.rarity,
-      targetRoles: lot.lootDrop.item.targetRoles,
+      targetRoles: lot.targetRoles ?? lot.lootDrop.item.targetRoles,
       startPrice: lot.startPrice,
       step: lot.step,
       markupPct: lot.markupPct,
       discountPct: lot.discountPct,
-      myPreferred: viewer
-        ? prefersItemAtLotCreation(viewer, lot.createdAt, lot.lootDrop.itemId)
-        : false,
+      myCombatRole: viewerSnapshot ? viewerSnapshot.combatRole : (viewer?.combatRole ?? null),
+      myPreferred: viewerSnapshot
+        ? viewerSnapshot.preferredItemId === lot.lootDrop.itemId
+        : viewer
+          ? prefersItemAtLotCreation(viewer, lot.createdAt, lot.lootDrop.itemId)
+          : false,
       timerKind: lot.timerFromFirstBid ? 'FIRST_BID' : 'OPENING',
       antiSnipeSec: lot.antiSnipeSec,
       antiSnipeExtendSec: lot.antiSnipeExtendSec,

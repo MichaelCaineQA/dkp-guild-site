@@ -192,7 +192,8 @@ export function RosterGroups({ user, mode }: { user: SessionUser; mode: 'kp' | '
   const canManageSelectedPack =
     isGuildManager || (!!user.memberId && selectedGroupKp?.leaderId === user.memberId);
   const canViewGs =
-    isGuildManager || user.rank === 'ADMIN' ||
+    isGuildManager ||
+    user.rank === 'ADMIN' ||
     (mode === 'kp' &&
       (selectedKp?.leaderId === user.memberId ||
         !!selectedKp?.packs.some((pack) => pack.leaderId === user.memberId))) ||

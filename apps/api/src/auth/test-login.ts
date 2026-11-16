@@ -4,16 +4,16 @@
  */
 
 export interface TestLoginResult {
-  ok: boolean
-  error?: string
+  ok: boolean;
+  error?: string;
   user?: {
-    userId: string
-    username: string
-    memberId: null
-    rank: null
-    isAdmin: boolean
-    blocked: boolean
-  }
+    userId: string;
+    username: string;
+    memberId: null;
+    rank: null;
+    isAdmin: boolean;
+    blocked: boolean;
+  };
 }
 
 /** Разрешены только тестовые пользователи test-* — иначе можно войти за реального человека. */
@@ -22,11 +22,11 @@ export function performTestLogin(
   authTestMode: string | undefined,
 ): TestLoginResult {
   if (authTestMode !== 'true') {
-    return { ok: false, error: 'NOT_FOUND' }
+    return { ok: false, error: 'NOT_FOUND' };
   }
-  const username = body.username ?? ''
+  const username = body.username ?? '';
   if (!username.startsWith('test-')) {
-    return { ok: false, error: 'Допустимы только тестовые пользователи (test-*)' }
+    return { ok: false, error: 'Допустимы только тестовые пользователи (test-*)' };
   }
   return {
     ok: true,
@@ -38,5 +38,5 @@ export function performTestLogin(
       isAdmin: false,
       blocked: false,
     },
-  }
+  };
 }

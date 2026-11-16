@@ -61,7 +61,14 @@ describe('Пакет итогов через HTTP', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     eventStatus = 'FINISHED';
-    actor = { userId: 'u', username: 'Игрок', memberId: 'rl', rank: 'MEMBER', isAdmin: false, blocked: false };
+    actor = {
+      userId: 'u',
+      username: 'Игрок',
+      memberId: 'rl',
+      rank: 'MEMBER',
+      isAdmin: false,
+      blocked: false,
+    };
   });
   const body = {
     requestId: '00000000-0000-4000-8000-000000000001',
@@ -76,7 +83,14 @@ describe('Пакет итогов через HTTP', () => {
   it('аноним 401, непривязанный 403, Офицер без назначения 403', async () => {
     actor = undefined;
     expect((await post()).status).toBe(401);
-    actor = { userId: 'u', username: 'Гость', memberId: null, rank: null, isAdmin: false, blocked: false };
+    actor = {
+      userId: 'u',
+      username: 'Гость',
+      memberId: null,
+      rank: null,
+      isAdmin: false,
+      blocked: false,
+    };
     expect((await post()).status).toBe(403);
     actor.memberId = 'other';
     actor.rank = 'OFFICER';
@@ -91,7 +105,14 @@ describe('Пакет итогов через HTTP', () => {
     expect(ledger).toHaveBeenCalledTimes(1);
   });
   it('чек-лист и итоги доступны только автору-Офицеру или назначенному РЛ', async () => {
-    actor = { userId: 'u', username: 'Автор', memberId: 'author', rank: 'OFFICER', isAdmin: false, blocked: false };
+    actor = {
+      userId: 'u',
+      username: 'Автор',
+      memberId: 'author',
+      rank: 'OFFICER',
+      isAdmin: false,
+      blocked: false,
+    };
     expect((await fetch(url + '/events/e/conduct/checklist')).status).toBe(200);
     expect((await post()).status).toBe(201);
     actor.rank = 'MEMBER';
@@ -112,7 +133,14 @@ describe('Пакет итогов через HTTP', () => {
     expect(record).not.toHaveBeenCalled();
   });
   it('резервный админ без Member сохраняет автора null', async () => {
-    actor = { userId: 'admin:root', username: 'Админ', memberId: null, rank: null, isAdmin: true, blocked: false };
+    actor = {
+      userId: 'admin:root',
+      username: 'Админ',
+      memberId: null,
+      rank: null,
+      isAdmin: true,
+      blocked: false,
+    };
     expect((await post()).status).toBe(201);
     expect(ledger).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ createdById: null }) }),

@@ -61,8 +61,7 @@ export function getSessionStore(): session.Store {
  */
 export async function readSessionUser(req: IncomingMessage): Promise<SessionUser | null> {
   const signed = sidFromCookieHeader(req.headers.cookie);
-  const sid =
-    signed?.startsWith('s:') === true ? unsign(signed.slice(2), sessionSecret()) : false;
+  const sid = signed?.startsWith('s:') === true ? unsign(signed.slice(2), sessionSecret()) : false;
   const current = store;
   if (!sid || !current) return null;
   return new Promise((resolve) => {

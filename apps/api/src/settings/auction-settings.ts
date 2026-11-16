@@ -1,8 +1,4 @@
-import {
-  parseSettingValue,
-  SETTING_DEFAULTS,
-  type AuctionSettingValues,
-} from '@dkp/shared';
+import { parseSettingValue, SETTING_DEFAULTS, type AuctionSettingValues } from '@dkp/shared';
 
 /** Ключи настроек аукциона, влияющие на дефолты и снапшоты нового лота. */
 export const AUCTION_SETTING_KEYS = [

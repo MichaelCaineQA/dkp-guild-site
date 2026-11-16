@@ -37,9 +37,12 @@ Production/staging и резервное копирование описаны �
 ## Проверки и изменения
 
 - Перед PR: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
-- CI: lint → typecheck → test → build → audit. Фактическая конфигурация —
-  `.github/workflows/ci.yml`; сейчас `pnpm audit --prod` имеет
-  `continue-on-error: true` (проверено 2026-11-08).
+- CI: lint, format:check, test:coverage (shared, минимум 80% statements/
+  branches/functions/lines), typecheck, test, PostgreSQL, build, Playwright
+  бизнес-сценарии, обязательный `pnpm audit --prod` без исключений (#171–172).
+  Zod 4 использует нативный конвертер OpenAPI; у PATCH удалены defaults,
+  чтобы отсутствующие поля не сбрасывали состав ивента. Для закреплённых
+  родителями PostCSS/deepmerge-ts есть адресные overrides в pnpm-workspace.
 - Отдельный `.github/workflows/infrastructure.yml` проверяет actionlint,
   Compose и shell-синтаксис, тестирует отказные сценарии деплоя без сервера
   (`python3 -m unittest discover -s scripts -p 'test_*.py' -v`), собирает
@@ -62,8 +65,8 @@ Production/staging и резервное копирование описаны �
 - VPS **188.120.225.204** (FirstVDS, root, ключ `~/.ssh/dkp_stage`, alias
   `dkp-stage`), Ubuntu 24.04, 4 vCPU / 8 ГБ / 99 ГБ NVMe, Docker Engine
   + Compose; checkout `/opt/dkp-guild-site` с серверным `.env.production`
-  (0600, секреты только там). Деплой — workflow `Deploy`: пуш в `main` катит
-  staging автоматически через окружение GitHub `staging`
+  (0600, секреты только там). Деплой — workflow `Deploy`: успешный CI пуша
+  в `main` запускает staging для того же SHA через окружение GitHub `staging`
   (secrets `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_SSH_KEY`/`DEPLOY_KNOWN_HOSTS`,
   variable `DEPLOY_PATH`); ручной workflow_dispatch выбирает окружение
   и для production требует тег из истории main (`release_tag` или tag ref).
@@ -90,8 +93,8 @@ Production/staging и резервное копирование описаны �
   админ из серверного `.env.production`. Realtime (#97): engine.io-handshake —
   `curl '.../api/socket.io/?EIO=4&transport=polling'` (ответ `0{"sid":...}`);
   неавторизованный сокет-клиент получает `auction:error` и disconnect.
-- **Ожидание деплоя (проверено 2026-11-10): на один пуш в main стартуют ДВА
-  workflow-рана с одинаковым SHA — CI и Deploy; фильтр `runs?name=Deploy`
+- **Ожидание деплоя (#172): CI пуша в main завершается первым, затем
+  workflow_run запускает Deploy того же SHA; фильтр `runs?name=Deploy`
   их не всегда различает. Жди завершения именно run'а workflow Deploy
   (запоминай его id при старте); сборка api+web на VPS идёт ~10–15 минут,
   `in_progress` всё это время — норма. Контейнер api при этом остаётся
@@ -104,8 +107,23 @@ Production/staging и резервное копирование описаны �
   stage.suneclipse.ru резолвится в 188.120.225.204 напрямую.
 - Бэкапы: cron `/etc/cron.d/dkp-guild-backup` — ежедневно в 03:17 локально
   в `/opt/dkp-guild-site/backups` (лог `/var/log/dkp-guild-backup.log`).
-  Внешнее хранилище (`BACKUP_REMOTE`) пока НЕ настроено — на старом
-  сервере проверить не удалось, он был недоступен.
+  По решению владельца #175 отдельный хостинг не используется: внешняя
+  копия скачивается на Windows оператора (`scripts/pull-backups.ps1`),
+  SHA-256 проверяется до ротации; последние 30 проверенных копий.
+  `scripts/install-local-backup.ps1` ставит ежедневное задание 10:00 с
+  StartWhenAvailable. Компьютер должен быть включён с доступом по SSH;
+  BACKUP_REMOTE для push на другой сервер не требуется.
+- Восстановление #175 проверено 2026-11-16: копия 20261116T145802Z,
+  SHA eb67f2d3d1aa, 8 участников / 5 записей ДКП / 10 скриншотов,
+  вход администратора и скачивание всех файлов; RTO 7,47 с для восстановления
+  уже имеющейся копии и образа. Повторение на staging:
+  `python3 scripts/verify-restore.py /opt/dkp-guild-site/backups/<timestamp>`.
+  Скрипт создаёт internal network и временные контейнеры без портов,
+  использует точный deployed image, не запускает миграции/seed и убирает
+  только свои контейнеры. Целевой RPO — 24 часа при успешном ежедневном
+  cron и скачивании; при выключенном ПК внешний RPO растёт до следующего
+  успешного запуска. Полный RTO с потерей VPS и настройкой нового сервера
+  этим тестом не измерен.
 
 ## Жизненный цикл задачи (поручение владельца 2026-11-09)
 

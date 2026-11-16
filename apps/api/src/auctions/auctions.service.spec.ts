@@ -19,14 +19,20 @@ const SETTINGS = new Map<string, number>([
 
 const settingsDb = () => ({
   setting: {
-    findMany: async () =>
-      [...SETTINGS.entries()].map(([key, value]) => ({ key, value })),
+    findMany: async () => [...SETTINGS.entries()].map(([key, value]) => ({ key, value })),
   },
 });
 
 const auditDb = () => {
   const audit: Array<Record<string, unknown>> = [];
-  return { audit, auditLog: { create: async ({ data }: { data: Record<string, unknown> }) => { audit.push(data); } } as AuditWriter };
+  return {
+    audit,
+    auditLog: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        audit.push(data);
+      },
+    } as AuditWriter,
+  };
 };
 
 const noopAudit: AuditWriter = { create: async () => undefined };
@@ -57,12 +63,21 @@ function makeDb(
   const queries: string[] = [];
   return {
     queries,
+    async $transaction(work) {
+      return work(this);
+    },
     ...settingsDb(),
     auditLog: noopAudit,
     item: { findUnique: async () => null },
-    lootDrop: { create: async () => { throw new Error('не должен вызываться'); } },
+    lootDrop: {
+      create: async () => {
+        throw new Error('не должен вызываться');
+      },
+    },
     auction: {
-      create: async () => { throw new Error('не должен вызываться'); },
+      create: async () => {
+        throw new Error('не должен вызываться');
+      },
       findMany: async ({ where, orderBy }) => {
         queries.push(JSON.stringify({ where, orderBy }));
         const matched = lots.filter((lot) => (lot.status ?? 'OPEN') === where.status);
@@ -80,50 +95,50 @@ function makeDb(
             return ae - be;
           });
         }
-        return matched
-          .map((lot) => ({
-            id: lot.id,
-            status: lot.status ?? 'OPEN',
-            startPrice: 100,
-            step: 5,
-            timerFromFirstBid: true,
-            durationSec: 90,
-            antiSnipeSec: 30,
-            antiSnipeExtendSec: 30,
-            noBidTimeoutSec: 120,
-            markupPct: 50,
-            discountPct: 10,
-            firstBidAt: lot.bids?.length ? new Date('2026-11-10T18:00:00Z') : null,
-            endsAt: lot.endsAt ?? null,
-            createdAt: lot.createdAt ?? new Date('2026-11-10T17:00:00Z'),
-            lootDrop: {
-              itemId: lot.itemId ?? 'item-1',
-              item: {
-                name: lot.itemName ?? 'Предмет',
-                rarity: lot.rarity ?? null,
-                targetRoles: lot.targetRoles ?? (['ALL'] as ItemTargetRole[]),
-              },
+        return matched.map((lot) => ({
+          id: lot.id,
+          status: lot.status ?? 'OPEN',
+          startPrice: 100,
+          step: 5,
+          timerFromFirstBid: true,
+          durationSec: 90,
+          antiSnipeSec: 30,
+          antiSnipeExtendSec: 30,
+          noBidTimeoutSec: 120,
+          markupPct: 50,
+          discountPct: 10,
+          firstBidAt: lot.bids?.length ? new Date('2026-11-10T18:00:00Z') : null,
+          endsAt: lot.endsAt ?? null,
+          createdAt: lot.createdAt ?? new Date('2026-11-10T17:00:00Z'),
+          lootDrop: {
+            itemId: lot.itemId ?? 'item-1',
+            item: {
+              name: lot.itemName ?? 'Предмет',
+              rarity: lot.rarity ?? null,
+              targetRoles: lot.targetRoles ?? (['ALL'] as ItemTargetRole[]),
             },
-            bids: (lot.bids ?? []).map((bid, index) => ({
-              id: `${lot.id}-b${index + 1}`,
-              memberId: bid.memberId,
-              amount: bid.amount,
-              fullCost: bid.fullCost ?? bid.amount,
-              member: { nickname: bid.nickname },
-            })),
-            award: lot.award
-              ? {
-                  winnerId: lot.award.winnerId,
-                  finalPrice: lot.award.finalPrice,
-                  markupPct: 0,
-                  discountPct: 0,
-                  winner: { nickname: lot.award.nickname },
-                }
-              : null,
-          }));
+          },
+          bids: (lot.bids ?? []).map((bid, index) => ({
+            id: `${lot.id}-b${index + 1}`,
+            memberId: bid.memberId,
+            amount: bid.amount,
+            fullCost: bid.fullCost ?? bid.amount,
+            member: { nickname: bid.nickname },
+          })),
+          award: lot.award
+            ? {
+                winnerId: lot.award.winnerId,
+                finalPrice: lot.award.finalPrice,
+                markupPct: 0,
+                discountPct: 0,
+                winner: { nickname: lot.award.nickname },
+              }
+            : null,
+        }));
       },
     },
     member: {
+      findMany: async () => [],
       findUnique: async ({ where }) =>
         viewer && viewer.id === where.id
           ? {
@@ -156,9 +171,9 @@ describe('AuctionsService (issue #98)', () => {
     expect(rows[0]!.topBid).toMatchObject({ memberName: 'Целитель', amount: 150, fullCost: 225 });
     expect(rows[0]!.myBid).toEqual({ amount: 100, leading: false });
     // та же ставка максимальная у автора — leading: true
-    const mineLead = await new AuctionsService(makeDb([
-      { id: 'a-1', bids: [{ memberId: 'm-1', nickname: 'Воин', amount: 100 }] },
-    ])).list('OPEN', 'm-1');
+    const mineLead = await new AuctionsService(
+      makeDb([{ id: 'a-1', bids: [{ memberId: 'm-1', nickname: 'Воин', amount: 100 }] }]),
+    ).list('OPEN', 'm-1');
     expect(mineLead[0]!.myBid).toEqual({ amount: 100, leading: true });
   });
 
@@ -203,7 +218,12 @@ describe('AuctionsService (issue #98)', () => {
 
   it('завершённый лот несёт победителя, архив сортируется свежими сверху', async () => {
     const db = makeDb([
-      { id: 'old', status: 'CLOSED', createdAt: new Date('2026-11-09T10:00:00Z'), award: { winnerId: 'm-2', nickname: 'Хил', finalPrice: 300 } },
+      {
+        id: 'old',
+        status: 'CLOSED',
+        createdAt: new Date('2026-11-09T10:00:00Z'),
+        award: { winnerId: 'm-2', nickname: 'Хил', finalPrice: 300 },
+      },
       { id: 'new', status: 'CLOSED', createdAt: new Date('2026-11-10T10:00:00Z') },
     ]);
     const rows = await new AuctionsService(db).list('CLOSED', 'm-2');
@@ -262,26 +282,35 @@ interface AwardSeed {
   eventName?: string;
 }
 
-function makeLootDb(
-  awards: AwardSeed[],
-): AuctionsDb & { findWhere: Array<Record<string, unknown>>; page: Array<Record<string, unknown>> } {
+function makeLootDb(awards: AwardSeed[]): AuctionsDb & {
+  findWhere: Array<Record<string, unknown>>;
+  page: Array<Record<string, unknown>>;
+} {
   const findWhere: Array<Record<string, unknown>> = [];
   const page: Array<Record<string, unknown>> = [];
   const db: AuctionsDb & {
     findWhere: Array<Record<string, unknown>>;
     page: Array<Record<string, unknown>>;
   } = {
+    $transaction: async (work) => work(db),
     findWhere,
     page,
     ...settingsDb(),
     auditLog: noopAudit,
     item: { findUnique: async () => null },
-    lootDrop: { create: async () => { throw new Error('не должен вызываться'); } },
+    lootDrop: {
+      create: async () => {
+        throw new Error('не должен вызываться');
+      },
+    },
     auction: {
-      create: async () => { throw new Error('не должен вызываться'); },
+      create: async () => {
+        throw new Error('не должен вызываться');
+      },
       findMany: async () => [],
     },
     member: {
+      findMany: async () => [],
       findUnique: async () => null,
     },
     lootAward: {
@@ -401,12 +430,14 @@ describe('AuctionsService.lootLog (issue #99)', () => {
 });
 
 /** Фейк БД для создания лота вне ивента (#137). */
-function makeCreateDb(item: {
-  id: string;
-  name: string;
-  targetRoles?: ItemTargetRole[];
-  defaultStartPrice?: number | null;
-} | null) {
+function makeCreateDb(
+  item: {
+    id: string;
+    name: string;
+    targetRoles?: ItemTargetRole[];
+    defaultStartPrice?: number | null;
+  } | null,
+) {
   const { audit, auditLog } = auditDb();
   const created = {
     drop: null as { data: { eventId: null; itemId: string } } | null,
@@ -422,6 +453,8 @@ function makeCreateDb(item: {
     lotClosed: () => undefined,
   };
   const db = {
+    $transaction: async (work: (tx: AuctionsDb) => Promise<unknown>) =>
+      work(db as unknown as AuctionsDb),
     ...settingsDb(),
     auditLog,
     item: {
@@ -456,7 +489,7 @@ function makeCreateDb(item: {
         } as never;
       },
     },
-    member: { findUnique: async () => null },
+    member: { findMany: async () => [], findUnique: async () => null },
     lootAward: { findMany: async () => [], count: async () => 0 },
   };
   return { db: db as unknown as AuctionsDb, created, audit, emitted, events };
@@ -554,10 +587,20 @@ describe('AuctionsService.createLot — лот вне ивента (#137)', () =
   it('некорректные параметры и неизвестный предмет отклоняются', async () => {
     const fake = makeCreateDb({ id: 'item-1', name: 'Клинок' });
     const service = new AuctionsService(fake.db as AuctionsDb);
-    await expect(service.createLot({ ...LONG_LOT_BODY, durationValue: 15 }, { memberId: 'm-1', isAdmin: false })).rejects.toThrow();
-    await expect(service.createLot({ ...LONG_LOT_BODY, itemId: '' }, { memberId: 'm-1', isAdmin: false })).rejects.toThrow();
     await expect(
-      new AuctionsService(makeCreateDb(null).db).createLot(LONG_LOT_BODY, { memberId: 'm-1', isAdmin: false }),
+      service.createLot(
+        { ...LONG_LOT_BODY, durationValue: 15 },
+        { memberId: 'm-1', isAdmin: false },
+      ),
+    ).rejects.toThrow();
+    await expect(
+      service.createLot({ ...LONG_LOT_BODY, itemId: '' }, { memberId: 'm-1', isAdmin: false }),
+    ).rejects.toThrow();
+    await expect(
+      new AuctionsService(makeCreateDb(null).db).createLot(LONG_LOT_BODY, {
+        memberId: 'm-1',
+        isAdmin: false,
+      }),
     ).rejects.toThrow(NotFoundException);
   });
 });

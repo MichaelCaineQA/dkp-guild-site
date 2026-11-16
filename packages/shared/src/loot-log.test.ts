@@ -17,9 +17,9 @@ describe('lootLogQuerySchema', () => {
     expect(lootLogQuerySchema.parse({ memberId: 'm1' }).memberId).toBe('m1');
     expect(lootLogQuerySchema.parse({ eventId: 'e1' }).eventId).toBe('e1');
     expect(lootLogQuerySchema.parse({ itemId: 'i1' }).itemId).toBe('i1');
-    expect(
-      lootLogQuerySchema.parse({ memberId: 'm1', eventId: 'e1', itemId: 'i1' }),
-    ).toMatchObject({ memberId: 'm1', eventId: 'e1', itemId: 'i1' });
+    expect(lootLogQuerySchema.parse({ memberId: 'm1', eventId: 'e1', itemId: 'i1' })).toMatchObject(
+      { memberId: 'm1', eventId: 'e1', itemId: 'i1' },
+    );
   });
 
   it('пагинация приводится из строк запроса', () => {

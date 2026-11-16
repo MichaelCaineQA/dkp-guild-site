@@ -56,11 +56,7 @@ const optionalLabel = (max: number) =>
 
 /** Ввод предмета справочника (создание и редактирование). */
 export const itemInputSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, 'Название обязательно')
-    .max(80, 'Название: до 80 символов'),
+  name: z.string().trim().min(1, 'Название обязательно').max(80, 'Название: до 80 символов'),
   rarity: optionalLabel(40),
   slot: optionalLabel(40),
   targetRoles: z

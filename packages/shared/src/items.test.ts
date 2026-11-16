@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  formatTargetRoles,
-  itemInputSchema,
-  itemStartPrice,
-  normalizeTargetRoles,
-} from './items';
+import { formatTargetRoles, itemInputSchema, itemStartPrice, normalizeTargetRoles } from './items';
 
 describe('items: справочник предметов (issue #92)', () => {
   describe('normalizeTargetRoles', () => {
@@ -44,9 +39,7 @@ describe('items: справочник предметов (issue #92)', () => {
     });
 
     it('отклоняет пустое название, пустой мультивыбор и отрицательную цену', () => {
-      expect(() =>
-        itemInputSchema.parse({ name: ' ', targetRoles: ['ALL'] }),
-      ).toThrow();
+      expect(() => itemInputSchema.parse({ name: ' ', targetRoles: ['ALL'] })).toThrow();
       expect(() => itemInputSchema.parse({ name: 'Меч', targetRoles: [] })).toThrow();
       expect(() =>
         itemInputSchema.parse({ name: 'Меч', targetRoles: ['ALL'], defaultStartPrice: -1 }),

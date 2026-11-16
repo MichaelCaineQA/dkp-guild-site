@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction-events';
 import type { MembersDb, Actor } from './members.service';
 import { MembersService } from './members.service';
@@ -100,7 +105,13 @@ function makeDb(
     },
     auditLog: {
       create: async ({ data }) => {
-        audit.push({ actorMemberId: data.actorMemberId, action: data.action, entityType: data.entityType, entityId: data.entityId, comment: data.comment ?? null });
+        audit.push({
+          actorMemberId: data.actorMemberId,
+          action: data.action,
+          entityType: data.entityType,
+          entityId: data.entityId,
+          comment: data.comment ?? null,
+        });
       },
     },
   };
@@ -112,13 +123,36 @@ const ACTOR: Actor = { memberId: 'm-actor', isAdmin: false, userId: 'u1' };
 describe('MembersService.roster', () => {
   it('фильтрует доступных на стыке дней вместе с рангом', async () => {
     const { db } = makeDb([
-      { id: 'a', nickname: 'a', rank: 'MEMBER', combatRole: 'DPS', timeZone: 'Europe/Moscow', primeTime: [{ weekday: 1, fromMinute: 0, toMinute: 60 }] },
-      { id: 'b', nickname: 'b', rank: 'MEMBER', combatRole: 'DPS', timeZone: 'Europe/Moscow', primeTime: [{ weekday: 0, fromMinute: 1380, toMinute: 1440 }] },
-      { id: 'c', nickname: 'c', rank: 'OFFICER', combatRole: 'DPS', timeZone: 'Europe/Moscow', primeTime: [{ weekday: 1, fromMinute: 0, toMinute: 60 }] },
+      {
+        id: 'a',
+        nickname: 'a',
+        rank: 'MEMBER',
+        combatRole: 'DPS',
+        timeZone: 'Europe/Moscow',
+        primeTime: [{ weekday: 1, fromMinute: 0, toMinute: 60 }],
+      },
+      {
+        id: 'b',
+        nickname: 'b',
+        rank: 'MEMBER',
+        combatRole: 'DPS',
+        timeZone: 'Europe/Moscow',
+        primeTime: [{ weekday: 0, fromMinute: 1380, toMinute: 1440 }],
+      },
+      {
+        id: 'c',
+        nickname: 'c',
+        rank: 'OFFICER',
+        combatRole: 'DPS',
+        timeZone: 'Europe/Moscow',
+        primeTime: [{ weekday: 1, fromMinute: 0, toMinute: 60 }],
+      },
       { id: 'd', nickname: 'd', rank: 'MEMBER', combatRole: 'DPS' },
     ]);
     const service = new MembersService(db, () => new Date('2026-11-16T21:00:00Z'));
-    expect((await service.roster({ availableNow: 'true', rank: 'MEMBER' })).map((row) => row.id)).toEqual(['a']);
+    expect(
+      (await service.roster({ availableNow: 'true', rank: 'MEMBER' })).map((row) => row.id),
+    ).toEqual(['a']);
   });
   it('возвращает состав, отсортированный по нику, с Discord-именем', async () => {
     const { db, members } = makeDb([
@@ -408,12 +442,12 @@ describe('MembersService.block/unblock (issue #149)', () => {
     await expect(service.block('m-2', { comment: 'Главу блок' }, ACTOR)).rejects.toThrow(
       ConflictException,
     );
-    await expect(
-      service.block('m-x', { comment: 'Нет такого' }, ACTOR),
-    ).rejects.toThrow(NotFoundException);
-    await expect(
-      service.block('m-1', { comment: 'ок' }, ACTOR),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.block('m-x', { comment: 'Нет такого' }, ACTOR)).rejects.toThrow(
+      NotFoundException,
+    );
+    await expect(service.block('m-1', { comment: 'ок' }, ACTOR)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('состав скрывает заблокированных, вкладка заблокированных их показывает', async () => {

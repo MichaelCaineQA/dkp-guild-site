@@ -27,9 +27,8 @@ suite('Ставки: настоящие транзакции PostgreSQL', () => 
 
   beforeEach(async () => {
     const suffix = randomUUID().slice(0, 10);
-    dpsId = (
-      await db.member.create({ data: { nickname: 'bid-dd-' + suffix, combatRole: 'DPS' } })
-    ).id;
+    dpsId = (await db.member.create({ data: { nickname: 'bid-dd-' + suffix, combatRole: 'DPS' } }))
+      .id;
     healerId = (
       await db.member.create({ data: { nickname: 'bid-heal-' + suffix, combatRole: 'HEALER' } })
     ).id;
@@ -93,9 +92,9 @@ suite('Ставки: настоящие транзакции PostgreSQL', () => 
       results.filter((r) => r.status === 'rejected' && r.reason instanceof BadRequestException),
     ).toHaveLength(1);
     expect(await bidsOf(auctionId)).toHaveLength(1);
-    expect(
-      await db.auditLog.count({ where: { action: 'AUCTION_BID', entityId: auctionId } }),
-    ).toBe(1);
+    expect(await db.auditLog.count({ where: { action: 'AUCTION_BID', entityId: auctionId } })).toBe(
+      1,
+    );
   });
 
   it('гонка первых ставок живой раздачи запускает таймер один раз', async () => {
@@ -147,9 +146,9 @@ suite('Ставки: настоящие транзакции PostgreSQL', () => 
       bids.place(auctionId, { amount: 100 }, { memberId: dpsId, isAdmin: false }),
     ).rejects.toThrow(ConflictException);
     expect(await bidsOf(auctionId)).toHaveLength(0);
-    expect(
-      await db.auditLog.count({ where: { action: 'AUCTION_BID', entityId: auctionId } }),
-    ).toBe(0);
+    expect(await db.auditLog.count({ where: { action: 'AUCTION_BID', entityId: auctionId } })).toBe(
+      0,
+    );
   });
 
   it('сбой аудита откатывает ставку и сдвиг таймера', async () => {

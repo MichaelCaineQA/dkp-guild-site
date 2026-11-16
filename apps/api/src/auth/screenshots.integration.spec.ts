@@ -7,6 +7,7 @@ import { SCREENSHOT_MAX_BYTES } from '@dkp/shared';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
+import sharp from 'sharp';
 import { ScreenshotsController } from './screenshots.controller';
 import { ScreenshotsService, type ScreenshotDb } from './screenshots.service';
 let actor: SessionUser | undefined;
@@ -43,15 +44,15 @@ const db = {
   ],
 })
 class TestModule {}
-const png = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jQ1sAAAAASUVORK5CYII=',
-  'base64',
-);
+let png: Buffer;
 describe('Приватные скриншоты через HTTP', () => {
   let app: INestApplication;
   let url: string;
   let directory: string;
   beforeAll(async () => {
+    png = await sharp({ create: { width: 1, height: 1, channels: 3, background: 'white' } })
+      .png()
+      .toBuffer();
     directory = await mkdtemp(join(tmpdir(), 'dkp-onboarding-'));
     process.env.SCREENSHOT_DIR = directory;
     app = await NestFactory.create(TestModule, { logger: false });
@@ -161,9 +162,25 @@ describe('Приватные скриншоты через HTTP', () => {
       expect((await upload(data, type)).status).toBe(400);
     expect(metadata.create).not.toHaveBeenCalled();
   });
-  it('распознаёт допустимые сигнатуры JPEG и WebP', async () => {
-    expect((await upload(Buffer.from([255, 216, 255, 224, 0]), 'image/jpeg')).status).toBe(201);
-    expect((await upload(Buffer.from('RIFF0000WEBPVP8 0000'), 'image/webp')).status).toBe(201);
+  it('принимает полностью декодируемые JPEG и WebP', async () => {
+    const jpeg = await sharp(png).jpeg().toBuffer();
+    const webp = await sharp(png).webp().toBuffer();
+    expect((await upload(jpeg, 'image/jpeg')).status).toBe(201);
+    expect((await upload(webp, 'image/webp')).status).toBe(201);
+  });
+  it('отклоняет усечённый PNG до записи метаданных и аудита', async () => {
+    expect((await upload(png.subarray(0, 24))).status).toBe(400);
+    expect(metadata.create).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+  });
+  it('отклоняет изображение с чрезмерным количеством пикселей', async () => {
+    const large = await sharp({
+      create: { width: 10001, height: 4000, channels: 3, background: 'white' },
+    })
+      .png()
+      .toBuffer();
+    expect((await upload(large)).status).toBe(400);
+    expect(metadata.create).not.toHaveBeenCalled();
   });
   it('пустой multipart не пишет метаданные', async () => {
     expect(

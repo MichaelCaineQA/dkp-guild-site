@@ -81,9 +81,7 @@ it('фильтр по игроку уходит в запрос, сброс во
 
   fireEvent.change(screen.getByLabelText('Фильтр по игроку'), { target: { value: 'm-2' } });
   await waitFor(() => {
-    expect(api).toHaveBeenLastCalledWith(
-      expect.stringContaining('memberId=m-2'),
-    );
+    expect(api).toHaveBeenLastCalledWith(expect.stringContaining('memberId=m-2'));
   });
 
   fireEvent.click(screen.getByRole('button', { name: 'Сбросить' }));

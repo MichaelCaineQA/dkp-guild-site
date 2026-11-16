@@ -29,18 +29,18 @@ export class PermissionsGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest<
-      AuthedRequest & { session?: { user?: SessionUser } }
-    >();
+    const request = context
+      .switchToHttp()
+      .getRequest<AuthedRequest & { session?: { user?: SessionUser } }>();
     const user = request.session?.user;
     if (!user) {
       throw new UnauthorizedException('Требуется вход');
     }
 
-    const permission = this.reflector.getAllAndOverride<Permission | undefined>(
-      PERMISSION_KEY,
-      [context.getHandler(), context.getClass()],
-    );
+    const permission = this.reflector.getAllAndOverride<Permission | undefined>(PERMISSION_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
     if (permission === undefined) {
       return true;
     }

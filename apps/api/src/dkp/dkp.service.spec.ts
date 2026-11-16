@@ -82,7 +82,12 @@ describe('DkpService.list', () => {
   it('фильтры: игрок, тип, период, пагинация', async () => {
     const { db } = makeDb([
       entry({ id: 'd-1', type: 'CHECKIN_EARN', amount: 5 }),
-      entry({ id: 'd-2', type: 'ADJUSTMENT', amount: -3, createdAt: new Date('2026-02-01T00:00:00Z') }),
+      entry({
+        id: 'd-2',
+        type: 'ADJUSTMENT',
+        amount: -3,
+        createdAt: new Date('2026-02-01T00:00:00Z'),
+      }),
       entry({
         id: 'd-3',
         memberId: 'm-2',
@@ -103,7 +108,9 @@ describe('DkpService.list', () => {
 
 describe('DkpService.balances / memberBalance', () => {
   it('баланс включает весь журнал, даже после 10000 операций', async () => {
-    const { db } = makeDb(Array.from({ length: 10_001 }, (_, i) => entry({ id: `d-${i}`, amount: 1 })));
+    const { db } = makeDb(
+      Array.from({ length: 10_001 }, (_, i) => entry({ id: `d-${i}`, amount: 1 })),
+    );
     const service = new DkpService(db);
     expect((await service.memberBalance('m-1')).balance).toBe(10_001);
     expect((await service.balances()).find((row) => row.memberId === 'm-1')?.balance).toBe(10_001);

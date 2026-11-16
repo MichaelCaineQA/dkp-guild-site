@@ -18,7 +18,12 @@ import { SocketAccessService } from './socket-access.service';
  */
 
 interface LotRow {
-  award: { winnerId: string; finalPrice: number; markupPct: number; winner: { nickname: string } } | null;
+  award: {
+    winnerId: string;
+    finalPrice: number;
+    markupPct: number;
+    winner: { nickname: string };
+  } | null;
   id: string;
   status: 'OPEN' | 'CLOSED' | 'CANCELLED';
   startPrice: number;
@@ -114,7 +119,7 @@ function makeStore() {
   let seq = 0;
   const audit: Array<Record<string, unknown>> = [];
 
-  const withItem = <T,>(row: T & { itemName?: string }) => ({
+  const withItem = <T>(row: T & { itemName?: string }) => ({
     ...row,
     lootDrop: { itemId: 'item-1', item: { name: row.itemName ?? 'Предмет' } },
   });
@@ -186,7 +191,7 @@ function makeStore() {
   const closeTxView = { ...tx, auction: { ...tx.auction, findUnique: closeFindUnique } };
   const closeDb = {
     ...closeTxView,
-    $transaction: async <R,>(work: (t: typeof closeTxView) => Promise<R>) => work(closeTxView),
+    $transaction: async <R>(work: (t: typeof closeTxView) => Promise<R>) => work(closeTxView),
   } as unknown as CloseDb;
   const snapshotDb = {
     auction: {
@@ -227,14 +232,16 @@ const USER_1: SessionUser = {
   username: 'warrior',
   memberId: 'm-1',
   rank: 'MEMBER',
-  isAdmin: false, blocked: false,
+  isAdmin: false,
+  blocked: false,
 };
 const USER_2: SessionUser = {
   userId: 'u-2',
   username: 'healer',
   memberId: 'm-2',
   rank: 'MEMBER',
-  isAdmin: false, blocked: false,
+  isAdmin: false,
+  blocked: false,
 };
 
 function connect(app: INestApplication, sid: string | null): Socket {
@@ -365,7 +372,11 @@ describe('Realtime аукциона: интеграция Socket.IO (issue #97)'
 
     // закрытие по истечении: свежий срез со статусом CLOSED и лёгкое событие
     store.auctions[0]!.endsAt = new Date(Date.now() - 1000); // просрочен
-    const closedPromise = once<{ auctionId: string; reason: string; winner: { memberName: string } | null }>(a, 'auction:closed');
+    const closedPromise = once<{
+      auctionId: string;
+      reason: string;
+      winner: { memberName: string } | null;
+    }>(a, 'auction:closed');
     const closedState = once<{ lot: { status: string }; bids: unknown[] }>(a, 'auction:state');
     await closer.closeExpiredLot('a-1');
     const closed = await closedPromise;

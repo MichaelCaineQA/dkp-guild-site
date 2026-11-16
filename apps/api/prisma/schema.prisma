@@ -468,6 +468,9 @@ model Auction {
   discountPct Int @default(0)
   targetRoles ItemTargetRole[] @default([])
 
+  /// Неизменяемая карта memberId -> роль и предпочитаемый предмет на момент открытия.
+  bidderProfiles Json?
+
   firstBidAt DateTime?
   endsAt DateTime?
   bids Bid[]
