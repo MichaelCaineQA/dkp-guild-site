@@ -82,20 +82,23 @@ suite('Ставки: настоящие транзакции PostgreSQL', () => 
 
   const bidsOf = (lot: string) => db.bid.findMany({ where: { auctionId: lot } });
 
-  it('две конкурирующие ставки одной суммы: принимается одна, вторая — 400 без побочных эффектов', async () => {
-    const results = await Promise.allSettled([
-      bids.place(auctionId, { amount: 100 }, { memberId: dpsId, isAdmin: false }),
-      bids.place(auctionId, { amount: 100 }, { memberId: healerId, isAdmin: false }),
-    ]);
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(
-      results.filter((r) => r.status === 'rejected' && r.reason instanceof BadRequestException),
-    ).toHaveLength(1);
-    expect(await bidsOf(auctionId)).toHaveLength(1);
-    expect(await db.auditLog.count({ where: { action: 'AUCTION_BID', entityId: auctionId } })).toBe(
-      1,
-    );
-  });
+  it.each(Array.from({ length: 100 }, (_, i) => i))(
+    'две конкурирующие ставки одной суммы: принимается одна, вторая — 400 без побочных эффектов (%i)',
+    async () => {
+      const results = await Promise.allSettled([
+        bids.place(auctionId, { amount: 100 }, { memberId: dpsId, isAdmin: false }),
+        bids.place(auctionId, { amount: 100 }, { memberId: healerId, isAdmin: false }),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.filter((r) => r.status === 'rejected');
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0].reason).toBeInstanceOf(BadRequestException);
+      expect(await bidsOf(auctionId)).toHaveLength(1);
+      expect(
+        await db.auditLog.count({ where: { action: 'AUCTION_BID', entityId: auctionId } }),
+      ).toBe(1);
+    },
+  );
 
   it('гонка первых ставок живой раздачи запускает таймер один раз', async () => {
     const results = await Promise.allSettled([
