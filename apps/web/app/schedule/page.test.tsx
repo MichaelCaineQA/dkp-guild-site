@@ -119,14 +119,16 @@ describe('SchedulePage', () => {
 
     render(<SchedulePage />);
 
-    expect(await screen.findByText('10/12 · пойдут / приглашены')).toBeDefined();
+    expect(
+      await screen.findByRole('button', { name: /10\s*\/12 · пойдут \/ приглашены/ }),
+    ).toBeDefined();
     // «Гильдбосс» встречается в option фильтра и в списке ближайших — берём все.
     expect(screen.getAllByText('Гильдбосс').length).toBeGreaterThan(1);
     expect(screen.getByText('Выберите событие из списка')).toBeDefined();
     expect(screen.getByText(/РЛ: РЛ · 10 ДКП/)).toBeDefined();
     expect(screen.getAllByText('→').length).toBeGreaterThan(0);
     expect(screen.queryByText('Начать ивент')).toBeNull();
-    expect(screen.queryByText('Отменить')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Отменить' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Создать ивент' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Создать серию' })).toBeNull();
   });
@@ -144,7 +146,7 @@ describe('SchedulePage', () => {
     render(<SchedulePage />);
 
     // Ждём загрузки списка, затем кликаем по «Гильдбосс» в ближайших.
-    await screen.findByText('10/12 · пойдут / приглашены');
+    await screen.findByRole('button', { name: /10\s*\/12 · пойдут \/ приглашены/ });
     await screen.findByText(/РЛ: РЛ · 10 ДКП/);
     expect(screen.getByRole('button', { name: 'Создать ивент' })).toBeDefined();
     const mentions = screen.getAllByText('Гильдбосс');
@@ -183,8 +185,8 @@ describe('SchedulePage', () => {
   it('переключает неделю и календарь, очищает выбранную карточку и показывает пустую неделю', async () => {
     mockSession({ userId: 'u', memberId: 'm3', rank: 'MEMBER', isAdmin: false });
     render(<SchedulePage />);
-    await screen.findByText('10/12 · пойдут / приглашены');
-    fireEvent.click(screen.getByRole('button', { name: /10\/12/ }));
+    await screen.findByRole('button', { name: /10\s*\/12 · пойдут \/ приглашены/ });
+    fireEvent.click(screen.getByRole('button', { name: /10\s*\/12/ }));
     expect(await screen.findByText('Фазы игрового времени на длительность ивента:')).toBeDefined();
     expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Календарь' }));

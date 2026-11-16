@@ -21,13 +21,19 @@ export function Button({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'danger' }) {
   const variants = {
-    primary: 'bg-accent text-accent-contrast hover:bg-accent-hover',
-    secondary: 'border border-line bg-surface text-primary hover:bg-surface-muted',
-    danger: 'bg-danger text-white hover:opacity-90',
+    // Основное действие — золотой градиент с тёмным текстом и тёплым свечением
+    primary:
+      'bg-[linear-gradient(135deg,var(--btn-gold-from),var(--btn-gold-to))] text-btn-gold-text shadow-sm hover:shadow-glow-gold hover:brightness-105 active:translate-y-px',
+    // Обычное — тёмная плашка с рамкой, подсветка рамки акцентом при наведении
+    secondary:
+      'border border-line bg-surface-elevated text-primary hover:border-line-accent hover:bg-surface-hover',
+    // Разрушительное — мягкая красная подложка
+    danger:
+      'border border-danger/30 bg-danger-soft text-danger hover:border-danger/60 hover:bg-danger/20',
   };
   return (
     <button
-      className={`${TOUCH_TARGET} rounded-lg px-4 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
+      className={`${TOUCH_TARGET} rounded-xl px-5 py-2.5 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
       {...props}
     />
   );
@@ -37,7 +43,7 @@ export function Button({
 export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={`${TOUCH_TARGET} min-w-0 max-w-full rounded-lg border border-line bg-surface px-3 py-1.5 ${FIELD_TEXT} text-primary placeholder:text-disabled focus:border-accent focus:outline-none ${className}`}
+      className={`${TOUCH_TARGET} min-w-0 max-w-full rounded-xl border border-line bg-surface-elevated px-3 py-2 ${FIELD_TEXT} text-primary placeholder:text-text-muted focus:border-cyan-accent focus:outline-none transition-colors ${className}`}
       {...props}
     />
   );
@@ -51,7 +57,7 @@ export function Select({
 }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className={`${TOUCH_TARGET} min-w-0 max-w-full rounded-lg border border-line bg-surface px-3 py-1.5 ${FIELD_TEXT} text-primary focus:border-accent focus:outline-none ${className}`}
+      className={`${TOUCH_TARGET} dkp-select min-w-0 max-w-full cursor-pointer rounded-xl border border-line bg-surface-elevated px-3 py-2 ${FIELD_TEXT} text-primary transition-colors hover:border-line-accent focus:border-cyan-accent focus:outline-none ${className}`}
       {...props}
     >
       {children}
@@ -62,7 +68,7 @@ export function Select({
 /** Подпись + контрол в одну строку (для компактных форм и фильтров). */
 export function Field({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
-    <label className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-secondary">
+    <label className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-text-secondary font-medium">
       {label}
       {children}
     </label>
@@ -70,10 +76,13 @@ export function Field({ label, children }: { label: ReactNode; children: ReactNo
 }
 
 export function TextLink({ className = '', ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) {
-  return <a className={`text-accent underline ${className}`} {...props} />;
+  return (
+    <a
+      className={`text-cyan-accent hover:underline text-xs font-medium transition-colors ${className}`}
+      {...props}
+    />
+  );
 }
-/** Ссылки-вкладки: на телефоне цель касания не меньше 44px по высоте. */
-const TAB_TARGET = 'inline-flex min-h-11 items-center md:min-h-0';
 export function RosterTabs({
   requests = false,
   blocked = false,
@@ -84,47 +93,30 @@ export function RosterTabs({
   blocked?: boolean;
   current: 'members' | 'kp' | 'pack' | 'requests' | 'blocked';
 }) {
+  const tabs = [
+    { key: 'members', label: 'Участники', href: '/roster', visible: true },
+    { key: 'kp', label: 'КП', href: '/roster/kp', visible: true },
+    { key: 'pack', label: 'Пак', href: '/roster/pack', visible: true },
+    { key: 'requests', label: 'Заявки', href: '/link-requests', visible: requests },
+    { key: 'blocked', label: 'Заблокированные', href: '/roster/blocked', visible: blocked },
+  ];
   return (
-    <nav aria-label="Вкладки состава" className="mb-4 flex flex-wrap gap-x-4 gap-y-1">
-      <TextLink
-        href="/roster"
-        aria-current={current === 'members' ? 'page' : undefined}
-        className={TAB_TARGET}
-      >
-        Участники
-      </TextLink>
-      <TextLink
-        href="/roster/kp"
-        aria-current={current === 'kp' ? 'page' : undefined}
-        className={TAB_TARGET}
-      >
-        КП
-      </TextLink>
-      <TextLink
-        href="/roster/pack"
-        aria-current={current === 'pack' ? 'page' : undefined}
-        className={TAB_TARGET}
-      >
-        Пак
-      </TextLink>
-      {requests && (
-        <TextLink
-          href="/link-requests"
-          aria-current={current === 'requests' ? 'page' : undefined}
-          className={TAB_TARGET}
-        >
-          Заявки
-        </TextLink>
-      )}
-      {blocked && (
-        <TextLink
-          href="/roster/blocked"
-          aria-current={current === 'blocked' ? 'page' : undefined}
-          className={TAB_TARGET}
-        >
-          Заблокированные
-        </TextLink>
-      )}
+    <nav
+      aria-label="Вкладки состава"
+      className="mb-6 flex w-fit max-w-full flex-wrap gap-1 rounded-xl border border-line bg-surface-elevated p-1"
+    >
+      {tabs
+        .filter((tab) => tab.visible)
+        .map((tab) => (
+          <a
+            key={tab.key}
+            href={tab.href}
+            aria-current={current === tab.key ? 'page' : undefined}
+            className={`inline-flex min-h-11 items-center rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors md:min-h-0 ${current === tab.key ? 'bg-accent-soft text-accent shadow-sm' : 'text-secondary hover:text-primary'}`}
+          >
+            {tab.label}
+          </a>
+        ))}
     </nav>
   );
 }

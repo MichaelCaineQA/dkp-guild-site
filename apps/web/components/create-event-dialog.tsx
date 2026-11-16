@@ -143,7 +143,7 @@ export function CreateEventDialog({
     <dialog
       ref={dialog}
       aria-labelledby="create-event-title"
-      className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-xl border border-line bg-surface p-5 text-primary shadow-xl backdrop:bg-black/40"
+      className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-xl border border-line-subtle bg-surface-elevated p-5 text-primary shadow-[0_24px_64px_rgba(2,5,16,0.65)] shadow-glow-purple backdrop:bg-black/70"
       onCancel={(event) => {
         event.preventDefault();
         if (!busy) onClose();
