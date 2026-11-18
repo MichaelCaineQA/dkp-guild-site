@@ -19,6 +19,7 @@ describe('items: справочник предметов (issue #92)', () => {
         name: 'Клинок рассвета',
         rarity: null,
         slot: null,
+        isArchboss: false,
         targetRoles: ['ALL'],
         defaultStartPrice: null,
       });
@@ -36,6 +37,16 @@ describe('items: справочник предметов (issue #92)', () => {
       expect(parsed.rarity).toBeNull();
       expect(parsed.slot).toBe('Голова');
       expect(parsed.targetRoles).toEqual(['DPS', 'TANK']);
+    });
+
+    it('отмечает архибосс-оружие и не требует флаг в минимальном вводе (#208)', () => {
+      expect(
+        itemInputSchema.parse({ name: 'Клинок Тевента', targetRoles: ['ALL'], isArchboss: true })
+          .isArchboss,
+      ).toBe(true);
+      expect(itemInputSchema.parse({ name: 'Кольцо', targetRoles: ['ALL'] }).isArchboss).toBe(
+        false,
+      );
     });
 
     it('отклоняет пустое название, пустой мультивыбор и отрицательную цену', () => {

@@ -15,8 +15,10 @@ import {
   isForeignBidder,
   minBidAmount,
   placeBidSchema,
+  prefersArchbossItemAtLotCreation,
   prefersItemAtLotCreation,
   roleAtLotCreation,
+  snapshotPrefersItem,
   type BidLotParams,
   type BidRow,
   type ItemTargetRole,
@@ -67,6 +69,9 @@ interface StoredMember {
   preferredItemId: string | null;
   prevPreferredItemId: string | null;
   preferredItemChangedAt: Date | null;
+  preferredArchbossItemId: string | null;
+  prevPreferredArchbossItemId: string | null;
+  preferredArchbossItemChangedAt: Date | null;
 }
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
@@ -218,6 +223,7 @@ export class BidsService {
 
       // Снимок на момент создания лота (план 6, п. 6, решение 18): смена роли
       // или предпочитаемого предмета после создания лота цену не меняет.
+      // Скидка — на обычное пожелание или архибосс-оружие (issue #208).
       const snapshot = auction.bidderProfiles
         ? bidderProfileAtCreation(auction.bidderProfiles, memberId)
         : null;
@@ -225,8 +231,9 @@ export class BidsService {
         ? snapshot.combatRole
         : roleAtLotCreation(member, auction.createdAt);
       const preferredThen = snapshot
-        ? snapshot.preferredItemId === auction.lootDrop.itemId
-        : prefersItemAtLotCreation(member, auction.createdAt, auction.lootDrop.itemId);
+        ? snapshotPrefersItem(snapshot, auction.lootDrop.itemId)
+        : prefersItemAtLotCreation(member, auction.createdAt, auction.lootDrop.itemId) ||
+          prefersArchbossItemAtLotCreation(member, auction.createdAt, auction.lootDrop.itemId);
       const foreign = isForeignBidder(lot.targetRoles, roleThen);
       const discountPct = preferredThen ? auction.discountPct : 0;
       const fullCost = bidFullCost(amount, lot.markupPct, foreign, discountPct);

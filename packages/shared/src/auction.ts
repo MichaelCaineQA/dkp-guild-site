@@ -315,6 +315,10 @@ export interface BidderSnapshotFields {
   preferredItemId: string | null;
   prevPreferredItemId: string | null;
   preferredItemChangedAt: Date | null;
+  /** Желаемое архибосс-оружие (issue #208): снимок и prev — как у обычного. */
+  preferredArchbossItemId: string | null;
+  prevPreferredArchbossItemId: string | null;
+  preferredArchbossItemChangedAt: Date | null;
 }
 
 /** Боевая роль игрока, действовавшая на момент создания лота. */
@@ -341,6 +345,24 @@ export function prefersItemAtLotCreation(
     member.preferredItemChangedAt !== null &&
     member.preferredItemChangedAt.getTime() > lotCreatedAt.getTime();
   const preferredThen = changedAfter ? member.prevPreferredItemId : member.preferredItemId;
+  return preferredThen === itemId;
+}
+
+/** Желалось ли архибосс-оружие игроком на момент создания лота (#208). */
+export function prefersArchbossItemAtLotCreation(
+  member: Pick<
+    BidderSnapshotFields,
+    'preferredArchbossItemId' | 'prevPreferredArchbossItemId' | 'preferredArchbossItemChangedAt'
+  >,
+  lotCreatedAt: Date,
+  itemId: string,
+): boolean {
+  const changedAfter =
+    member.preferredArchbossItemChangedAt !== null &&
+    member.preferredArchbossItemChangedAt.getTime() > lotCreatedAt.getTime();
+  const preferredThen = changedAfter
+    ? member.prevPreferredArchbossItemId
+    : member.preferredArchbossItemId;
   return preferredThen === itemId;
 }
 

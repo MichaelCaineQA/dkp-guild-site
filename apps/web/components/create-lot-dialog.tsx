@@ -49,6 +49,7 @@ export function CreateLotDialog({
   const [name, setName] = useState('');
   const [rarity, setRarity] = useState('');
   const [slot, setSlot] = useState('');
+  const [archboss, setArchboss] = useState(false);
   const [price, setPrice] = useState('');
   const [roles, setRoles] = useState<ItemTargetRole[]>(['ALL']);
 
@@ -88,6 +89,7 @@ export function CreateLotDialog({
           name,
           rarity: rarity || null,
           slot: slot || null,
+          isArchboss: archboss,
           targetRoles: roles,
           defaultStartPrice: price.trim() === '' ? null : Number(price),
         }),
@@ -141,6 +143,7 @@ export function CreateLotDialog({
               <option key={item.id} value={item.id}>
                 {item.name}
                 {item.rarity ? ` (${item.rarity})` : ''}
+                {item.isArchboss ? ' — Архибосс' : ''}
               </option>
             ))}
           </Select>
@@ -189,6 +192,17 @@ export function CreateLotDialog({
                   </option>
                 ))}
               </Select>
+            </Field>
+            <Field label="Архибосс">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  aria-label="Архибосс"
+                  checked={archboss}
+                  onChange={(e) => setArchboss(e.target.checked)}
+                />
+                Оружие Архибоссов — выбирается в профиле отдельным списком
+              </label>
             </Field>
             <Field label="Рекомендованная стартовая цена">
               <Input

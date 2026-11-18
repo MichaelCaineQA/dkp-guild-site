@@ -13,6 +13,7 @@ interface StoredItem {
   name: string;
   rarity: string | null;
   slot: string | null;
+  isArchboss: boolean;
   targetRoles: ItemTargetRole[];
   defaultStartPrice: number | null;
   _count?: { lootDrops: number };
@@ -35,6 +36,7 @@ export interface ItemsDb {
   };
   member: {
     count(args: { where: { preferredItemId: string } }): Promise<number>;
+    count(args: { where: { preferredArchbossItemId: string } }): Promise<number>;
   };
   auditLog: AuditWriter;
 }
@@ -98,13 +100,20 @@ export class ItemsService {
       );
     }
     const preferredBy = await this.db.member.count({ where: { preferredItemId: id } });
+    // Удаление чистит и желаемое архибосс-оружие (FK SetNull, #208).
+    const preferredArchbossBy = await this.db.member.count({
+      where: { preferredArchbossItemId: id },
+    });
     await this.db.item.delete({ where: { id } });
     await this.audit(
       actor,
       'ITEM_DELETE',
       id,
       `Удалён предмет «${existing.name}»` +
-        (preferredBy > 0 ? `; предпочитаемый предмет очищен у ${preferredBy} игрок(ов)` : ''),
+        (preferredBy > 0 ? `; предпочитаемый предмет очищен у ${preferredBy} игрок(ов)` : '') +
+        (preferredArchbossBy > 0
+          ? `; желаемое архибосс-оружие очищено у ${preferredArchbossBy} игрок(ов)`
+          : ''),
     );
     return { ok: true };
   }
@@ -141,6 +150,7 @@ export class ItemsService {
       name: item.name,
       rarity: item.rarity,
       slot: item.slot,
+      isArchboss: item.isArchboss,
       targetRoles: item.targetRoles,
       defaultStartPrice: item.defaultStartPrice,
       lotsCount: item._count?.lootDrops ?? 0,

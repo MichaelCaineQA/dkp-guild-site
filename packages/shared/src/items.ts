@@ -22,13 +22,18 @@ export const ITEM_TARGET_ROLE_LABELS: Record<ItemTargetRole, string> = {
   TANK: 'Танк',
 };
 
-/** Редкости предмета — подсказки для формы; в БД хранится строка. */
+/**
+ * Редкости предмета — подсказки для формы; в БД хранится строка.
+ * Словарь владельца (issue #208): Редкий / Эпический 1 / Эпический 2 /
+ * Эпический 3 / Легендарный. Оружие Архибоссов не образует отдельного
+ * качества — бывает «Эпический 1» или «Эпический 2» и отмечается флагом
+ * `isArchboss`.
+ */
 export const ITEM_RARITIES = [
-  'Обычный',
-  'Необычный',
   'Редкий',
-  'Героический',
-  'Эпический',
+  'Эпический 1',
+  'Эпический 2',
+  'Эпический 3',
   'Легендарный',
 ] as const;
 
@@ -59,6 +64,8 @@ export const itemInputSchema = z.object({
   name: z.string().trim().min(1, 'Название обязательно').max(80, 'Название: до 80 символов'),
   rarity: optionalLabel(40),
   slot: optionalLabel(40),
+  /** Отметка «Архибосс» (issue #208): оружие Архибоссов, отдельного качества нет. */
+  isArchboss: z.boolean().optional().default(false),
   targetRoles: z
     .array(z.enum(ITEM_TARGET_ROLES))
     .min(1, 'Выберите, кому нужен предмет')
@@ -104,6 +111,8 @@ export interface ItemRow {
   name: string;
   rarity: string | null;
   slot: string | null;
+  /** Отметка «Архибосс» (issue #208): желаемое архибосс-оружие выбирается по ней. */
+  isArchboss: boolean;
   targetRoles: ItemTargetRole[];
   /** Рекомендованная стартовая цена; null — не задана (лот стартует с 0). */
   defaultStartPrice: number | null;

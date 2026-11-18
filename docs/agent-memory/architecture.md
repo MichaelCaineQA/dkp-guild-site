@@ -8,6 +8,14 @@
 - `apps/web` — Next.js, App Router, TypeScript strict.
 - `apps/api` — NestJS; Prisma-схема: `apps/api/prisma/schema.prisma`.
   Справочник предметов аукциона — модуль `apps/api/src/items` (issue #92);
+  `Item.isArchboss` — отметка «Архибосс» (#208, решение 21): словарь
+  редкостей Редкий/Эпический 1–3/Легендарный (архибосс — качество
+  Эпический 1 или 2, отдельного качества нет). У участника **два** желаемых
+  предмета: `preferredItemId` (без отметки) и `preferredArchbossItemId`
+  (только отмеченные; prev/changedAt — как у обычного, кулдаун свой).
+  Скидка при ставке и `myPreferred` — по любому из двух желаний; снимок
+  `bidderProfiles` хранит оба поля (старые JSON — без archboss-поля,
+  нормализуются в null). Сервер 400-ит пересечение списков.
   дроп и создание лота в проведении ивента — `apps/api/src/loot` (issue #93);
   ставки с заморозкой и анти-снайпом — `apps/api/src/bids` (issue #94);
   приём ставки сначала блокирует строку лота (`SELECT FOR UPDATE`, #161),
