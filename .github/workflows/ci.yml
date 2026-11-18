@@ -5,9 +5,13 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  ci:
-    name: lint + typecheck + test + build
+  checks:
+    name: Code and database checks
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -97,8 +101,58 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Install browser
-        run: pnpm exec playwright install --with-deps chromium
+      - name: Audit dependencies
+        run: pnpm audit --prod
+
+  browser:
+    name: Browser business smoke
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Обновлять вместе с @playwright/test в lockfile.
+        playwright: ['1.65.1']
+    container:
+      image: mcr.microsoft.com/playwright:v${{ matrix.playwright }}-noble
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dkp
+          POSTGRES_PASSWORD: dkp
+          POSTGRES_DB: dkp_test
+        options: >-
+          --health-cmd "pg_isready -U dkp -d dkp_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      # Job и БД находятся в одной Docker-сети; localhost здесь — сам job.
+      DATABASE_URL: postgresql://dkp:dkp@postgres:5432/dkp_test?schema=public
+      PLAYWRIGHT_IMAGE_VERSION: ${{ matrix.playwright }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify Playwright image version
+        run: |
+          node <<'NODE'
+          const actual = require('@playwright/test/package.json').version;
+          const expected = process.env.PLAYWRIGHT_IMAGE_VERSION;
+          if (actual !== expected) {
+            throw new Error(`Playwright ${actual} does not match image ${expected}; update the CI matrix with the lockfile`);
+          }
+          NODE
+      - name: Prepare browser test database
+        env:
+          NODE_ENV: test
+        run: |
+          pnpm --filter @dkp/api db:generate
+          pnpm --filter @dkp/api exec prisma migrate deploy
+          pnpm db:seed
+          pnpm db:seed:test
 
       - name: Browser business smoke
         env:
@@ -108,5 +162,15 @@ jobs:
           CHECKIN_ENC_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
         run: pnpm test:e2e
 
-      - name: Audit dependencies
-        run: pnpm audit --prod
+  # Сохраняем имя обязательного check и запрещаем зелёный CI при пропуске job.
+  ci:
+    name: lint + typecheck + test + build
+    runs-on: ubuntu-latest
+    needs: [checks, browser]
+    if: always()
+    steps:
+      - name: Require all checks
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          BROWSER_RESULT: ${{ needs.browser.result }}
+        run: test "$CHECKS_RESULT" = success && test "$BROWSER_RESULT" = success
