@@ -32,6 +32,12 @@ const c = (
 
 /** Ключи привязаны к методам контроллеров; пути и HTTP-статусы сканирует Nest. */
 export const contracts: Record<string, Contract> = {
+  Statistics_attendance: c('Посещаемость и обзор', 'AttendanceReport', {
+    query: 'StatisticsQuery',
+    errors: [400],
+    description:
+      'NO_HISTORICAL_DATA означает недостаточную историю; показатели включают возможных участников и требуют осторожной интерпретации.',
+  }),
   Statistics_get: c('Получить основу статистики', 'StatisticsReport', {
     query: 'StatisticsQuery',
     errors: [400],

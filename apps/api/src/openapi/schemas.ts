@@ -41,6 +41,7 @@ const inputs: Record<string, unknown> = {
   WeekQuery: shared.weekQuerySchema,
   StatisticsQuery: shared.statisticsQuerySchema,
   StatisticsReport: shared.statisticsReportSchema,
+  AttendanceReport: shared.attendanceReportSchema,
   AuctionsQuery: shared.auctionsQuerySchema,
   ParticipationInput: shared.participationInputSchema,
   SubmitCheckIn: shared.submitCheckInSchema,
