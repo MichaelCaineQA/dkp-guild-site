@@ -32,6 +32,13 @@ const c = (
 
 /** Ключи привязаны к методам контроллеров; пути и HTTP-статусы сканирует Nest. */
 export const contracts: Record<string, Contract> = {
+  Statistics_get: c('Получить основу статистики', 'StatisticsReport', {
+    query: 'StatisticsQuery',
+    errors: [400],
+    description:
+      'NO_HISTORICAL_DATA означает «Нет исторических данных»; неизвестные кандидаты не исключаются из фильтра. ' +
+      'factsWithoutEvent — отдельная категория без привязки к ивенту, типу, режиму или исторической команде; она не ограничивается этими фильтрами.',
+  }),
   App_getGuildName: {
     summary: 'Получить публичное название гильдии',
     response: object({ name: { ...str, nullable: true } }),
