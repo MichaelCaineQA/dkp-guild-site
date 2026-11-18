@@ -4,6 +4,7 @@ import { PermissionsGuard, RequirePermission } from '../permissions/permissions.
 import { StatisticsService } from './statistics.service';
 import { AttendanceStatisticsService } from './attendance-statistics.service';
 import { ActivityStatisticsService } from './activity-statistics.service';
+import { DkpStatisticsService } from './dkp-statistics.service';
 
 @Controller('statistics')
 @UseGuards(AuthGuard, PermissionsGuard)
@@ -12,6 +13,7 @@ export class StatisticsController {
     private readonly statistics: StatisticsService,
     private readonly attendanceStatistics: AttendanceStatisticsService,
     private readonly activityStatistics: ActivityStatisticsService,
+    private readonly dkpStatistics: DkpStatisticsService,
   ) {}
 
   @Get('attendance')
@@ -19,6 +21,13 @@ export class StatisticsController {
   @RequirePermission('members.view_roster')
   attendance(@Query() query: Record<string, string>) {
     return this.attendanceStatistics.get(query);
+  }
+
+  @Get('dkp')
+  @Header('Cache-Control', 'private, no-store')
+  @RequirePermission('members.view_roster')
+  dkp(@Query() query: Record<string, string>) {
+    return this.dkpStatistics.get(query);
   }
 
   @Get('activity')
