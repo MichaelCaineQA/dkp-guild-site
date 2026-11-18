@@ -107,7 +107,7 @@ export default function DkpPage() {
     <Page width="wide">
       <PageHeader
         title="ДКП-журнал"
-        subtitle="Журнал append-only: балансы = сумма операций, «исправление» — новая корректировка."
+        subtitle="Баланс — сумма всех операций; «исправление» не переписывает журнал, а добавляет корректировку."
       />
       {error && <ErrorText>{error}</ErrorText>}
 

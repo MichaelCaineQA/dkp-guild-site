@@ -201,7 +201,7 @@ export function CreateLotDialog({
                   checked={archboss}
                   onChange={(e) => setArchboss(e.target.checked)}
                 />
-                Оружие Архибоссов — выбирается в профиле отдельным списком
+                Оружие Архибоссов — сильнейших мировых боссов
               </label>
             </Field>
             <Field label="Рекомендованная стартовая цена">
