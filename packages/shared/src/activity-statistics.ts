@@ -1,8 +1,5 @@
 import { z } from 'zod';
-import {
-  attendancePercentage,
-  attendanceStatisticsResult,
-} from './attendance-statistics';
+import { attendancePercentage, attendanceStatisticsResult } from './attendance-statistics';
 
 const MOSCOW_OFFSET = 3 * 60 * 60 * 1000;
 const historyStatus = z.enum(['KNOWN', 'NO_HISTORICAL_DATA']);
@@ -183,10 +180,7 @@ export function activityTypeRows(rows: ActivityParticipation[]) {
       name: group[0]!.eventTypeName,
       totals: aggregateActivity(group),
     }))
-    .sort(
-      (a, b) =>
-        b.totals.visited - a.totals.visited || a.name.localeCompare(b.name, 'ru'),
-    );
+    .sort((a, b) => b.totals.visited - a.totals.visited || a.name.localeCompare(b.name, 'ru'));
 }
 
 /** Оба режима присутствуют всегда: нули отличимы от отсутствия данных. */
@@ -198,17 +192,13 @@ export function activityModeRows(rows: ActivityParticipation[]) {
 }
 
 /** Недельные интервалы берутся из общего периода; итоги недель сходятся с общим. */
-export function activityWeeks(
-  weeks: { start: Date; end: Date }[],
-  rows: ActivityParticipation[],
-) {
+export function activityWeeks(weeks: { start: Date; end: Date }[], rows: ActivityParticipation[]) {
   return weeks.map((week) => ({
     start: week.start.toISOString(),
     end: week.end.toISOString(),
     totals: aggregateActivity(
       rows.filter(
-        (row) =>
-          row.startsAt >= week.start.toISOString() && row.startsAt < week.end.toISOString(),
+        (row) => row.startsAt >= week.start.toISOString() && row.startsAt < week.end.toISOString(),
       ),
     ),
   }));

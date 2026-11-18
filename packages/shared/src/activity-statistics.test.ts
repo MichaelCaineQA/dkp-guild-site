@@ -12,9 +12,7 @@ import {
   type ActivityParticipation,
 } from './activity-statistics';
 
-const participation = (
-  overrides: Partial<ActivityParticipation> = {},
-): ActivityParticipation => ({
+const participation = (overrides: Partial<ActivityParticipation> = {}): ActivityParticipation => ({
   eventId: 'e1',
   eventName: 'Ивент',
   startsAt: '2026-03-08T20:30:00.000Z',
@@ -153,8 +151,18 @@ describe('activity aggregates', () => {
     const peak = activityPeak([
       participation({ startsAt: '2026-03-08T20:30:00.000Z' }),
       participation({ memberId: 'm2', startsAt: '2026-03-08T20:30:00.000Z' }),
-      participation({ eventId: 'no-visit', startsAt: '2026-03-05T16:00:00.000Z', checks: 0, visited: false }),
-      participation({ eventId: 'monday', startsAt: '2026-03-08T21:30:00.000Z', checks: 2, status: 'PRESENT' }),
+      participation({
+        eventId: 'no-visit',
+        startsAt: '2026-03-05T16:00:00.000Z',
+        checks: 0,
+        visited: false,
+      }),
+      participation({
+        eventId: 'monday',
+        startsAt: '2026-03-08T21:30:00.000Z',
+        checks: 2,
+        status: 'PRESENT',
+      }),
     ]);
     expect(peak.byWeekday).toHaveLength(7);
     expect(peak.byHour).toHaveLength(24);

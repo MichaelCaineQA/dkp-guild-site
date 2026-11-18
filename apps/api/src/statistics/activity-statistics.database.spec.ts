@@ -56,7 +56,9 @@ suite('Статистика активности в PostgreSQL', () => {
       ids.members.push(member.id);
     }
     for (const name of ['raid', 'siege']) {
-      ids.types.push((await db.eventType.create({ data: { name: `actstats-${name}-${suffix}` } })).id);
+      ids.types.push(
+        (await db.eventType.create({ data: { name: `actstats-${name}-${suffix}` } })).id,
+      );
     }
     // История принадлежности делает команды на момент ивентов известными.
     for (const memberId of ids.members) {
@@ -263,9 +265,9 @@ suite('Статистика активности в PostgreSQL', () => {
     expect(report.peak.byWeekday[3]).toEqual({ weekday: 3, visited: 3 });
     expect(report.peak.byWeekday.filter((bucket) => bucket.visited === 0)).toHaveLength(6);
     expect(report.peak.byHour[19]).toEqual({ hour: 19, visited: 3 });
-    expect(
-      report.peak.byWeekday.reduce((sum, bucket) => sum + bucket.visited, 0),
-    ).toBe(report.overview.totals.visited);
+    expect(report.peak.byWeekday.reduce((sum, bucket) => sum + bucket.visited, 0)).toBe(
+      report.overview.totals.visited,
+    );
   });
 
   it('keeps historical teams in details when the player moves between packs', async () => {
@@ -347,11 +349,25 @@ suite('Статистика активности в PostgreSQL', () => {
     expect(empty.byMode).toEqual([
       expect.objectContaining({
         mode: 'PVE',
-        totals: { events: 0, counted: 0, visited: 0, checks: 0, attendance: null, historyStatus: 'KNOWN' },
+        totals: {
+          events: 0,
+          counted: 0,
+          visited: 0,
+          checks: 0,
+          attendance: null,
+          historyStatus: 'KNOWN',
+        },
       }),
       expect.objectContaining({
         mode: 'PVP',
-        totals: { events: 0, counted: 0, visited: 0, checks: 0, attendance: null, historyStatus: 'KNOWN' },
+        totals: {
+          events: 0,
+          counted: 0,
+          visited: 0,
+          checks: 0,
+          attendance: null,
+          historyStatus: 'KNOWN',
+        },
       }),
     ]);
     expect(empty.peak.byWeekday.every((bucket) => bucket.visited === 0)).toBe(true);
