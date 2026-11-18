@@ -138,7 +138,9 @@ suite('Историческая статистика в PostgreSQL', () => {
       }),
     ]);
     const after = await service.get(query);
-    expect(after.events).toEqual(before.events);
+    expect(before.events[0]?.members).toEqual([
+      expect.objectContaining({ memberId: ids.member, teamStatus: 'NO_HISTORICAL_DATA' }),
+    ]);
     expect(after.events[0]?.members).toEqual([
       expect.objectContaining({
         memberId: ids.member,

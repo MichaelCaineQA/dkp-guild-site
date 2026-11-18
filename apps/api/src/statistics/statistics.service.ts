@@ -145,11 +145,10 @@ export class StatisticsService {
             );
             if (historicalPack) {
               packId = historicalPack.id;
-              kpId = packKpAt(
-                historicalPack.kpId,
-                historicalPack.membershipHistory,
-                event.startsAt,
-              );
+              kpId =
+                historicalPack.membershipHistory.length || event.startsAt >= generatedAt
+                  ? packKpAt(historicalPack.kpId, historicalPack.membershipHistory, event.startsAt)
+                  : null;
               if (kps.some((row) => row.id === kpId && row.createdAt <= event.startsAt))
                 teamStatus = 'KNOWN';
               else kpId = null;

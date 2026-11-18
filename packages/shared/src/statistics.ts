@@ -121,17 +121,25 @@ export function statisticsEventMembers(
   const packMap = new Map(packs.map((pack) => [pack.id, pack]));
   return members.flatMap((member) => {
     if (member.createdAt > event.startsAt) return [];
-    const packId = memberPackAt(member.packId, member.packHistory, event.startsAt);
+    const historical = event.startsAt < generatedAt;
+    const memberHistoryKnown = !historical || member.packHistory.length > 0;
+    const packId = memberHistoryKnown
+      ? memberPackAt(member.packId, member.packHistory, event.startsAt)
+      : null;
     const pack = packId ? packMap.get(packId) : undefined;
-    const packKnown = !packId || (!!pack && pack.createdAt <= event.startsAt);
+    const packKnown =
+      memberHistoryKnown && (!packId || (!!pack && pack.createdAt <= event.startsAt));
     const resolvedPackId = packKnown ? packId : null;
+    const packHistoryKnown = !pack || !historical || pack.membershipHistory.length > 0;
     const historicalKpId =
-      packKnown && pack ? packKpAt(pack.kpId, pack.membershipHistory, event.startsAt) : null;
+      packKnown && pack && packHistoryKnown
+        ? packKpAt(pack.kpId, pack.membershipHistory, event.startsAt)
+        : null;
     const kpKnown =
       !historicalKpId ||
       !kps ||
       kps.some((kp) => kp.id === historicalKpId && kp.createdAt <= event.startsAt);
-    const teamKnown = packKnown && kpKnown;
+    const teamKnown = packKnown && packHistoryKnown && kpKnown;
     const kpId = kpKnown ? historicalKpId : null;
     if (teamKnown && !isEventInvitee(event, { id: member.id, packId: resolvedPackId, kpId }))
       return [];
