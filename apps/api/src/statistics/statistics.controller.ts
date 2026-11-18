@@ -1,0 +1,17 @@
+import { Controller, Get, Header, Query, UseGuards } from '@nestjs/common';
+import { AuthGuard } from '../auth/auth.guard';
+import { PermissionsGuard, RequirePermission } from '../permissions/permissions.guard';
+import { StatisticsService } from './statistics.service';
+
+@Controller('statistics')
+@UseGuards(AuthGuard, PermissionsGuard)
+export class StatisticsController {
+  constructor(private readonly statistics: StatisticsService) {}
+
+  @Get()
+  @Header('Cache-Control', 'private, no-store')
+  @RequirePermission('members.view_roster')
+  get(@Query() query: Record<string, string>) {
+    return this.statistics.get(query);
+  }
+}

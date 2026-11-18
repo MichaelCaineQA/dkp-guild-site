@@ -28,3 +28,4 @@ export * from './membership-history';
 export * from './org';
 export * from './prime-time';
 export * from './bidder-profile';
+export * from './statistics';
