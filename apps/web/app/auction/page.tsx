@@ -214,10 +214,7 @@ export default function AuctionPage() {
 
   return (
     <Page width="wide">
-      <PageHeader
-        title="Аукцион"
-        subtitle="Открытый аукцион лута: справочник предметов и торги."
-      />
+      <PageHeader title="Аукцион" subtitle="Открытый аукцион лута: справочник предметов и торги." />
 
       <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Разделы аукциона">
         {(
