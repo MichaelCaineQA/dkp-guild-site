@@ -66,7 +66,12 @@ describe('dkp weeks', () => {
     ];
     const rows = [
       movement({ id: 'd1', amount: 10, occurredAt: '2026-06-04T18:00:00.000Z' }),
-      movement({ id: 'd2', type: 'ADJUSTMENT', amount: -3, occurredAt: '2026-06-09T12:00:00.000Z' }),
+      movement({
+        id: 'd2',
+        type: 'ADJUSTMENT',
+        amount: -3,
+        occurredAt: '2026-06-09T12:00:00.000Z',
+      }),
     ];
     const weekRows = dkpWeekRows(weeks, rows);
     expect(weekRows.map((week) => week.totals.net)).toEqual([10, -3]);
@@ -160,7 +165,12 @@ describe('dkp team rows', () => {
         totals: { earned: 10, spent: 0, adjustments: 0, net: 10 },
         details: [rows[0]],
       },
-      { id: null, name: null, totals: { earned: 0, spent: 0, adjustments: -3, net: -3 }, details: [rows[1]] },
+      {
+        id: null,
+        name: null,
+        totals: { earned: 0, spent: 0, adjustments: -3, net: -3 },
+        details: [rows[1]],
+      },
     ]);
   });
 });

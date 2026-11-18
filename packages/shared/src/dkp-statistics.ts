@@ -194,9 +194,7 @@ export function dkpTeamRows(
 }
 
 /** Категория «Без ивента»: свои итоги и раскрытие по игрокам. */
-export function dkpWithoutEventRows(
-  entries: DkpMovement[],
-): z.infer<typeof dkpWithoutEventSchema> {
+export function dkpWithoutEventRows(entries: DkpMovement[]): z.infer<typeof dkpWithoutEventSchema> {
   return {
     totals: aggregateDkpTotals(entries),
     members: dkpMemberRows(entries, new Map()).map((row) => ({

@@ -156,11 +156,7 @@ export class DkpStatisticsService {
           totals: aggregateDkpTotals(movements),
           weeks: dkpWeekRows(period.weeks, movements),
           members: dkpMemberRows(movements, balances),
-          packs: dkpTeamRows(
-            movements,
-            'packId',
-            new Map(packs.map((row) => [row.id, row.name])),
-          ),
+          packs: dkpTeamRows(movements, 'packId', new Map(packs.map((row) => [row.id, row.name]))),
           kps: dkpTeamRows(movements, 'kpId', new Map(kps.map((row) => [row.id, row.name]))),
           withoutEvent: dkpWithoutEventRows(withoutEventMovements),
         };
