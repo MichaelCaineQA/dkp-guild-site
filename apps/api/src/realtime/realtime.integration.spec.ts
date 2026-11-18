@@ -66,6 +66,9 @@ const MEMBERS = [
     preferredItemId: null,
     prevPreferredItemId: null,
     preferredItemChangedAt: null,
+    preferredArchbossItemId: null,
+    prevPreferredArchbossItemId: null,
+    preferredArchbossItemChangedAt: null,
   },
   {
     id: 'm-2',
@@ -79,6 +82,9 @@ const MEMBERS = [
     preferredItemId: null,
     prevPreferredItemId: null,
     preferredItemChangedAt: null,
+    preferredArchbossItemId: null,
+    prevPreferredArchbossItemId: null,
+    preferredArchbossItemChangedAt: null,
   },
 ];
 

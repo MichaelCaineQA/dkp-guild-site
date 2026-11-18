@@ -227,6 +227,15 @@ model Member {
   prevPreferredItem Item? @relation("PrevPreferredItem", fields: [prevPreferredItemId], references: [id])
   preferredItemChangedAt DateTime?
 
+  /// Желаемое архибосс-оружие (issue #208): второй предпочитаемый предмет —
+  /// только из отмеченных «Архибосс». Скидка и снимок лота — как у обычного
+  /// предпочтения, кулдаун свой. Удаление предмета очищает выбор (SetNull).
+  preferredArchbossItemId String?
+  preferredArchbossItem Item? @relation("PreferredArchbossItem", fields: [preferredArchbossItemId], references: [id])
+  prevPreferredArchbossItemId String?
+  prevPreferredArchbossItem Item? @relation("PrevPreferredArchbossItem", fields: [prevPreferredArchbossItemId], references: [id])
+  preferredArchbossItemChangedAt DateTime?
+
   packJoinedAt DateTime?
   packId String?
   pack Pack? @relation("PackMembers", fields: [packId], references: [id])
@@ -409,6 +418,12 @@ model Item {
   rarity String?
   slot String?
 
+  /// Оружие Архибоссов (issue #208): падает с сильнейших мировых боссов,
+  /// ажиотаж выше остального шмота. Отдельное качество не вводится —
+  /// архибосс-предмет бывает «Эпический 1» или «Эпический 2»; выбор
+  /// желаемого архибосс-оружия в профиле идёт по этому флагу.
+  isArchboss Boolean @default(false)
+
   /// «кому нужна» — мультивыбор; ALL = без классовой наценки (раздел 2.4).
   targetRoles ItemTargetRole[]
   defaultStartPrice Int?
@@ -418,6 +433,8 @@ model Item {
   /// связь исчезает — поле предпочитаемого очищается у всех (SetNull).
   preferredBy Member[] @relation("PreferredItem")
   prevPreferredBy Member[] @relation("PrevPreferredItem")
+  preferredArchbossBy Member[] @relation("PreferredArchbossItem")
+  prevPreferredArchbossBy Member[] @relation("PrevPreferredArchbossItem")
   createdAt DateTime @default(now())
 
   @@unique([name])

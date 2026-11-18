@@ -2,10 +2,12 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import {
   winningBid,
   lootLogQuerySchema,
+  prefersArchbossItemAtLotCreation,
   prefersItemAtLotCreation,
   createStandaloneLotSchema,
   lotDurationSec,
   suggestLotDefaults,
+  snapshotPrefersItem,
   type AuctionListRow,
   type AuctionListStatus,
   type AuctionLotRow,
@@ -158,6 +160,9 @@ export interface AuctionsDb extends AuctionSettingsDb {
       combatRole?: import('@dkp/shared').CombatRole | null;
       prevPreferredItemId: string | null;
       preferredItemChangedAt: Date | null;
+      preferredArchbossItemId: string | null;
+      prevPreferredArchbossItemId: string | null;
+      preferredArchbossItemChangedAt: Date | null;
     } | null>;
   };
   lootAward: {
@@ -443,10 +448,12 @@ export class AuctionsService {
       markupPct: lot.markupPct,
       discountPct: lot.discountPct,
       myCombatRole: viewerSnapshot ? viewerSnapshot.combatRole : (viewer?.combatRole ?? null),
+      // Бейдж «ваш предмет» — по обычному пожеланию или архибосс-оружию (#208)
       myPreferred: viewerSnapshot
-        ? viewerSnapshot.preferredItemId === lot.lootDrop.itemId
+        ? snapshotPrefersItem(viewerSnapshot, lot.lootDrop.itemId)
         : viewer
-          ? prefersItemAtLotCreation(viewer, lot.createdAt, lot.lootDrop.itemId)
+          ? prefersItemAtLotCreation(viewer, lot.createdAt, lot.lootDrop.itemId) ||
+            prefersArchbossItemAtLotCreation(viewer, lot.createdAt, lot.lootDrop.itemId)
           : false,
       timerKind: lot.timerFromFirstBid ? 'FIRST_BID' : 'OPENING',
       antiSnipeSec: lot.antiSnipeSec,

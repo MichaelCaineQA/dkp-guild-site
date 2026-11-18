@@ -58,6 +58,9 @@ function makeDb(
     preferredItemId: string | null;
     prevPreferredItemId?: string | null;
     preferredItemChangedAt?: Date | null;
+    preferredArchbossItemId?: string | null;
+    prevPreferredArchbossItemId?: string | null;
+    preferredArchbossItemChangedAt?: Date | null;
   },
 ): AuctionsDb & { queries: string[] } {
   const queries: string[] = [];
@@ -146,6 +149,9 @@ function makeDb(
               preferredItemId: viewer.preferredItemId,
               prevPreferredItemId: viewer.prevPreferredItemId ?? null,
               preferredItemChangedAt: viewer.preferredItemChangedAt ?? null,
+              preferredArchbossItemId: viewer.preferredArchbossItemId ?? null,
+              prevPreferredArchbossItemId: viewer.prevPreferredArchbossItemId ?? null,
+              preferredArchbossItemChangedAt: viewer.preferredArchbossItemChangedAt ?? null,
             }
           : null,
     },
@@ -214,6 +220,22 @@ describe('AuctionsService (issue #98)', () => {
     const viewer3 = { id: 'm-1', preferredItemId: 'item-other' };
     const rows3 = await new AuctionsService(makeDb(lots, viewer3)).list('OPEN', 'm-1');
     expect(rows3.map((row) => row.myPreferred)).toEqual([false, false]);
+  });
+
+  it('myPreferred — и по желаемому архибосс-оружию, без обычного желания (#208)', async () => {
+    const lots = [
+      { id: 'old', createdAt: new Date('2026-11-01T10:00:00Z') },
+      { id: 'new', createdAt: new Date('2026-11-09T10:00:00Z') },
+    ];
+    const viewer = {
+      id: 'm-1',
+      preferredItemId: null,
+      preferredArchbossItemId: 'item-1',
+      prevPreferredArchbossItemId: null,
+      preferredArchbossItemChangedAt: null,
+    };
+    const rows = await new AuctionsService(makeDb(lots, viewer)).list('OPEN', 'm-1');
+    expect(rows.map((row) => row.myPreferred)).toEqual([true, true]);
   });
 
   it('завершённый лот несёт победителя, архив сортируется свежими сверху', async () => {

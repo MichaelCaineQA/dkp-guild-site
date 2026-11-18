@@ -19,6 +19,7 @@ import {
   lotExpired,
   minBidAmount,
   placeBidSchema,
+  prefersArchbossItemAtLotCreation,
   prefersItemAtLotCreation,
   roleAtLotCreation,
   suggestLotDefaults,
@@ -341,6 +342,53 @@ describe('снимок роли и предпочтения на момент с
         { preferredItemId: 'item-1', prevPreferredItemId: null, preferredItemChangedAt: null },
         lotCreatedAt,
         'item-1',
+      ),
+    ).toBe(true);
+  });
+
+  it('архибосс-желание: без смены — текущее, смена после создания лота — прежнее (#208)', () => {
+    expect(
+      prefersArchbossItemAtLotCreation(
+        {
+          preferredArchbossItemId: 'arch-2',
+          prevPreferredArchbossItemId: 'arch-1',
+          preferredArchbossItemChangedAt: changedAfter,
+        },
+        lotCreatedAt,
+        'arch-1',
+      ),
+    ).toBe(true);
+    expect(
+      prefersArchbossItemAtLotCreation(
+        {
+          preferredArchbossItemId: 'arch-2',
+          prevPreferredArchbossItemId: 'arch-1',
+          preferredArchbossItemChangedAt: changedAfter,
+        },
+        lotCreatedAt,
+        'arch-2',
+      ),
+    ).toBe(false);
+    expect(
+      prefersArchbossItemAtLotCreation(
+        {
+          preferredArchbossItemId: null,
+          prevPreferredArchbossItemId: null,
+          preferredArchbossItemChangedAt: null,
+        },
+        lotCreatedAt,
+        'arch-1',
+      ),
+    ).toBe(false);
+    expect(
+      prefersArchbossItemAtLotCreation(
+        {
+          preferredArchbossItemId: 'arch-1',
+          prevPreferredArchbossItemId: null,
+          preferredArchbossItemChangedAt: null,
+        },
+        lotCreatedAt,
+        'arch-1',
       ),
     ).toBe(true);
   });

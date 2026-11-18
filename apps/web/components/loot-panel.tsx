@@ -276,6 +276,7 @@ export function LootPanel({
               <option key={item.id} value={item.id}>
                 {item.name}
                 {item.rarity ? ` (${item.rarity})` : ''}
+                {item.isArchboss ? ' — Архибосс' : ''}
               </option>
             ))}
           </Select>

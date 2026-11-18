@@ -9,13 +9,17 @@ interface Stored {
   name: string;
   rarity: string | null;
   slot: string | null;
+  isArchboss: boolean;
   targetRoles: Array<'ALL' | 'DPS' | 'HEALER' | 'TANK'>;
   defaultStartPrice: number | null;
   _count?: { lootDrops: number };
 }
 
-function makeDb(seed: Stored[] = [], lotsByItem: Record<string, number> = {}) {
-  const items = seed.map((item) => ({ ...item }));
+function makeDb(
+  seed: Array<Omit<Stored, 'isArchboss'> & { isArchboss?: boolean }> = [],
+  lotsByItem: Record<string, number> = {},
+) {
+  const items = seed.map((item) => ({ isArchboss: false, ...item }) as Stored);
   const audit: Array<Record<string, string | null>> = [];
   const db: ItemsDb = {
     member: {
@@ -67,7 +71,7 @@ function makeDb(seed: Stored[] = [], lotsByItem: Record<string, number> = {}) {
 
 const INPUT = {
   name: 'Клинок рассвета',
-  rarity: 'Эпический',
+  rarity: 'Эпический 1',
   slot: 'Оружие',
   targetRoles: ['DPS', 'TANK'],
   defaultStartPrice: 120,
@@ -115,6 +119,21 @@ describe('ItemsService (issue #92)', () => {
       entityId: created.id,
       actorMemberId: 'm-officer',
     });
+  });
+
+  it('сохраняет отметку «Архибосс» предмета (#208)', async () => {
+    const { db } = makeDb();
+    const service = new ItemsService(db);
+
+    const created = await service.create(
+      { ...INPUT, name: 'Боевой клинок Тевента', isArchboss: true },
+      ACTOR,
+    );
+    expect(created.isArchboss).toBe(true);
+    expect((await service.list()).find((item) => item.id === created.id)?.isArchboss).toBe(true);
+
+    await service.update(created.id, { ...INPUT, isArchboss: false }, ACTOR);
+    expect((await service.list()).find((item) => item.id === created.id)?.isArchboss).toBe(false);
   });
 
   it('дубликат названия — 409', async () => {

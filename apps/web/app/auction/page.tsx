@@ -40,6 +40,7 @@ interface ItemFormState {
   name: string;
   rarity: string;
   slot: string;
+  archboss: boolean;
   price: string;
   roles: ItemTargetRole[];
 }
@@ -49,6 +50,7 @@ const EMPTY_FORM: ItemFormState = {
   name: '',
   rarity: '',
   slot: '',
+  archboss: false,
   price: '',
   roles: ['ALL'],
 };
@@ -150,6 +152,7 @@ export default function AuctionPage() {
       name: item.name,
       rarity: item.rarity ?? '',
       slot: item.slot ?? '',
+      archboss: item.isArchboss,
       price: item.defaultStartPrice === null ? '' : String(item.defaultStartPrice),
       roles: item.targetRoles,
     });
@@ -177,6 +180,7 @@ export default function AuctionPage() {
       name: form.name,
       rarity: form.rarity || null,
       slot: form.slot || null,
+      isArchboss: form.archboss,
       targetRoles: form.roles,
       defaultStartPrice: form.price.trim() === '' ? null : Number(form.price),
     };
@@ -269,6 +273,7 @@ export default function AuctionPage() {
                 <tr>
                   <Table.Th>Название</Table.Th>
                   <Table.Th>Редкость</Table.Th>
+                  <Table.Th>Архибосс</Table.Th>
                   <Table.Th>Слот</Table.Th>
                   <Table.Th>Кому нужна</Table.Th>
                   <Table.Th>Стартовая цена</Table.Th>
@@ -281,6 +286,9 @@ export default function AuctionPage() {
                   <tr key={item.id}>
                     <Table.Td className="font-medium">{item.name}</Table.Td>
                     <Table.Td>{item.rarity ?? <Muted>—</Muted>}</Table.Td>
+                    <Table.Td>
+                      {item.isArchboss ? <Badge tone="accent">Архибосс</Badge> : <Muted>—</Muted>}
+                    </Table.Td>
                     <Table.Td>{item.slot ?? <Muted>—</Muted>}</Table.Td>
                     <Table.Td>
                       <Badge tone={item.targetRoles.includes('ALL') ? 'neutral' : 'accent'}>
@@ -311,7 +319,7 @@ export default function AuctionPage() {
                 ))}
                 {visible.length === 0 && (
                   <tr>
-                    <Table.Td colSpan={canManage ? 7 : 6}>
+                    <Table.Td colSpan={canManage ? 8 : 7}>
                       <Muted>{search ? 'Ничего не найдено' : 'Справочник пока пуст'}</Muted>
                     </Table.Td>
                   </tr>
@@ -348,7 +356,25 @@ export default function AuctionPage() {
                     {rarity}
                   </option>
                 ))}
+                {/* Значение, записанное до смены словаря (#208), — чтобы не потерялось */}
+                {form.rarity && !ITEM_RARITIES.includes(form.rarity as never) && (
+                  <option value={form.rarity}>{form.rarity}</option>
+                )}
               </Select>
+            </Field>
+            <Field label="Архибосс">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.archboss}
+                  onChange={(e) => setForm({ ...form, archboss: e.target.checked })}
+                />
+                Оружие Архибоссов — сильнейших мировых боссов
+              </label>
+              <p className="text-sm text-secondary">
+                Архибосс-оружие не образует отдельного качества (бывает «Эпический 1» или «Эпический
+                2»); в профиле оно выбирается отдельным списком желаемого.
+              </p>
             </Field>
             <Field label="Слот">
               <Select

@@ -40,6 +40,8 @@ interface ProfileMember {
   combatRoleChangedAt: Date | null;
   preferredItemId: string | null;
   preferredItemChangedAt: Date | null;
+  preferredArchbossItemId: string | null;
+  preferredArchbossItemChangedAt: Date | null;
   rank: Rank;
   user: { username: string } | null;
 }
@@ -50,9 +52,16 @@ export interface ProfileTransaction {
       include: {
         user: { select: { username: true } };
         preferredItem: { select: { id: true; name: true } };
+        preferredArchbossItem: { select: { id: true; name: true } };
         primeTime: true;
       };
-    }): Promise<(ProfileMember & { preferredItem: { id: string; name: string } | null }) | null>;
+    }): Promise<
+      | (ProfileMember & {
+          preferredItem: { id: string; name: string } | null;
+          preferredArchbossItem: { id: string; name: string } | null;
+        })
+      | null
+    >;
     findFirst(args: { where: { nickname: string } }): Promise<{ id: string } | null>;
     update(args: {
       where: { id: string };
@@ -67,13 +76,18 @@ export interface ProfileTransaction {
         preferredItemId?: string | null;
         prevPreferredItemId?: string | null;
         preferredItemChangedAt?: Date | null;
+        preferredArchbossItemId?: string | null;
+        prevPreferredArchbossItemId?: string | null;
+        preferredArchbossItemChangedAt?: Date | null;
         timeZone?: string;
         primeTime?: { deleteMany: Record<string, never>; create: PrimeTimeSlot[] };
       };
     }): Promise<unknown>;
   };
   item: {
-    findUnique(args: { where: { id: string } }): Promise<{ id: string; name: string } | null>;
+    findUnique(args: {
+      where: { id: string };
+    }): Promise<{ id: string; name: string; isArchboss: boolean } | null>;
   };
   setting: {
     findMany(args: {
@@ -212,6 +226,10 @@ export class ProfilesService {
         ? { id: member.preferredItem.id, name: member.preferredItem.name }
         : null,
       preferredItemChangedAt: member.preferredItemChangedAt?.toISOString() ?? null,
+      preferredArchbossItem: member.preferredArchbossItem
+        ? { id: member.preferredArchbossItem.id, name: member.preferredArchbossItem.name }
+        : null,
+      preferredArchbossItemChangedAt: member.preferredArchbossItemChangedAt?.toISOString() ?? null,
       combatRoleChangedAt: member.combatRoleChangedAt?.toISOString() ?? null,
       balance: computeBalance(entries),
       recentEntries: entries.slice(0, 10).map((entry) => ({
@@ -263,17 +281,32 @@ export class ProfilesService {
       const member = await this.mustExist(tx, id);
       const now = this.now();
 
-      // Предпочитаемый предмет должен существовать (null — снять выбор).
+      // Предпочитаемый предмет должен существовать (null — снять выбор);
+      // обычное желание — предмет без отметки «Архибосс», архибосс-оружие —
+      // только с ней (issue #208): списки в профиле не пересекаются.
       let preferredName: string | null = null;
       if (input.preferredItemId) {
         const item = await tx.item.findUnique({ where: { id: input.preferredItemId } });
         if (!item) throw new NotFoundException('Предмет не найден');
+        if (item.isArchboss)
+          throw new BadRequestException('Архибосс-предмет выбирается в списке архибосс-оружия');
         preferredName = item.name;
+      }
+      let preferredArchbossName: string | null = null;
+      if (input.preferredArchbossItemId) {
+        const item = await tx.item.findUnique({ where: { id: input.preferredArchbossItemId } });
+        if (!item) throw new NotFoundException('Предмет не найден');
+        if (!item.isArchboss)
+          throw new BadRequestException('В списке архибосс-оружия — только предметы «Архибосс»');
+        preferredArchbossName = item.name;
       }
 
       const roleChanged = input.combatRole !== undefined && input.combatRole !== member.combatRole;
       const preferredChanged =
         input.preferredItemId !== undefined && input.preferredItemId !== member.preferredItemId;
+      const preferredArchbossChanged =
+        input.preferredArchbossItemId !== undefined &&
+        input.preferredArchbossItemId !== member.preferredArchbossItemId;
       // Ник уникален (аудит F03): чужой занятый — 409, свой прежний — не смена
       const nicknameChanged = input.nickname !== undefined && input.nickname !== member.nickname;
       if (nicknameChanged) {
@@ -298,6 +331,7 @@ export class ProfilesService {
         (input.weapons !== undefined &&
           JSON.stringify(member.weapons ?? []) !== JSON.stringify(input.weapons)) ||
         preferredChanged ||
+        preferredArchbossChanged ||
         primeTimeChanged ||
         timeZoneChanged;
       if (otherFieldsChanged && !input.comment)
@@ -316,6 +350,14 @@ export class ProfilesService {
       ) {
         throw new ConflictException(
           `Предпочитаемый предмет можно менять раз в ${cooldownDays} дн. — не раньше ${nextChangeDate(member.preferredItemChangedAt, cooldownDays)}`,
+        );
+      }
+      if (
+        preferredArchbossChanged &&
+        !canChangeProfileField(member.preferredArchbossItemChangedAt, cooldownDays, now)
+      ) {
+        throw new ConflictException(
+          `Архибосс-оружие можно менять раз в ${cooldownDays} дн. — не раньше ${nextChangeDate(member.preferredArchbossItemChangedAt, cooldownDays)}`,
         );
       }
 
@@ -342,6 +384,15 @@ export class ProfilesService {
           ...(preferredChanged
             ? { prevPreferredItemId: member.preferredItemId, preferredItemChangedAt: now }
             : {}),
+          ...(input.preferredArchbossItemId !== undefined
+            ? { preferredArchbossItemId: input.preferredArchbossItemId }
+            : {}),
+          ...(preferredArchbossChanged
+            ? {
+                prevPreferredArchbossItemId: member.preferredArchbossItemId,
+                preferredArchbossItemChangedAt: now,
+              }
+            : {}),
         },
       });
       await tx.auditLog.create({
@@ -350,7 +401,7 @@ export class ProfilesService {
           action: 'MEMBER_UPDATE',
           entityType: 'Member',
           entityId: id,
-          comment: `ник: ${nicknameChanged ? `«${member.nickname}» → «${input.nickname}»` : 'без изменений'}; роль: ${member.combatRole ?? 'не указана'} → ${input.combatRole ?? member.combatRole ?? 'не указана'}; оружия: ${formatWeapons(member.weapons ?? [])} → ${formatWeapons(input.weapons ?? member.weapons ?? [])}; предпочитаемый предмет: ${member.preferredItem ? `«${member.preferredItem.name}»` : 'не выбран'} → ${input.preferredItemId === undefined ? 'без изменений' : preferredName ? `«${preferredName}»` : 'не выбран'}; аватар: ${member.avatar ?? 'не выбран'} → ${input.avatar === undefined ? (member.avatar ?? 'не выбран') : (input.avatar ?? 'не выбран')}; фон: ${member.avatarColor ?? 'автоматически'} → ${input.avatarColor === undefined ? (member.avatarColor ?? 'автоматически') : (input.avatarColor ?? 'автоматически')}; прайм-тайм: ${primeTimeChanged ? 'изменён' : 'без изменений'}; таймзона: ${member.timeZone} → ${input.timeZone ?? member.timeZone}.${input.comment ? ` ${input.comment}` : ''}`,
+          comment: `ник: ${nicknameChanged ? `«${member.nickname}» → «${input.nickname}»` : 'без изменений'}; роль: ${member.combatRole ?? 'не указана'} → ${input.combatRole ?? member.combatRole ?? 'не указана'}; оружия: ${formatWeapons(member.weapons ?? [])} → ${formatWeapons(input.weapons ?? member.weapons ?? [])}; предпочитаемый предмет: ${member.preferredItem ? `«${member.preferredItem.name}»` : 'не выбран'} → ${input.preferredItemId === undefined ? 'без изменений' : preferredName ? `«${preferredName}»` : 'не выбран'}; архибосс-оружие: ${member.preferredArchbossItem ? `«${member.preferredArchbossItem.name}»` : 'не выбрано'} → ${input.preferredArchbossItemId === undefined ? 'без изменений' : preferredArchbossName ? `«${preferredArchbossName}»` : 'не выбрано'}; аватар: ${member.avatar ?? 'не выбран'} → ${input.avatar === undefined ? (member.avatar ?? 'не выбран') : (input.avatar ?? 'не выбран')}; фон: ${member.avatarColor ?? 'автоматически'} → ${input.avatarColor === undefined ? (member.avatarColor ?? 'автоматически') : (input.avatarColor ?? 'автоматически')}; прайм-тайм: ${primeTimeChanged ? 'изменён' : 'без изменений'}; таймзона: ${member.timeZone} → ${input.timeZone ?? member.timeZone}.${input.comment ? ` ${input.comment}` : ''}`,
         },
       });
     });
@@ -376,6 +427,7 @@ export class ProfilesService {
       include: {
         user: { select: { username: true } },
         preferredItem: { select: { id: true, name: true } },
+        preferredArchbossItem: { select: { id: true, name: true } },
         primeTime: true,
       },
     });

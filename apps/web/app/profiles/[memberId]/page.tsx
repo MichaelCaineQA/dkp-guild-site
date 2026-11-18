@@ -53,6 +53,7 @@ export default function ProfilePage() {
   const [nickname, setNickname] = useState('');
   const [role, setRole] = useState<CombatRole | ''>('');
   const [preferredItem, setPreferredItem] = useState<string>('');
+  const [preferredArchbossItem, setPreferredArchbossItem] = useState<string>('');
   const [avatar, setAvatar] = useState<AvatarId | null>(null);
   const [avatarColor, setAvatarColor] = useState<AvatarColor | null>(null);
   const [weapons, setWeapons] = useState<Array<Weapon | ''>>([]);
@@ -84,6 +85,7 @@ export default function ProfilePage() {
           setAvatarColor(data.avatarColor ?? null);
           setRole(data.combatRole ?? '');
           setPreferredItem(data.preferredItem?.id ?? '');
+          setPreferredArchbossItem(data.preferredArchbossItem?.id ?? '');
           setWeapons(data.weapons ?? []);
         }
       })
@@ -116,11 +118,15 @@ export default function ProfilePage() {
     // Предпочитаемый предмет отправляем только при изменении (2.4): снятие
     // выбора и повторный выбор — тоже смена по кулдауну (решение 18).
     const preferredDirty = preferredItem !== ((profile?.preferredItem?.id ?? '') as string);
+    // Желаемое архибосс-оружие — второй список со своим кулдауном (#208).
+    const preferredArchbossDirty =
+      preferredArchbossItem !== ((profile?.preferredArchbossItem?.id ?? '') as string);
     const nicknameDirty = nickname.trim() !== (profile?.nickname ?? '');
     const input = updateOwnProfileSchema.safeParse({
       ...(nicknameDirty ? { nickname: nickname.trim() } : {}),
       ...(otherFieldsChanged ? { combatRole: role, weapons } : {}),
       ...(preferredDirty ? { preferredItemId: preferredItem || null } : {}),
+      ...(preferredArchbossDirty ? { preferredArchbossItemId: preferredArchbossItem || null } : {}),
       avatar,
       avatarColor,
       ...(comment.trim() ? { comment } : {}),
@@ -131,7 +137,10 @@ export default function ProfilePage() {
       setSaveError('Выберите роль, два разных оружия и укажите комментарий от 3 до 500 символов');
       return;
     }
-    if ((nicknameDirty || otherFieldsChanged || preferredDirty) && !input.data.comment) {
+    if (
+      (nicknameDirty || otherFieldsChanged || preferredDirty || preferredArchbossDirty) &&
+      !input.data.comment
+    ) {
       setSaveError('Укажите комментарий от 3 до 500 символов');
       return;
     }
@@ -152,6 +161,11 @@ export default function ProfilePage() {
                 input.data.preferredItemId === undefined
                   ? current.preferredItem
                   : ((items ?? []).find((item) => item.id === input.data.preferredItemId) ?? null),
+              preferredArchbossItem:
+                input.data.preferredArchbossItemId === undefined
+                  ? current.preferredArchbossItem
+                  : ((items ?? []).find((item) => item.id === input.data.preferredArchbossItemId) ??
+                    null),
               avatar: input.data.avatar,
               avatarColor: input.data.avatarColor,
             }
@@ -368,23 +382,45 @@ export default function ProfilePage() {
                     onChange={setWeapons}
                     required={otherFieldsChanged}
                   />
-                  <Field label="Предпочитаемый предмет">
+                  <Field label="Желаемый предмет">
                     <Select
                       value={preferredItem}
                       onChange={(e) => setPreferredItem(e.target.value)}
-                      aria-label="Предпочитаемый предмет"
+                      aria-label="Желаемый предмет"
                     >
                       <option value="">Не выбран</option>
-                      {(items ?? []).map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
+                      {(items ?? [])
+                        .filter((item) => !item.isArchboss)
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
                     </Select>
                     <p className="text-sm text-secondary">
                       Даёт скидку при победе в лоте с этим предметом (план 2.4). Боевую роль и
-                      предпочитаемый предмет можно менять не чаще раза в 2 недели — у каждого поля
-                      свой отсчёт.
+                      желаемые предметы можно менять не чаще раза в 2 недели — у каждого поля свой
+                      отсчёт.
+                    </p>
+                  </Field>
+                  <Field label="Желаемое архибосс-оружие">
+                    <Select
+                      value={preferredArchbossItem}
+                      onChange={(e) => setPreferredArchbossItem(e.target.value)}
+                      aria-label="Желаемое архибосс-оружие"
+                    >
+                      <option value="">Не выбрано</option>
+                      {(items ?? [])
+                        .filter((item) => item.isArchboss)
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
+                    </Select>
+                    <p className="text-sm text-secondary">
+                      Оружие Архибоссов — отдельное желание со своей скидкой и своим кулдауном смены
+                      (#208). Пока предметов с отметкой «Архибосс» нет — список пуст.
                     </p>
                   </Field>
                   <Field label="Комментарий">
@@ -405,6 +441,7 @@ export default function ProfilePage() {
                       avatar === (profile.avatar ?? null) &&
                       avatarColor === (profile.avatarColor ?? null) &&
                       preferredItem === (profile.preferredItem?.id ?? '') &&
+                      preferredArchbossItem === (profile.preferredArchbossItem?.id ?? '') &&
                       JSON.stringify(weapons) === JSON.stringify(profile.weapons ?? [])
                     }
                   >

@@ -70,6 +70,9 @@ interface MemberSeed {
   preferredItemId?: string | null;
   prevPreferredItemId?: string | null;
   preferredItemChangedAt?: Date | null;
+  preferredArchbossItemId?: string | null;
+  prevPreferredArchbossItemId?: string | null;
+  preferredArchbossItemChangedAt?: Date | null;
 }
 
 function makeDb(options: {
@@ -101,6 +104,9 @@ function makeDb(options: {
     preferredItemId: null,
     prevPreferredItemId: null,
     preferredItemChangedAt: null,
+    preferredArchbossItemId: null,
+    prevPreferredArchbossItemId: null,
+    preferredArchbossItemChangedAt: null,
     ...seed,
   }));
   const dkp = options.dkp ?? { 'm-1': 1000 };
@@ -323,6 +329,21 @@ describe('BidsService (issue #94)', () => {
   it('скидка «родному» классу с предпочитаемым предметом: 105 → 94,5 → 95', async () => {
     const { db } = makeDb({
       members: [{ id: 'm-1', nickname: 'Воин', combatRole: 'DPS', preferredItemId: 'item-1' }],
+    });
+    const ok = await service(db).place('a-1', { amount: 105 }, ACTOR);
+    expect(ok.bid).toMatchObject({ fullCost: 95, markupPct: 0, discountPct: 10 });
+  });
+
+  it('скидка по желаемому архибосс-оружию — как по обычному пожеланию (#208)', async () => {
+    const { db } = makeDb({
+      members: [
+        {
+          id: 'm-1',
+          nickname: 'Воин',
+          combatRole: 'DPS',
+          preferredArchbossItemId: 'item-1',
+        },
+      ],
     });
     const ok = await service(db).place('a-1', { amount: 105 }, ACTOR);
     expect(ok.bid).toMatchObject({ fullCost: 95, markupPct: 0, discountPct: 10 });

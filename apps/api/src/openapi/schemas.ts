@@ -572,6 +572,15 @@ export const schemas: Record<string, SchemaObject> = {
         ...nullable(date),
         description: 'Последняя смена предпочитаемого предмета — кулдаун (план 2.5, решение 18).',
       },
+      preferredArchbossItem: {
+        ...nullable(object({ id: str, name: str })),
+        description:
+          'Желаемое архибосс-оружие (#208): null — не выбрано; скидка — как у обычного пожелания.',
+      },
+      preferredArchbossItemChangedAt: {
+        ...nullable(date),
+        description: 'Последняя смена архибосс-оружия — свой кулдаун (#208).',
+      },
       combatRoleChangedAt: {
         ...nullable(date),
         description: 'Последняя смена боевой роли — кулдаун (план 2.5, решение 18).',
@@ -663,6 +672,11 @@ export const schemas: Record<string, SchemaObject> = {
     name: str,
     rarity: { ...str, nullable: true },
     slot: { ...str, nullable: true },
+    isArchboss: {
+      type: 'boolean',
+      description:
+        'Отметка «Архибосс» (#208): оружие Архибоссов; желаемое архибосс-оружие в профиле выбирается по ней.',
+    },
     targetRoles: array({
       type: 'string',
       enum: ['ALL', 'DPS', 'HEALER', 'TANK'],
@@ -683,6 +697,10 @@ export const schemas: Record<string, SchemaObject> = {
       name: { type: 'string', minLength: 1, maxLength: 80 },
       rarity: { ...str, nullable: true, maxLength: 40 },
       slot: { ...str, nullable: true, maxLength: 40 },
+      isArchboss: {
+        type: 'boolean',
+        description: 'Отметка «Архибосс» (#208); отсутствие — обычный предмет.',
+      },
       targetRoles: array({ type: 'string', enum: ['ALL', 'DPS', 'HEALER', 'TANK'] }),
       defaultStartPrice: { type: 'integer', nullable: true, minimum: 0, maximum: 1000000 },
     },

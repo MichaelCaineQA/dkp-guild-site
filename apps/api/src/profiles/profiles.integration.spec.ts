@@ -15,6 +15,9 @@ let avatarColor: import('@dkp/shared').AvatarColor | null = null;
 /** Предпочитаемый предмет (#101) и время его последней смены — для кулдауна. */
 let preferredItemId: string | null = null;
 let preferredChangedAt: Date | null = null;
+/** Желаемое архибосс-оружие (#208) и его кулдаун — свой отсчёт. */
+let preferredArchbossItemId: string | null = null;
+let preferredArchbossChangedAt: Date | null = null;
 /** Время последней смены роли — свой таймер кулдауна (решение 18). */
 let roleChangedAt: Date | null = null;
 let timeZone = 'Europe/Moscow';
@@ -53,7 +56,10 @@ function member(id: string, combatRole: CombatRole | null) {
         combatRoleChangedAt: null,
         preferredItemId: null,
         preferredItemChangedAt: null,
+        preferredArchbossItemId: null,
+        preferredArchbossItemChangedAt: null,
         preferredItem: null,
+        preferredArchbossItem: null,
         weapons,
         avatar,
         avatarColor,
@@ -83,7 +89,11 @@ const db: ProfilesDb = {
   },
   item: {
     findUnique: async ({ where }) =>
-      where.id === 'item-1' ? { id: 'item-1', name: 'Клинок рассвета' } : null,
+      where.id === 'item-1'
+        ? { id: 'item-1', name: 'Клинок рассвета', isArchboss: false }
+        : where.id === 'item-arch'
+          ? { id: 'item-arch', name: 'Боевой клинок Тевента', isArchboss: true }
+          : null,
   },
   setting: {
     findMany: async () => [] as Array<{ key: string; value: unknown }>,
@@ -125,6 +135,8 @@ const db: ProfilesDb = {
     let draftAvatarColor = avatarColor;
     let draftPreferredItemId = preferredItemId;
     let draftPreferredChangedAt = preferredChangedAt;
+    let draftPreferredArchbossItemId = preferredArchbossItemId;
+    let draftPreferredArchbossChangedAt = preferredArchbossChangedAt;
     let draftTimeZone = timeZone;
     let draftPrimeTime = [...primeTime];
     const draftAudit: unknown[] = [];
@@ -142,8 +154,13 @@ const db: ProfilesDb = {
                 combatRoleChangedAt: draftRoleChangedAt,
                 preferredItemId: draftPreferredItemId,
                 preferredItemChangedAt: draftPreferredChangedAt,
+                preferredArchbossItemId: draftPreferredArchbossItemId,
+                preferredArchbossItemChangedAt: draftPreferredArchbossChangedAt,
                 preferredItem: draftPreferredItemId
                   ? { id: draftPreferredItemId, name: 'Клинок рассвета' }
+                  : null,
+                preferredArchbossItem: draftPreferredArchbossItemId
+                  ? { id: draftPreferredArchbossItemId, name: 'Боевой клинок Тевента' }
                   : null,
               }
             : null;
@@ -165,6 +182,10 @@ const db: ProfilesDb = {
           if (data.preferredItemId !== undefined) draftPreferredItemId = data.preferredItemId;
           if (data.preferredItemChangedAt !== undefined)
             draftPreferredChangedAt = data.preferredItemChangedAt;
+          if (data.preferredArchbossItemId !== undefined)
+            draftPreferredArchbossItemId = data.preferredArchbossItemId;
+          if (data.preferredArchbossItemChangedAt !== undefined)
+            draftPreferredArchbossChangedAt = data.preferredArchbossItemChangedAt;
           if (data.timeZone !== undefined) draftTimeZone = data.timeZone;
           if (data.primeTime !== undefined) draftPrimeTime = data.primeTime.create;
           return {};
@@ -172,7 +193,11 @@ const db: ProfilesDb = {
       },
       item: {
         findUnique: async ({ where }) =>
-          where.id === 'item-1' ? { id: 'item-1', name: 'Клинок рассвета' } : null,
+          where.id === 'item-1'
+            ? { id: 'item-1', name: 'Клинок рассвета', isArchboss: false }
+            : where.id === 'item-arch'
+              ? { id: 'item-arch', name: 'Боевой клинок Тевента', isArchboss: true }
+              : null,
       },
       setting: {
         findMany: async () => [] as Array<{ key: string; value: unknown }>,
@@ -194,6 +219,8 @@ const db: ProfilesDb = {
     avatarColor = draftAvatarColor;
     preferredItemId = draftPreferredItemId;
     preferredChangedAt = draftPreferredChangedAt;
+    preferredArchbossItemId = draftPreferredArchbossItemId;
+    preferredArchbossChangedAt = draftPreferredArchbossChangedAt;
     timeZone = draftTimeZone;
     primeTime = draftPrimeTime;
     audit.push(...draftAudit);
@@ -240,6 +267,8 @@ describe('профили через HTTP', () => {
     avatarColor = null;
     preferredItemId = null;
     preferredChangedAt = null;
+    preferredArchbossItemId = null;
+    preferredArchbossChangedAt = null;
     roleChangedAt = null;
     timeZone = 'Europe/Moscow';
     primeTime = [];
@@ -574,6 +603,43 @@ describe('профили через HTTP', () => {
     expect((await patch('m1', { preferredItemId: 'item-1' })).status).toBe(400);
     expect(preferredItemId).toBeNull();
     expect(audit).toHaveLength(0);
+  });
+
+  it('архибосс-оружие: свой кулдаун, списки не пересекаются (#208)', async () => {
+    // Первый выбор архибосс-оружия — сразу; обычное желание не мешает.
+    expect(
+      (await patch('m1', { preferredArchbossItemId: 'item-arch', comment: 'Хочу клинок' })).status,
+    ).toBe(200);
+    expect(preferredArchbossItemId).toBe('item-arch');
+    expect((await patch('m1', { preferredItemId: 'item-1', comment: 'И кольцо' })).status).toBe(
+      200,
+    );
+    expect(preferredItemId).toBe('item-1');
+    expect(audit).toHaveLength(2);
+    expect(String((audit[0] as { comment: string }).comment)).toContain('архибосс-оружие');
+    expect(String((audit[0] as { comment: string }).comment)).toContain('Тевента');
+
+    // Смена архибосс-оружия до истечения интервала — 409, обычнее поля не задеты.
+    expect(
+      (await patch('m1', { preferredArchbossItemId: null, comment: 'Передумал' })).status,
+    ).toBe(409);
+    expect(preferredArchbossItemId).toBe('item-arch');
+
+    // Архибосс-предмет в обычном списке и наоборот — 400.
+    expect((await patch('m1', { preferredItemId: 'item-arch', comment: 'Не туда' })).status).toBe(
+      400,
+    );
+    expect(
+      (await patch('m1', { preferredArchbossItemId: 'item-1', comment: 'Не сюда' })).status,
+    ).toBe(400);
+
+    // После истечения интервала снятие разрешения; обычное желание осталось.
+    preferredArchbossChangedAt = new Date(Date.now() - 15 * 86_400_000);
+    expect(
+      (await patch('m1', { preferredArchbossItemId: null, comment: 'Снимаю выбор' })).status,
+    ).toBe(200);
+    expect(preferredArchbossItemId).toBeNull();
+    expect(preferredItemId).toBe('item-1');
   });
 
   it('боевая роль сменяется не чаще раза в интервал, независимо от предмета (#101)', async () => {

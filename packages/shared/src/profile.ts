@@ -81,7 +81,8 @@ export type AvatarColor = (typeof AVATAR_COLORS)[number];
  * админский обход PATCH /members/:id удалён, ник меняет владелец сам).
  * Предпочитаемый предмет (план 2.4, решение 18) — один из справочника
  * аукциона, nullable (снятие выбора); смена роли и предмета ограничена
- * кулдауном (план 2.5).
+ * кулдауном (план 2.5). Желаемое архибосс-оружие (issue #208) — второй
+ * предмет, только из отмеченных «Архибосс»; кулдаун у каждого поля свой.
  */
 export const updateOwnProfileSchema = z
   .object({
@@ -91,6 +92,7 @@ export const updateOwnProfileSchema = z
     avatar: z.enum(AVATARS).nullable().optional(),
     avatarColor: z.enum(AVATAR_COLORS).nullable().optional(),
     preferredItemId: z.string().min(1, 'Выберите предмет').nullable().optional(),
+    preferredArchbossItemId: z.string().min(1, 'Выберите предмет').nullable().optional(),
     timeZone: timeZoneSchema.optional(),
     primeTime: z.array(primeTimeSlotSchema).max(100).optional(),
     comment: z.string().trim().min(3).max(500).optional(),
@@ -127,6 +129,10 @@ export interface PlayerProfile {
   preferredItem: { id: string; name: string } | null;
   /** Последняя смена предпочитаемого предмета — для кулдауна (план 2.5). */
   preferredItemChangedAt: string | null;
+  /** Желаемое архибосс-оружие (issue #208): null — не выбран. */
+  preferredArchbossItem: { id: string; name: string } | null;
+  /** Последняя смена архибосс-оружия — для кулдауна (план 2.5, свой отсчёт). */
+  preferredArchbossItemChangedAt: string | null;
   /** Последняя смена боевой роли — для кулдауна (план 2.5). */
   combatRoleChangedAt: string | null;
   balance: number;

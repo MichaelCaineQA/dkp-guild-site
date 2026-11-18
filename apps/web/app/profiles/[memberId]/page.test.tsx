@@ -15,6 +15,8 @@ const profile = {
   weapons: ['STAFF', 'WAND'],
   preferredItem: null,
   preferredItemChangedAt: null,
+  preferredArchbossItem: null,
+  preferredArchbossItemChangedAt: null,
   combatRoleChangedAt: null,
   balance: 75,
   recentEntries: [],
@@ -225,7 +227,7 @@ it('выбор предпочитаемого предмета уходит в P
   });
   render(<ProfilePage />);
   await screen.findByText('Профиль: Алистер');
-  fireEvent.change(screen.getByLabelText('Предпочитаемый предмет'), {
+  fireEvent.change(screen.getByLabelText('Желаемый предмет'), {
     target: { value: 'item-1' },
   });
   fireEvent.change(screen.getByLabelText('Комментарий'), { target: { value: 'Мой предмет' } });
@@ -251,10 +253,48 @@ it('отказ кулдауна с сервера показывается в ф
   });
   render(<ProfilePage />);
   await screen.findByText('Профиль: Алистер');
-  fireEvent.change(screen.getByLabelText('Предпочитаемый предмет'), {
+  fireEvent.change(screen.getByLabelText('Желаемый предмет'), {
     target: { value: 'item-1' },
   });
   fireEvent.change(screen.getByLabelText('Комментарий'), { target: { value: 'Мой предмет' } });
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить профиль' }));
   await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('раз в 14 дн.'));
+});
+
+it('два списка желаемого: обычный без архибоссов, второй — только архибоссы (#208)', async () => {
+  vi.mocked(api).mockImplementation(async (path, init) => {
+    if (path === '/items')
+      return [
+        { id: 'item-1', name: 'Клинок рассвета', isArchboss: false },
+        { id: 'item-arch', name: 'Боевой клинок Тевента', isArchboss: true },
+      ];
+    return init?.method === 'PATCH' ? { ok: true } : profile;
+  });
+  render(<ProfilePage />);
+  await screen.findByText('Профиль: Алистер');
+  // Ждём справочник: опции обоих списков должны быть на месте.
+  await screen.findByText('Боевой клинок Тевента');
+
+  const regular = screen.getByLabelText('Желаемый предмет') as HTMLSelectElement;
+  const archboss = screen.getByLabelText('Желаемое архибосс-оружие') as HTMLSelectElement;
+  const optionValues = (select: HTMLSelectElement) =>
+    Array.from(select.options).map((option) => option.value);
+  expect(optionValues(regular)).toEqual(['', 'item-1']);
+  expect(optionValues(archboss)).toEqual(['', 'item-arch']);
+
+  fireEvent.change(archboss, { target: { value: 'item-arch' } });
+  fireEvent.change(screen.getByLabelText('Комментарий'), {
+    target: { value: 'Хочу клинок Тевента' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить профиль' }));
+  await screen.findByRole('status');
+  expect(api).toHaveBeenCalledWith('/profiles/m1', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      avatar: null,
+      avatarColor: null,
+      preferredArchbossItemId: 'item-arch',
+      comment: 'Хочу клинок Тевента',
+    }),
+  });
 });

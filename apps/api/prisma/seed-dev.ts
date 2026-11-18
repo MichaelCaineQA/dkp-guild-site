@@ -205,6 +205,8 @@ const EVENT_TYPES: EventTypeSpec[] = [
 interface ItemSpec {
   name: string;
   rarity: string;
+  /** Отметка «Архибосс» (#208): оружие Архибоссов, отдельного качества нет. */
+  isArchboss?: boolean;
   slot: string;
   targetRoles: ItemTargetRole[];
   defaultStartPrice: number;
@@ -213,239 +215,261 @@ interface ItemSpec {
 const ITEMS_REAL: ItemSpec[] = [
   {
     name: 'Зачарованный клинок королевы Белландир',
-    rarity: 'ARCHBOSS',
+    rarity: 'Эпический 1',
+    isArchboss: true,
     slot: 'WEAPON',
     targetRoles: ['TANK'],
     defaultStartPrice: 320,
   },
   {
     name: 'Боевой клинок Тевента',
-    rarity: 'ARCHBOSS',
+    rarity: 'Эпический 2',
+    isArchboss: true,
     slot: 'WEAPON',
     targetRoles: ['TANK', 'DPS'],
     defaultStartPrice: 300,
   },
   {
     name: 'Гнев Морокая',
-    rarity: 'WORLD_BOSS',
+    rarity: 'Эпический 2',
     slot: 'WEAPON',
     targetRoles: ['TANK', 'DPS'],
     defaultStartPrice: 220,
   },
   {
     name: 'Меч Ковазана из песка',
-    rarity: 'WORLD_BOSS',
+    rarity: 'Эпический 2',
     slot: 'WEAPON',
     targetRoles: ['TANK', 'DPS'],
     defaultStartPrice: 200,
   },
   {
     name: 'Клык лунного волка',
-    rarity: 'EPIC',
+    rarity: 'Эпический 2',
     slot: 'WEAPON',
     targetRoles: ['DPS'],
     defaultStartPrice: 160,
   },
   {
     name: 'Посох Лунного света',
-    rarity: 'EPIC',
+    rarity: 'Эпический 2',
     slot: 'WEAPON',
     targetRoles: ['HEALER', 'DPS'],
     defaultStartPrice: 150,
   },
   {
     name: 'Жезл Звёздного света',
-    rarity: 'EPIC',
+    rarity: 'Эпический 2',
     slot: 'WEAPON',
     targetRoles: ['HEALER'],
     defaultStartPrice: 140,
   },
   {
     name: 'Арбалет Убийцы драконов',
-    rarity: 'EPIC',
+    rarity: 'Эпический 2',
     slot: 'WEAPON',
     targetRoles: ['DPS'],
     defaultStartPrice: 160,
   },
   {
     name: 'Лук Феникса',
-    rarity: 'EPIC',
+    rarity: 'Эпический 2',
     slot: 'WEAPON',
     targetRoles: ['DPS'],
     defaultStartPrice: 160,
   },
   {
     name: 'Копьё Вихря',
-    rarity: 'EPIC',
+    rarity: 'Эпический 2',
     slot: 'WEAPON',
     targetRoles: ['DPS'],
     defaultStartPrice: 150,
   },
   {
     name: 'Клинок Багрового заката',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'WEAPON',
     targetRoles: ['DPS'],
     defaultStartPrice: 130,
   },
   {
     name: 'Щит Каменной стражи',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'OFFHAND',
     targetRoles: ['TANK'],
     defaultStartPrice: 120,
   },
   {
     name: 'Жезл Древнего древа',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'WEAPON',
     targetRoles: ['HEALER'],
     defaultStartPrice: 130,
   },
   {
     name: 'Кинжал Ночного шепота',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'WEAPON',
     targetRoles: ['DPS'],
     defaultStartPrice: 110,
   },
   {
     name: 'Молот Титана',
-    rarity: 'EPIC',
+    rarity: 'Эпический 2',
     slot: 'WEAPON',
     targetRoles: ['TANK'],
     defaultStartPrice: 140,
   },
   {
     name: 'Топор Павшего короля',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'WEAPON',
     targetRoles: ['DPS'],
     defaultStartPrice: 125,
   },
   {
     name: 'Амулет Вечности',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'NECK',
     targetRoles: ['ALL'],
     defaultStartPrice: 90,
   },
   {
     name: 'Кольцо Кровавой луны',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'RING',
     targetRoles: ['DPS'],
     defaultStartPrice: 100,
   },
   {
     name: 'Кольцо Морского змея',
-    rarity: 'RARE',
+    rarity: 'Редкий',
     slot: 'RING',
     targetRoles: ['ALL'],
     defaultStartPrice: 60,
   },
   {
     name: 'Кольцо Титана',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'RING',
     targetRoles: ['TANK'],
     defaultStartPrice: 95,
   },
   {
     name: 'Ожерелье Лунной жрицы',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'NECK',
     targetRoles: ['HEALER'],
     defaultStartPrice: 105,
   },
   {
     name: 'Пояс Вулкана',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'BELT',
     targetRoles: ['TANK'],
     defaultStartPrice: 90,
   },
   {
     name: 'Пояс Проклятого лорда',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'BELT',
     targetRoles: ['DPS'],
     defaultStartPrice: 85,
   },
   {
     name: 'Наручи Титана',
-    rarity: 'RARE',
+    rarity: 'Редкий',
     slot: 'BRACERS',
     targetRoles: ['TANK', 'DPS'],
     defaultStartPrice: 70,
   },
   {
     name: 'Браслеты Огня',
-    rarity: 'RARE',
+    rarity: 'Редкий',
     slot: 'BRACERS',
     targetRoles: ['ALL'],
     defaultStartPrice: 65,
   },
   {
     name: 'Шлем Немезиды',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'HELMET',
     targetRoles: ['ALL'],
     defaultStartPrice: 80,
   },
   {
     name: 'Корона Мёртвого короля',
-    rarity: 'EPIC',
+    rarity: 'Эпический 3',
     slot: 'HELMET',
     targetRoles: ['ALL'],
     defaultStartPrice: 110,
   },
   {
     name: 'Накидка Тени',
-    rarity: 'RARE',
+    rarity: 'Редкий',
     slot: 'CLOAK',
     targetRoles: ['DPS'],
     defaultStartPrice: 65,
   },
-  { name: 'Плащ Бури', rarity: 'EPIC', slot: 'CLOAK', targetRoles: ['ALL'], defaultStartPrice: 90 },
+  {
+    name: 'Плащ Бури',
+    rarity: 'Эпический 1',
+    slot: 'CLOAK',
+    targetRoles: ['ALL'],
+    defaultStartPrice: 90,
+  },
   {
     name: 'Доспех Ледяного великана',
-    rarity: 'EPIC',
+    rarity: 'Эпический 3',
     slot: 'CHEST',
     targetRoles: ['TANK'],
     defaultStartPrice: 130,
   },
   {
     name: 'Перчатки Павшего ангела',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'GLOVES',
     targetRoles: ['HEALER'],
     defaultStartPrice: 85,
   },
   {
     name: 'Сандалии Ветра',
-    rarity: 'RARE',
+    rarity: 'Редкий',
     slot: 'BOOTS',
     targetRoles: ['ALL'],
     defaultStartPrice: 55,
   },
   {
     name: 'Сапоги Скорохода',
-    rarity: 'RARE',
+    rarity: 'Редкий',
     slot: 'BOOTS',
     targetRoles: ['ALL'],
     defaultStartPrice: 50,
   },
   {
     name: 'Щит Бастиона',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'OFFHAND',
     targetRoles: ['TANK'],
     defaultStartPrice: 100,
   },
   {
+    name: 'Сердце Вулкана',
+    rarity: 'Легендарный',
+    slot: 'NECK',
+    targetRoles: ['ALL'],
+    defaultStartPrice: 180,
+  },
+  {
+    name: 'Печать Ковазана',
+    rarity: 'Легендарный',
+    slot: 'RING',
+    targetRoles: ['ALL'],
+    defaultStartPrice: 170,
+  },
+  {
     name: 'Меч Вихря',
-    rarity: 'EPIC',
+    rarity: 'Эпический 1',
     slot: 'WEAPON',
     targetRoles: ['DPS', 'TANK'],
     defaultStartPrice: 115,
@@ -510,7 +534,7 @@ function buildTemplateItems(): ItemSpec[] {
     const suf = suffixes[(i * 7) % suffixes.length];
     result.push({
       name: `${adj} ${noun} ${suf}`,
-      rarity: i % 3 === 0 ? 'EPIC' : i % 3 === 1 ? 'RARE' : 'WORLD_BOSS',
+      rarity: i % 3 === 0 ? 'Эпический 1' : i % 3 === 1 ? 'Редкий' : 'Эпический 2',
       slot: slots[i % slots.length],
       targetRoles: roles[i % roles.length],
       defaultStartPrice: 50 + ((i * 17) % 150),
@@ -721,6 +745,7 @@ async function main(): Promise<void> {
           where: { name: spec.name },
           update: {
             rarity: spec.rarity,
+            isArchboss: spec.isArchboss ?? false,
             slot: spec.slot,
             targetRoles: spec.targetRoles,
             defaultStartPrice: spec.defaultStartPrice,
@@ -728,6 +753,7 @@ async function main(): Promise<void> {
           create: {
             name: spec.name,
             rarity: spec.rarity,
+            isArchboss: spec.isArchboss ?? false,
             slot: spec.slot,
             targetRoles: spec.targetRoles,
             defaultStartPrice: spec.defaultStartPrice,
@@ -812,6 +838,12 @@ async function main(): Promise<void> {
         HEALER: null,
         DPS: null,
       };
+      // Желаемое архибосс-оружие (#208): танки — клинок Белландир, ДД — Тевент.
+      const preferredArchbossIdByRole: Record<CombatRole, string | null> = {
+        TANK: null,
+        HEALER: null,
+        DPS: null,
+      };
       for (const spec of ITEMS_REAL) {
         if (spec.name === 'Пояс Вулкана')
           preferredIdByRole.TANK =
@@ -821,6 +853,12 @@ async function main(): Promise<void> {
             (await tx.item.findUnique({ where: { name: spec.name } }))?.id ?? null;
         if (spec.name === 'Кольцо Кровавой луны')
           preferredIdByRole.DPS =
+            (await tx.item.findUnique({ where: { name: spec.name } }))?.id ?? null;
+        if (spec.name === 'Зачарованный клинок королевы Белландир')
+          preferredArchbossIdByRole.TANK =
+            (await tx.item.findUnique({ where: { name: spec.name } }))?.id ?? null;
+        if (spec.name === 'Боевой клинок Тевента')
+          preferredArchbossIdByRole.DPS =
             (await tx.item.findUnique({ where: { name: spec.name } }))?.id ?? null;
       }
       void preferredItemByRole;
@@ -850,6 +888,7 @@ async function main(): Promise<void> {
 
         const packId = packIdByName.get(p.packName) ?? null;
         const preferredId = preferredIdByRole[p.combatRole];
+        const preferredArchbossId = preferredArchbossIdByRole[p.combatRole];
         const cooldownAgo = new Date(Date.now() - 15 * DAY_MS);
 
         const existingMember = await tx.member.findFirst({ where: { nickname: p.nickname } });
@@ -864,6 +903,8 @@ async function main(): Promise<void> {
                 packJoinedAt: packId ? new Date(Date.now() - 30 * DAY_MS) : null,
                 preferredItemId: preferredId,
                 preferredItemChangedAt: cooldownAgo,
+                preferredArchbossItemId: preferredArchbossId,
+                preferredArchbossItemChangedAt: cooldownAgo,
                 combatRoleChangedAt: cooldownAgo,
               },
             })
@@ -879,6 +920,8 @@ async function main(): Promise<void> {
                 packJoinedAt: packId ? new Date(Date.now() - 30 * DAY_MS) : null,
                 preferredItemId: preferredId,
                 preferredItemChangedAt: cooldownAgo,
+                preferredArchbossItemId: preferredArchbossId,
+                preferredArchbossItemChangedAt: cooldownAgo,
                 combatRoleChangedAt: cooldownAgo,
               },
             });

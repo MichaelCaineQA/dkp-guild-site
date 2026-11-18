@@ -242,7 +242,7 @@ function LotModal({
             Кому нужна: {formatTargetRoles(row.targetRoles)}
           </Badge>
           {row.myPreferred && row.discountPct > 0 && (
-            <Badge tone="accent">Ваш предпочитаемый — скидка {row.discountPct}%</Badge>
+            <Badge tone="accent">Ваш желаемый предмет — скидка {row.discountPct}%</Badge>
           )}
           {connection.status === 'connecting' && state && <Muted>Переподключение…</Muted>}
         </div>
