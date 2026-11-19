@@ -3,6 +3,7 @@ import {
   absenceCoversEvent,
   aggregateAttendance,
   attendanceStatisticsResult,
+  compareAttendanceGroups,
   resolveStatisticsPeriod,
   statisticsEventMembers,
   statisticsQuerySchema,
@@ -142,12 +143,7 @@ export class AttendanceStatisticsService {
         const byMember = group('memberId');
         const top = byMember
           .filter((row) => row.totals.events > 0)
-          .sort(
-            (a, b) =>
-              b.totals.checks / b.totals.events - a.totals.checks / a.totals.events ||
-              b.totals.events - a.totals.events ||
-              (a.name ?? '').localeCompare(b.name ?? '', 'ru'),
-          )
+          .sort(compareAttendanceGroups)
           .slice(0, 5);
         return {
           generatedAt: generatedAt.toISOString(),
