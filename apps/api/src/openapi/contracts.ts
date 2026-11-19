@@ -94,6 +94,48 @@ export const contracts: Record<string, Contract> = {
       'NO_HISTORICAL_DATA означает «Нет исторических данных»; неизвестные кандидаты не исключаются из фильтра. ' +
       'factsWithoutEvent — отдельная категория без привязки к ивенту, типу, режиму или исторической команде; она не ограничивается этими фильтрами.',
   }),
+  Statistics_exportAttendanceCsv: c('Экспорт посещаемости в CSV', str, {
+    query: 'StatisticsQuery',
+    errors: [400],
+    responseTypes: ['text/csv'],
+    description:
+      'Файл CSV («;», UTF-8 c BOM) всей серверной выборки, не видимой страницы. ' +
+      'Параметр cut: members/packs/kps/guild — таблица разреза, details — пары игрок–ивент с отметками. ' +
+      'Мета-строки «#» несут период, фильтры, часовой пояс Москвы и дату среза; пустой процент — нет ивентов для расчёта.',
+  }),
+  Statistics_exportActivityCsv: c('Экспорт активности в CSV', str, {
+    query: 'StatisticsQuery',
+    errors: [400],
+    responseTypes: ['text/csv'],
+    description:
+      'Файл CSV активности. Параметр table: types/modes/weeks/peak-weekday/peak-hour/members/member-details/events. ' +
+      'Пик — посещённые участия по дням недели и часам начала (Москва).',
+  }),
+  Statistics_exportDkpCsv: c('Экспорт ДКП в CSV', str, {
+    query: 'StatisticsQuery',
+    errors: [400],
+    responseTypes: ['text/csv'],
+    description:
+      'Файл CSV ДКП. Параметр table: weeks/members/packs/kps/movements/without-event/without-event-movements. ' +
+      'Полный баланс подписан датой среза и предупреждением об игнорировании фильтров типа/режима; ' +
+      '«Без ивента» — отдельная категория вне итога выбранного типа.',
+  }),
+  Statistics_exportLootCsv: c('Экспорт лута в CSV', str, {
+    query: 'StatisticsQuery',
+    errors: [400],
+    responseTypes: ['text/csv'],
+    description:
+      'Файл CSV лута. Параметр table: dropped/dropped-details/awarded/awarded-members/awarded-packs/awarded-kps/without-event-dropped/without-event-awarded. ' +
+      'Выпадение и получение — разные факты; фактические цены журнала не пересчитываются.',
+  }),
+  Statistics_exportOverviewCsv: c('Экспорт таблиц обзора в CSV', str, {
+    query: 'StatisticsQuery',
+    errors: [400],
+    responseTypes: ['text/csv'],
+    description:
+      'Файл CSV обзора. Параметр table: top (рейтинг посещаемости)/types (типы активности)/items (топ предметов с «Остальным»)/gear-score. ' +
+      'gear-score — защищённая выгрузка: только Глава/Админ, остальные получают 403; значений GS нет, только категории свежести.',
+  }),
   App_getGuildName: {
     summary: 'Получить публичное название гильдии',
     response: object({ name: { ...str, nullable: true } }),

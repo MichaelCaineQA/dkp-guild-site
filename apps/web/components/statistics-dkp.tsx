@@ -4,8 +4,8 @@ import { Fragment, useEffect, useState } from 'react';
 import type { DkpMovement, DkpStatisticsReport, DkpTotals, StatisticsQuery } from '@dkp/shared';
 import { ReportError, useStatisticsEndpoint } from './statistics-report';
 import type { StatisticsFilterOptions } from './statistics-filters';
-import type { StatisticsFocus } from './statistics-navigation';
-import { BarChart, formatDkp, moscowDateTime, weekLabel } from './ui/charts';
+import { csvPath, type StatisticsFocus } from './statistics-navigation';
+import { BarChart, CsvButton, formatDkp, moscowDateTime, weekLabel } from './ui/charts';
 import { DKP_ENTRY_LABELS } from './ui/profile';
 import { Badge, Card, Muted, Notice, SectionTitle, Table, TextLink } from './ui/index';
 
@@ -121,7 +121,13 @@ export function StatisticsDkpTab({
       </Card>
 
       <Card>
-        <SectionTitle>Динамика по неделям</SectionTitle>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <SectionTitle className="mb-0">Динамика по неделям</SectionTitle>
+          <CsvButton
+            path={csvPath('dkp', { table: 'weeks' }, query)}
+            label="движение ДКП по неделям"
+          />
+        </div>
         <BarChart
           label="Итог движения ДКП по неделям"
           columns={data.weeks.map((week) => ({
@@ -158,26 +164,38 @@ export function StatisticsDkpTab({
 
       <Card id="dkp-tables">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <SectionTitle>Показатели и балансы</SectionTitle>
-          <div role="group" aria-label="Разрез ДКП" className="flex flex-wrap gap-2">
-            {CUTS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                aria-pressed={cut === item.key}
-                onClick={() => {
-                  setCut(item.key);
-                  setExpanded(null);
-                }}
-                className={`rounded-lg border px-3 py-1 text-sm ${
-                  cut === item.key
-                    ? 'border-accent bg-accent-soft text-accent'
-                    : 'border-line bg-surface text-primary hover:bg-surface-muted'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
+          <SectionTitle className="mb-0">Показатели и балансы</SectionTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex flex-wrap gap-2">
+              <CsvButton
+                path={csvPath('dkp', { table: cut }, query)}
+                label={`показатели ДКП: ${CUTS.find((item) => item.key === cut)?.label ?? cut}`}
+              />
+              <CsvButton
+                path={csvPath('dkp', { table: 'movements' }, query)}
+                label="операции журнала ДКП"
+              />
+            </span>
+            <div role="group" aria-label="Разрез ДКП" className="flex flex-wrap gap-2">
+              {CUTS.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  aria-pressed={cut === item.key}
+                  onClick={() => {
+                    setCut(item.key);
+                    setExpanded(null);
+                  }}
+                  className={`rounded-lg border px-3 py-1 text-sm ${
+                    cut === item.key
+                      ? 'border-accent bg-accent-soft text-accent'
+                      : 'border-line bg-surface text-primary hover:bg-surface-muted'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         {data.balanceIgnoresFilters.length > 0 && (
@@ -247,7 +265,19 @@ export function StatisticsDkpTab({
       </Card>
 
       <Card id="dkp-without-event">
-        <SectionTitle>Без ивента</SectionTitle>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <SectionTitle className="mb-0">Без ивента</SectionTitle>
+          <span className="flex flex-wrap gap-2">
+            <CsvButton
+              path={csvPath('dkp', { table: 'without-event' }, query)}
+              label="операции без ивента"
+            />
+            <CsvButton
+              path={csvPath('dkp', { table: 'without-event-movements' }, query)}
+              label="операции журнала без ивента"
+            />
+          </span>
+        </div>
         <p className="text-sm text-secondary">
           Самостоятельные операции (лоты хранилища, админ-начисления): без типа и режима, не
           ограничиваются фильтрами и не подмешиваются в итог выбранного типа ивента.

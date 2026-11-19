@@ -1,7 +1,49 @@
-import type { ReactNode } from 'react';
+'use client';
+
+import { useState, type ReactNode } from 'react';
 import { moscowWeekLabel } from '@dkp/shared';
+import { API_URL_VALUE } from '../../lib/api';
 import { Button } from './controls';
 import { ErrorText, Muted } from './layout';
+
+/**
+ * Кнопка «Скачать CSV» таблицы статистики (#223): скачивает всю серверную
+ * выборку выбранных на момент запуска условий. Ошибка не создаёт пустой
+ * «успешный» файл; имя берётся из Content-Disposition сервера.
+ */
+export function CsvButton({ path, label }: { path: string; label: string }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const download = async () => {
+    setBusy(true);
+    setFailed(false);
+    try {
+      const response = await fetch(`${API_URL_VALUE}${path}`, { credentials: 'include' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const disposition = response.headers.get('Content-Disposition') ?? '';
+      const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? 'statistics.csv';
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Button onClick={download} disabled={busy} aria-label={`Скачать CSV: ${label}`}>
+        {busy ? 'Готовим…' : 'Скачать CSV'}
+      </Button>
+      {failed && <ErrorText>Не удалось скачать CSV</ErrorText>}
+    </span>
+  );
+}
 
 /**
  * Сводная карточка статистики (план 2.8): число и подпись; клик открывает

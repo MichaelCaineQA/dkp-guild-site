@@ -11,10 +11,10 @@ import {
 import { EventCard } from './event-card';
 import { ReportError, useGameTime, useStatisticsEndpoint } from './statistics-report';
 import type { StatisticsFilterOptions } from './statistics-filters';
-import type { StatisticsFocus } from './statistics-navigation';
+import { csvPath, type StatisticsFocus } from './statistics-navigation';
 import { useSession } from './session-context';
 import { api } from '../lib/api';
-import { BarChart, formatAttendancePct, weekLabel } from './ui/charts';
+import { BarChart, CsvButton, formatAttendancePct, weekLabel } from './ui/charts';
 import { ATTENDANCE_STATUS_LABELS } from './ui/event-summary';
 import { Badge, Card, Muted, Notice, SectionTitle, Table, TextLink } from './ui/index';
 
@@ -119,7 +119,19 @@ export function StatisticsActivityTab({
   return (
     <div className="space-y-4">
       <Card>
-        <SectionTitle>Активность по типам ивентов</SectionTitle>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <SectionTitle className="mb-0">Активность по типам ивентов</SectionTitle>
+          <span className="flex flex-wrap gap-2">
+            <CsvButton
+              path={csvPath('activity', { table: 'types' }, query)}
+              label="типы активности"
+            />
+            <CsvButton
+              path={csvPath('activity', { table: 'modes' }, query)}
+              label="режимы активности"
+            />
+          </span>
+        </div>
         <Table>
           <thead>
             <tr>
@@ -181,7 +193,13 @@ export function StatisticsActivityTab({
       {!typeFocus && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
-            <SectionTitle>Динамика по неделям</SectionTitle>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <SectionTitle className="mb-0">Динамика по неделям</SectionTitle>
+              <CsvButton
+                path={csvPath('activity', { table: 'weeks' }, query)}
+                label="недельная динамика"
+              />
+            </div>
             <BarChart
               label="Посещённые участия по неделям"
               columns={data.weeks.map((week) => ({
@@ -194,7 +212,19 @@ export function StatisticsActivityTab({
             />
           </Card>
           <Card>
-            <SectionTitle>Пик активности</SectionTitle>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <SectionTitle className="mb-0">Пик активности</SectionTitle>
+              <span className="flex flex-wrap gap-2">
+                <CsvButton
+                  path={csvPath('activity', { table: 'peak-weekday' }, query)}
+                  label="пик по дням недели"
+                />
+                <CsvButton
+                  path={csvPath('activity', { table: 'peak-hour' }, query)}
+                  label="пик по часам"
+                />
+              </span>
+            </div>
             <p className="mb-2 text-sm text-secondary">
               Посещённые участия по началу ивента, московское время (UTC+3).
             </p>
@@ -230,7 +260,19 @@ export function StatisticsActivityTab({
       )}
 
       <Card id="activity-members">
-        <SectionTitle>Игроки</SectionTitle>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <SectionTitle className="mb-0">Игроки</SectionTitle>
+          <span className="flex flex-wrap gap-2">
+            <CsvButton
+              path={csvPath('activity', { table: 'members' }, query)}
+              label="игроки активности"
+            />
+            <CsvButton
+              path={csvPath('activity', { table: 'member-details' }, query)}
+              label="участия игроков"
+            />
+          </span>
+        </div>
         <Table>
           <thead>
             <tr>
@@ -308,7 +350,13 @@ export function StatisticsActivityTab({
       </Card>
 
       <Card id="activity-events">
-        <SectionTitle>Ивенты</SectionTitle>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <SectionTitle className="mb-0">Ивенты</SectionTitle>
+          <CsvButton
+            path={csvPath('activity', { table: 'events' }, query)}
+            label="ивенты активности"
+          />
+        </div>
         {eventError && <Muted>Не удалось открыть ивент</Muted>}
         <Table>
           <thead>
