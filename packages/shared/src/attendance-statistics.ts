@@ -30,6 +30,9 @@ export const attendanceDetailSchema = z.object({
 export const attendanceGroupSchema = z.object({
   id: z.string().nullable(),
   name: z.string().nullable(),
+  /** Аватар игрока — только в группах/топе игроков (#219); у команд null. */
+  avatar: z.string().nullable(),
+  avatarColor: z.string().nullable(),
   totals: attendanceTotalsSchema,
 });
 export const attendanceReportSchema = z.object({

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { canViewGuildGearScore } from '@dkp/shared';
 import { useSession } from './session-context';
 import { api } from '../lib/api';
 import {
@@ -11,15 +12,22 @@ import {
   type StatisticsFilterOptions,
   type StatisticsFilterState,
 } from './statistics-filters';
+import {
+  statisticsFocusLabel,
+  type StatisticsFocus,
+  type StatisticsTab,
+} from './statistics-navigation';
+import { StatisticsOverview } from './statistics-overview';
 import { ReportEmpty, ReportError, ReportSkeleton, useStatisticsReport } from './statistics-report';
-import { Card, Notice, Page, PageHeader, Tabs, type TabItem } from './ui';
+import { Card, FocusChip, Notice, Page, PageHeader, Tabs, type TabItem } from './ui';
 
 /**
  * «Статистика» (план 2.8, #218): маршрут, общий период и фильтры, вкладки
- * и состояния для всех отчётов этапа. Содержимое вкладок подключают
- * профильные задачи; оболочка держит один общий запрос основы (#212)
- * выбранных условий, поэтому смена фильтров видна каждой вкладке
- * одинаково, а поздний ответ старого запроса новый отчёт не заменяет.
+ * и состояния для всех отчётов этапа. Оболочка держит один общий запрос
+ * основы (#212) выбранных условий, поэтому смена фильтров видна каждой
+ * вкладке одинаково, а поздний ответ старого запроса новый отчёт не
+ * заменяет. Переходы из обзора (#219) открывают вкладку с дополнительным
+ * срезом, который виден чипом и снимается, не меняя общие фильтры.
  */
 
 const TABS: Array<TabItem<StatisticsTab>> = [
@@ -29,7 +37,6 @@ const TABS: Array<TabItem<StatisticsTab>> = [
   { key: 'dkp', label: 'ДКП' },
   { key: 'loot', label: 'Лут' },
 ];
-type StatisticsTab = 'overview' | 'attendance' | 'activity' | 'dkp' | 'loot';
 
 const dayNumber = new Intl.DateTimeFormat('ru-RU', { day: 'numeric' });
 const fullDate = new Intl.DateTimeFormat('ru-RU', {
@@ -54,9 +61,23 @@ export function StatisticsScreen({ now = new Date() }: { now?: Date }) {
     defaultStatisticsFilters(now),
   );
   const [tab, setTab] = useState<StatisticsTab>('overview');
+  const [focus, setFocus] = useState<StatisticsFocus | null>(null);
   // Отчёт запрашивается только для одобренных участников и Админа.
   const authorized = !!user && (!!user.memberId || !!user.isAdmin);
   const report = useStatisticsReport(authorized ? statisticsFilterQuery(filters) : null);
+
+  // Смена общих условий делает срез перехода недействительным — снимаем его.
+  const changeFilters = useCallback((next: StatisticsFilterState) => {
+    setFilters(next);
+    setFocus(null);
+  }, []);
+
+  /** Переход из обзора: вкладка + дополнительный срез (снимается чипом). */
+  const go = useCallback((nextTab: StatisticsTab, nextFocus?: StatisticsFocus) => {
+    setTab(nextTab);
+    setFocus(nextFocus ?? null);
+    window.history.replaceState(null, '', `/statistics?tab=${nextTab}`);
+  }, []);
 
   // Глубокая ссылка на вкладку: /statistics?tab=dkp открывает её сразу.
   useEffect(() => {
@@ -135,7 +156,7 @@ export function StatisticsScreen({ now = new Date() }: { now?: Date }) {
     <Page width="wide">
       <PageHeader title="Статистика" subtitle="Посещаемость, активность, ДКП и лут" />
 
-      <StatisticsFilters now={now} options={options} value={filters} onChange={setFilters} />
+      <StatisticsFilters now={now} options={options} value={filters} onChange={changeFilters} />
 
       <Tabs
         items={TABS}
@@ -143,30 +164,50 @@ export function StatisticsScreen({ now = new Date() }: { now?: Date }) {
         label="Разделы статистики"
         onChange={(key) => {
           setTab(key);
+          setFocus(null);
           window.history.replaceState(null, '', `/statistics?tab=${key}`);
         }}
       />
 
       <div role="tabpanel" aria-labelledby={`tab-${tab}`}>
-        <Card>
-          {appliedLabel && <p className="mb-3 text-sm text-secondary">{appliedLabel}</p>}
-          {!query ? (
+        {focus && (
+          <div className="mb-3">
+            <FocusChip label={statisticsFocusLabel(focus)} onClear={() => setFocus(null)} />
+          </div>
+        )}
+        {appliedLabel && <p className="mb-3 text-sm text-secondary">{appliedLabel}</p>}
+        {!query ? (
+          <Card>
             <Notice tone="info">Укажите корректный период — отчёт обновится автоматически.</Notice>
-          ) : report.failed ? (
+          </Card>
+        ) : report.failed ? (
+          <Card>
             <ReportError onRetry={report.reload} />
-          ) : report.loading ? (
-            <ReportSkeleton refreshing={report.refreshing} />
-          ) : emptySelection ? (
+          </Card>
+        ) : report.loading ? (
+          <ReportSkeleton refreshing={report.refreshing} />
+        ) : emptySelection ? (
+          <Card>
             <ReportEmpty
               filtered={hasFilters}
-              onResetFilters={() => setFilters(defaultStatisticsFilters(now))}
+              onResetFilters={() => changeFilters(defaultStatisticsFilters(now))}
             />
-          ) : (
+          </Card>
+        ) : tab === 'overview' ? (
+          <StatisticsOverview
+            query={query}
+            eventFilterActive={!!(query.eventTypeId || query.mode)}
+            canViewGearScore={!!user && canViewGuildGearScore(user)}
+            go={go}
+          />
+        ) : (
+          <Card>
             <Notice tone="info">
-              Отчёт готовится к открытию. Выбранные период и фильтры уже применяются к его данным.
+              Раздел статистики подключается. Выбранные период и фильтры уже применяются к его
+              данным.
             </Notice>
-          )}
-        </Card>
+          </Card>
+        )}
       </div>
     </Page>
   );

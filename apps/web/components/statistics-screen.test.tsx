@@ -2,20 +2,27 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { StatisticsReport } from '@dkp/shared';
 import { StatisticsScreen } from './statistics-screen';
+import { baseReportFixture, NOW, statisticsApiMock } from './statistics-fixtures';
 import { api } from '../lib/api';
 import { useSession } from './session-context';
 
 vi.mock('../lib/api', () => ({ api: vi.fn() }));
 vi.mock('./session-context', () => ({ useSession: vi.fn() }));
 
-function session(user: { memberId: string | null; isAdmin?: boolean } | null) {
+function session(
+  user: {
+    memberId: string | null;
+    isAdmin?: boolean;
+    rank?: 'GUILD_LEADER' | 'ADMIN' | 'OFFICER' | 'MEMBER';
+  } | null,
+) {
   vi.mocked(useSession).mockReturnValue({
     user: user
       ? {
           userId: 'u',
           username: 'Тест',
           memberId: user.memberId,
-          rank: 'MEMBER',
+          rank: user.rank ?? 'MEMBER',
           isAdmin: user.isAdmin ?? false,
           blocked: false,
         }
@@ -25,51 +32,19 @@ function session(user: { memberId: string | null; isAdmin?: boolean } | null) {
   });
 }
 
-const ROSTER = {
-  groups: [{ id: 'kp1', name: 'КП Альфа', packs: [{ id: 'p1', name: 'Пак Один' }] }],
-};
-const EVENT_TYPES = [{ id: 't1', name: 'Гильдбосс' }];
-
 function emptyReport(): StatisticsReport {
-  return {
-    generatedAt: '2026-12-02T12:00:00Z',
-    start: '2026-11-30T21:00:00Z',
-    end: '2026-12-31T21:00:00Z',
-    weeks: [],
-    events: [],
-    facts: [],
-    factsWithoutEvent: [],
-  };
+  return baseReportFixture({ weeks: [], events: [] });
 }
 
 function reportWithEvent(): StatisticsReport {
-  return {
-    ...emptyReport(),
-    events: [
-      {
-        id: 'e1',
-        startsAt: '2026-12-05T18:00:00Z',
-        eventTypeId: 't1',
-        mode: 'PVE',
-        status: 'FINISHED',
-        members: [],
-      },
-    ],
-  };
+  return baseReportFixture();
 }
 
-/** Ответы по префиксу пути; entries статистики — очередь последовательных ответов. */
+/** Ответы основы — очередь; профильные отчёты обзора — фикстуры. */
 function mockApi(statistics: Array<Promise<StatisticsReport> | (() => Promise<StatisticsReport>)>) {
-  vi.mocked(api).mockImplementation(((path: string) => {
-    if (path.startsWith('/org/roster')) return Promise.resolve(ROSTER);
-    if (path.startsWith('/event-types')) return Promise.resolve(EVENT_TYPES);
-    if (path.startsWith('/statistics')) {
-      const next = statistics.shift();
-      if (next === undefined) return Promise.reject(new Error('нет заготовленного ответа'));
-      return typeof next === 'function' ? next() : next;
-    }
-    return Promise.reject(new Error(`неожиданный путь ${path}`));
-  }) as typeof api);
+  const mock = statisticsApiMock({ base: statistics });
+  vi.mocked(api).mockImplementation(mock.implementation as typeof api);
+  return mock;
 }
 
 function statisticsCalls(): string[] {
@@ -79,9 +54,6 @@ function statisticsCalls(): string[] {
     .map(([path]) => String(path));
 }
 
-// 30 ноября 23:00 UTC: в Москве уже декабрь — дефолтный период 1–31 декабря.
-const NOW = new Date('2026-11-30T23:00:00Z');
-
 async function opened(statistics: Parameters<typeof mockApi>[0]) {
   mockApi(statistics);
   render(<StatisticsScreen now={NOW} />);
@@ -90,6 +62,8 @@ async function opened(statistics: Parameters<typeof mockApi>[0]) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Глубокая ссылка вкладки не должна протекать между тестами.
+  window.history.replaceState(null, '', '/');
   session({ memberId: 'm1' });
 });
 afterEach(cleanup);
@@ -143,18 +117,18 @@ it('поздний ответ старого запроса не заменяе�
   await screen.findByText('По выбранным фильтрам ничего не найдено');
   resolveFirst(reportWithEvent());
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(screen.queryByText(/Отчёт готовится к открытию/)).toBeNull();
   expect(screen.getByText('По выбранным фильтрам ничего не найдено')).toBeDefined();
 });
 
 it('смена условий скрывает прошлые данные состоянием обновления', async () => {
   mockApi([Promise.resolve(reportWithEvent()), Promise.resolve(emptyReport())]);
   render(<StatisticsScreen now={NOW} />);
-  expect(await screen.findByText(/Отчёт готовится к открытию/)).toBeDefined();
+  // Обзор с данными основы открывает карточки и профильные отчёты.
+  expect(await screen.findByText('Активные участники')).toBeDefined();
   fireEvent.change(screen.getByLabelText('Режим:'), { target: { value: 'PVE' } });
   // Старое содержимое скрыто, показан каркас обновления, затем пустой отчёт
   // с активным фильтром режима — это «ничего не найдено», не «нет данных».
-  expect(screen.queryByText(/Отчёт готовится к открытию/)).toBeNull();
+  expect(screen.queryByText('Активные участники')).toBeNull();
   await screen.findByRole('status');
   await screen.findByText('По выбранным фильтрам ничего не найдено');
   expect(statisticsCalls().at(-1)).toBe('/statistics?from=2026-12-01&to=2026-12-31&mode=PVE');
@@ -163,14 +137,13 @@ it('смена условий скрывает прошлые данные со�
 it('вкладки переключаются стрелками и клавиатурой, условия общие для всех', async () => {
   mockApi([Promise.resolve(reportWithEvent()), Promise.resolve(reportWithEvent())]);
   render(<StatisticsScreen now={NOW} />);
-  await screen.findByText(/Отчёт готовится к открытию/);
+  await screen.findByText('Активные участники');
   const tabs = ['Обзор', 'Посещаемость', 'Активность', 'ДКП', 'Лут'];
   for (const label of tabs) {
     expect(screen.getByRole('tab', { name: label })).toBeDefined();
   }
   expect(screen.getByRole('tab', { name: 'Обзор' }).getAttribute('aria-selected')).toBe('true');
   // Выбранный тип ивента виден в применённых условиях и сохраняется между вкладками.
-  await screen.findByText('Гильдбосс');
   fireEvent.change(screen.getByLabelText('Тип ивента:'), { target: { value: 't1' } });
   await screen.findByText(/Тип ивента: Гильдбосс/);
   fireEvent.click(screen.getByRole('tab', { name: 'ДКП' }));
@@ -189,6 +162,40 @@ it('глубокая ссылка открывает вкладку период
   await opened([Promise.resolve(emptyReport())]);
   expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('tab-loot');
   window.history.replaceState(null, '', '/');
+});
+
+it('переход из обзора открывает вкладку с чипом среза; срез снимается', async () => {
+  mockApi([Promise.resolve(reportWithEvent())]);
+  render(<StatisticsScreen now={NOW} />);
+  await screen.findByText('Активные участники');
+  fireEvent.click(screen.getByRole('button', { name: /Посещаемость Игрок Один/ }));
+  expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('tab-attendance');
+  expect(screen.getByText('Игрок: Игрок Один')).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: /Снять срез/ }));
+  expect(screen.queryByText('Игрок: Игрок Один')).toBeNull();
+  // Смена общих фильтров тоже снимает срез: возвращаемся на обзор и открываем заново.
+  fireEvent.click(screen.getByRole('tab', { name: 'Обзор' }));
+  await screen.findByRole('button', { name: /Посещаемость Игрок Один/ });
+  fireEvent.click(screen.getByRole('button', { name: /Посещаемость Игрок Один/ }));
+  await screen.findByText('Игрок: Игрок Один');
+  fireEvent.change(screen.getByLabelText('Режим:'), { target: { value: 'PVE' } });
+  expect(screen.queryByText('Игрок: Игрок Один')).toBeNull();
+});
+
+it('свежесть GS на обзоре запрашивает только Глава/Админ', async () => {
+  const memberMock = mockApi([Promise.resolve(reportWithEvent())]);
+  render(<StatisticsScreen now={NOW} />);
+  await screen.findByText('Активные участники');
+  expect(memberMock.paths('/statistics/gear-score')).toEqual([]);
+  expect(screen.queryByText('Свежесть GS')).toBeNull();
+});
+
+it('Глава видит блок свежести GS на обзоре', async () => {
+  session({ memberId: 'm1', rank: 'GUILD_LEADER' });
+  const leaderMock = mockApi([Promise.resolve(reportWithEvent())]);
+  render(<StatisticsScreen now={NOW} />);
+  await screen.findByText('Свежесть GS');
+  expect(leaderMock.paths('/statistics/gear-score').length).toBeGreaterThan(0);
 });
 
 it('без входа и без привязки аккаунта — пояснения вместо отчёта', () => {

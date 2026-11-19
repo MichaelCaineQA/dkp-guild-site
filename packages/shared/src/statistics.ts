@@ -210,3 +210,37 @@ export function resolveStatisticsPeriod(query: StatisticsQuery, now: Date): Stat
   }
   return { start: new Date(startMs), end: new Date(endMs), weeks };
 }
+
+/** Moscow timezone is fixed (UTC+3), so labels need no IANA database. */
+export function formatMoscowDayShort(value: string): string {
+  const date = new Date(value);
+  const moscow = new Date(date.getTime() + MOSCOW_OFFSET);
+  const day = moscow.getUTCDate();
+  const month = moscow.getUTCMonth();
+  const months = [
+    'янв',
+    'фев',
+    'мар',
+    'апр',
+    'мая',
+    'июн',
+    'июл',
+    'авг',
+    'сен',
+    'окт',
+    'ноя',
+    'дек',
+  ];
+  return `${day} ${months[month]}`;
+}
+
+/**
+ * Фактические даты недели по Москве («1 дек – 7 янв»): границы обрезаны
+ * периодом, подпись всегда отражает реальные даты выборки (#219, план 2.8).
+ */
+export function moscowWeekLabel(start: string, end: string): string {
+  const startLabel = formatMoscowDayShort(start);
+  // Конечная граница полуоткрытая: последняя фактическая дата — на мс раньше.
+  const endLabel = formatMoscowDayShort(new Date(Date.parse(end) - 1).toISOString());
+  return startLabel === endLabel ? startLabel : `${startLabel} – ${endLabel}`;
+}

@@ -6,26 +6,27 @@ import { api } from '../lib/api';
 import { Button, ErrorText, Muted } from './ui';
 
 /**
- * Общий контейнер состояния отчётов статистики (#218): один общий запрос
- * основы (#212) на выбранный период и фильтры. Поколения запросов защищают
- * от позднего ответа старых условий; ошибка не превращается в пустые данные.
- * Профильные вкладки (#219–#222) строят свои виджеты на этих состояниях.
+ * Общий контейнер состояния отчётов статистики (#218): запрос любого
+ * профильного эндпоинта этапа на выбранный период и фильтры. Поколения
+ * запросов защищают от позднего ответа старых условий; ошибка не
+ * превращается в пустые данные. Профильные вкладки (#219–#222) строят
+ * свои виджеты на этих состояниях.
  */
-export function useStatisticsReport(query: StatisticsQuery | null) {
-  const [loaded, setLoaded] = useState<{ key: string; report: StatisticsReport } | null>(null);
+export function useStatisticsEndpoint<T>(path: string, query: StatisticsQuery | null) {
+  const [loaded, setLoaded] = useState<{ key: string; data: T } | null>(null);
   const [failed, setFailed] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
   const generation = useRef(0);
-  const key = query ? statisticsQueryString(query) : null;
+  const key = query ? `${path}?${statisticsQueryString(query)}` : null;
 
   useEffect(() => {
     if (!key) return;
     const request = ++generation.current;
     setFailed(false);
-    api<StatisticsReport>(`/statistics?${key}`)
-      .then((report) => {
+    api<T>(key)
+      .then((data) => {
         if (request !== generation.current) return;
-        setLoaded({ key, report });
+        setLoaded({ key, data });
       })
       .catch(() => {
         if (request !== generation.current) return;
@@ -36,9 +37,9 @@ export function useStatisticsReport(query: StatisticsQuery | null) {
     };
   }, [key, reloadTick]);
 
-  const current = loaded && loaded.key === key ? loaded.report : null;
+  const current = loaded && loaded.key === key ? loaded.data : null;
   return {
-    report: current,
+    data: current,
     /** Первый запрос периода: каркас вместо данных. */
     loading: !!key && !current && !failed,
     /** Смена условий при уже показанном отчёте: старые данные скрыты. */
@@ -46,6 +47,12 @@ export function useStatisticsReport(query: StatisticsQuery | null) {
     failed,
     reload: () => setReloadTick((tick) => tick + 1),
   };
+}
+
+/** Основа #212 — общий индикатор периода для оболочки и вкладок. */
+export function useStatisticsReport(query: StatisticsQuery | null) {
+  const endpoint = useStatisticsEndpoint<StatisticsReport>('/statistics', query);
+  return { ...endpoint, report: endpoint.data };
 }
 
 /** Каркас карточек и графиков на время загрузки/обновления. */
