@@ -20,6 +20,7 @@ import {
 import { StatisticsOverview } from './statistics-overview';
 import { StatisticsAttendanceTab } from './statistics-attendance';
 import { StatisticsActivityTab } from './statistics-activity';
+import { StatisticsDkpTab } from './statistics-dkp';
 import { ReportEmpty, ReportError, ReportSkeleton, useStatisticsReport } from './statistics-report';
 import { Card, FocusChip, Notice, Page, PageHeader, Tabs, type TabItem } from './ui';
 
@@ -206,6 +207,8 @@ export function StatisticsScreen({ now = new Date() }: { now?: Date }) {
           <StatisticsAttendanceTab query={query} focus={focus} options={options} />
         ) : tab === 'activity' ? (
           <StatisticsActivityTab query={query} focus={focus} options={options} />
+        ) : tab === 'dkp' ? (
+          <StatisticsDkpTab query={query} focus={focus} options={options} />
         ) : (
           <Card>
             <Notice tone="info">

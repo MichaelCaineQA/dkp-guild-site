@@ -3,12 +3,14 @@ import { Card, Muted, SectionTitle } from './layout';
 import { Table } from './data';
 import { Avatar } from '../avatar';
 
-const ENTRY_LABELS: Record<string, string> = {
+/** Подписи типов операций журнала ДКП (профиль и статистика). */
+export const DKP_ENTRY_LABELS: Record<string, string> = {
   CHECKIN_EARN: 'Чек-ин',
   MANUAL_EARN: 'Ручное начисление',
   AUCTION_SPEND: 'Покупка на аукционе',
   ADJUSTMENT: 'Корректировка',
 };
+const ENTRY_LABELS = DKP_ENTRY_LABELS;
 
 export function ProfileDetails({ profile }: { profile: PlayerProfile }) {
   return (
