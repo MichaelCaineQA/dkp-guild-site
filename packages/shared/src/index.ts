@@ -31,3 +31,4 @@ export * from './bidder-profile';
 export * from './statistics';
 export * from './attendance-statistics';
 export * from './activity-statistics';
+export * from './dkp-statistics';

@@ -7,6 +7,7 @@ import { StatisticsController } from './statistics.controller';
 import { StatisticsService } from './statistics.service';
 import { AttendanceStatisticsService } from './attendance-statistics.service';
 import { ActivityStatisticsService } from './activity-statistics.service';
+import { DkpStatisticsService } from './dkp-statistics.service';
 
 let actor: SessionUser | undefined;
 @Module({
@@ -15,6 +16,7 @@ let actor: SessionUser | undefined;
     { provide: StatisticsService, useValue: { get: () => ({ events: [] }) } },
     { provide: AttendanceStatisticsService, useValue: { get: () => ({}) } },
     { provide: ActivityStatisticsService, useValue: { get: () => ({}) } },
+    { provide: DkpStatisticsService, useValue: { get: () => ({}) } },
   ],
 })
 class TestModule {}
@@ -45,28 +47,33 @@ describe('Доступ к статистике через HTTP', () => {
     expect((await fetch(`${url}/statistics`)).status).toBe(401);
     expect((await fetch(`${url}/statistics/attendance`)).status).toBe(401);
     expect((await fetch(`${url}/statistics/activity`)).status).toBe(401);
+    expect((await fetch(`${url}/statistics/dkp`)).status).toBe(401);
   });
   it('отказывает ожидающему участнику', async () => {
     actor = { ...member, memberId: null, rank: null };
     expect((await fetch(`${url}/statistics`)).status).toBe(403);
     expect((await fetch(`${url}/statistics/attendance`)).status).toBe(403);
     expect((await fetch(`${url}/statistics/activity`)).status).toBe(403);
+    expect((await fetch(`${url}/statistics/dkp`)).status).toBe(403);
   });
   it('отказывает заблокированному участнику', async () => {
     actor = { ...member, blocked: true };
     expect((await fetch(`${url}/statistics`)).status).toBe(403);
     expect((await fetch(`${url}/statistics/attendance`)).status).toBe(403);
     expect((await fetch(`${url}/statistics/activity`)).status).toBe(403);
+    expect((await fetch(`${url}/statistics/dkp`)).status).toBe(403);
   });
   it.each(['MEMBER', 'OFFICER', 'GUILD_LEADER'] as const)('разрешает ранг %s', async (rank) => {
     actor = { ...member, rank };
     expect((await fetch(`${url}/statistics`)).status).toBe(200);
     expect((await fetch(`${url}/statistics/attendance`)).status).toBe(200);
     expect((await fetch(`${url}/statistics/activity`)).status).toBe(200);
+    expect((await fetch(`${url}/statistics/dkp`)).status).toBe(200);
   });
   it('разрешает резервного администратора', async () => {
     actor = { ...member, memberId: null, rank: null, isAdmin: true };
     expect((await fetch(`${url}/statistics`)).status).toBe(200);
     expect((await fetch(`${url}/statistics/activity`)).status).toBe(200);
+    expect((await fetch(`${url}/statistics/dkp`)).status).toBe(200);
   });
 });
