@@ -122,7 +122,7 @@
   `bidFullCost`
   в shared: сначала наценка, затем от наценной цены скидка, ceil;
   `Auction.discountPct` — снимок настройки при создании лота, `Bid/LootAward
-  .discountPct` — применённые. Смена роли/предмета — кулдаун
+.discountPct` — применённые. Смена роли/предмета — кулдаун
   `auction.profileChangeCooldownDays` (409 с датой), первый выбор сразу;
   удаление предмета — FK SetNull (поле очищается у всех); настройки
   `auction.preferredItemDiscountPct`/`foreignClassMarkupPct` — дефолты 10/10,
@@ -174,8 +174,7 @@
   «Мой кошелёк» (#81, PR #128): `GET /dashboard/wallet` — баланс журнала
   (`computeBalance`) + заморозка `frozenAmount` (shared, общая с проверкой
   ставок в `bids.service`): по открытому лоту только ведущая ставка с уже
-  применёнными наценкой/скидкой; `available = balance − frozen`; без Member —
-  403. Карточка на дашборде опрашивает endpoint каждые 15 c + по фокусу
+  применёнными наценкой/скидкой; `available = balance − frozen`; без Member — 403. Карточка на дашборде опрашивает endpoint каждые 15 c + по фокусу
   (realtime `auction:bid` идёт только в комнату лота — опрос покрывает
   и смены баланса). Лут-лог (#99, PR #122):
   `GET /auctions/loot-log?memberId=&eventId=&itemId=` — публичная история
@@ -258,17 +257,17 @@
 - `installer/` — установщик релизного Compose (`dkp`, Python 3 stdlib) для
   Ubuntu 22.04/24.04 (amd64/arm64), один домен, изолированный проект
   `dkp-guild`, состояние `/var/lib/dkp-guild` (конфиг 0600, `releases/<версия>`
-  + symlink `current`, флаг `migration-failed`, flock `operation.lock`).
-  Команды: `start` (мастер: домен/DNS, гильдия, админ, Discord, бэкап;
-  apt-установка Docker; миграции+seed; health-проверка HTTPS),
-  `update [vX.Y.Z]` (GitHub Releases, sha256+состав архива, копия до
-  миграции; при ошибке API остановлен), `backup setup|now|list|restore <id>`
-  (openssl AES-256-CBC PBKDF2 + HMAC-SHA256, ключ восстановления, scp/локально,
-  systemd-таймер, ротация), `status/logs/stop/restart/configure/leader`.
-  Упаковка по тегу — `.github/workflows/release.yml` и
-  `scripts/release/package.sh`; тесты — `installer/test_dkp.py` (10,
-  Linux-only, см. known-issues). Реальную приёмку на чистой VM нужно
-  провести отдельно (issue #75).
+  - symlink `current`, флаг `migration-failed`, flock `operation.lock`).
+    Команды: `start` (мастер: домен/DNS, гильдия, админ, Discord, бэкап;
+    apt-установка Docker; миграции+seed; health-проверка HTTPS),
+    `update [vX.Y.Z]` (GitHub Releases, sha256+состав архива, копия до
+    миграции; при ошибке API остановлен), `backup setup|now|list|restore <id>`
+    (openssl AES-256-CBC PBKDF2 + HMAC-SHA256, ключ восстановления, scp/локально,
+    systemd-таймер, ротация), `status/logs/stop/restart/configure/leader`.
+    Упаковка по тегу — `.github/workflows/release.yml` и
+    `scripts/release/package.sh`; тесты — `installer/test_dkp.py` (10,
+    Linux-only, см. known-issues). Реальную приёмку на чистой VM нужно
+    провести отдельно (issue #75).
 - Production web использует same-origin `/api`: Caddy убирает префикс,
   dev — прокси Next.js на :3001. Локальный Docker Compose сохраняет явный
   `NEXT_PUBLIC_API_URL`. Discord необязателен: `/auth/providers` возвращает
