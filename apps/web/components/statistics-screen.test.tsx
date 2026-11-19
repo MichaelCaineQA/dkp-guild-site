@@ -192,10 +192,9 @@ it('свежесть GS на обзоре запрашивает только Г
 
 it('Глава видит блок свежести GS на обзоре', async () => {
   session({ memberId: 'm1', rank: 'GUILD_LEADER' });
-  const leaderMock = mockApi([Promise.resolve(reportWithEvent())]);
+  mockApi([Promise.resolve(reportWithEvent())]);
   render(<StatisticsScreen now={NOW} />);
-  await screen.findByText('Свежесть GS');
-  expect(leaderMock.paths('/statistics/gear-score').length).toBeGreaterThan(0);
+  expect(await screen.findByText('Актуальные: 3')).toBeDefined();
 });
 
 it('без входа и без привязки аккаунта — пояснения вместо отчёта', () => {
