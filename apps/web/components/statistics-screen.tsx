@@ -21,6 +21,7 @@ import { StatisticsOverview } from './statistics-overview';
 import { StatisticsAttendanceTab } from './statistics-attendance';
 import { StatisticsActivityTab } from './statistics-activity';
 import { StatisticsDkpTab } from './statistics-dkp';
+import { StatisticsLootTab } from './statistics-loot';
 import { ReportEmpty, ReportError, ReportSkeleton, useStatisticsReport } from './statistics-report';
 import { Card, FocusChip, Notice, Page, PageHeader, Tabs, type TabItem } from './ui';
 
@@ -210,12 +211,7 @@ export function StatisticsScreen({ now = new Date() }: { now?: Date }) {
         ) : tab === 'dkp' ? (
           <StatisticsDkpTab query={query} focus={focus} options={options} />
         ) : (
-          <Card>
-            <Notice tone="info">
-              Раздел статистики подключается. Выбранные период и фильтры уже применяются к его
-              данным.
-            </Notice>
-          </Card>
+          <StatisticsLootTab query={query} focus={focus} options={options} />
         )}
       </div>
     </Page>
