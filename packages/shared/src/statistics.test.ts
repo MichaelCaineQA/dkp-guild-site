@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   moscowMonthBounds,
+  moscowWeekLabel,
   resolveStatisticsPeriod,
   statisticsEventMembers,
   statisticsQueryString,
@@ -137,5 +138,22 @@ describe('historical statistics participants', () => {
         checkinEnd: null,
       },
     ]);
+  });
+});
+
+describe('moscowWeekLabel', () => {
+  it('подписывает фактические даты недели по Москве', () => {
+    // Неделя 1–7 декабря: конец полуоткрытый, последняя дата — 7 декабря.
+    expect(moscowWeekLabel('2026-11-30T21:00:00.000Z', '2026-12-07T21:00:00.000Z')).toBe(
+      '1 дек – 7 дек',
+    );
+    // Обрезанная границей периода неделя заканчивается 3 января.
+    expect(moscowWeekLabel('2026-12-31T21:00:00.000Z', '2027-01-03T21:00:00.000Z')).toBe(
+      '1 янв – 3 янв',
+    );
+  });
+
+  it('однодневная выборка подписывается одной датой', () => {
+    expect(moscowWeekLabel('2026-12-05T21:00:00.000Z', '2026-12-06T21:00:00.000Z')).toBe('6 дек');
   });
 });

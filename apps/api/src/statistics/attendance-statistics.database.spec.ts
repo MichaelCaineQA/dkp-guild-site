@@ -51,7 +51,13 @@ suite('Статистика посещаемости в PostgreSQL', () => {
     ).id;
     ids.member = (
       await db.member.create({
-        data: { nickname: `attstats-${suffix}`, packId: ids.pack, createdAt: old },
+        data: {
+          nickname: `attstats-${suffix}`,
+          packId: ids.pack,
+          createdAt: old,
+          avatar: 'DRAGON',
+          avatarColor: 'GREEN',
+        },
       })
     ).id;
     ids.type = (await db.eventType.create({ data: { name: `attstats-${suffix}` } })).id;
@@ -197,6 +203,9 @@ suite('Статистика посещаемости в PostgreSQL', () => {
     });
     expect(report.members[0]?.totals).toEqual(report.overview.totals);
     expect(report.top[0]?.id).toBe(ids.member);
+    // Аватар игрока — только в строках игроков/топа (#219); у команд null.
+    expect(report.top[0]).toMatchObject({ avatar: 'DRAGON', avatarColor: 'GREEN' });
+    expect(report.packs.every((row) => row.avatar === null && row.avatarColor === null)).toBe(true);
     expect(JSON.stringify(report)).not.toContain('database integration fixture');
   });
 

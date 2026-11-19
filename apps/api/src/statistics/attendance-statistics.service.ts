@@ -124,6 +124,7 @@ export class AttendanceStatisticsService {
           }
           return [...groups].map(([groupId, rows]) => {
             const id = typeof groupId === 'symbol' ? null : groupId;
+            const member = id === null ? undefined : memberMap.get(id);
             return {
               id,
               name:
@@ -132,6 +133,8 @@ export class AttendanceStatisticsService {
                   : key === 'packId'
                     ? (packs.find((p) => p.id === id)?.name ?? null)
                     : (kps.find((k) => k.id === id)?.name ?? null),
+              avatar: key === 'memberId' && member ? member.avatar : null,
+              avatarColor: key === 'memberId' && member ? member.avatarColor : null,
               totals: aggregateAttendance(rows),
             };
           });
