@@ -172,7 +172,22 @@ export function activityReportFixture(overrides: Partial<ActivityReport> = {}): 
             totals: activityTotalsFixture({ events: 2, counted: 3, visited: 2, checks: 6 }),
           },
         ],
-        details: [],
+        details: [
+          {
+            eventId: 'e1',
+            eventName: 'Вечерний гильдбосс',
+            startsAt: '2026-12-05T18:00:00.000Z',
+            eventTypeId: 't1',
+            eventTypeName: 'Гильдбосс',
+            mode: 'PVE',
+            packId: 'p1',
+            kpId: 'kp1',
+            teamStatus: 'KNOWN',
+            status: 'PRESENT',
+            checks: 2,
+            visited: true,
+          },
+        ],
       },
     ],
     events: [

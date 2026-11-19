@@ -51,10 +51,19 @@ export function PageHeader({ title, subtitle }: { title: ReactNode; subtitle?: s
   );
 }
 
-/** Карточка — основной контейнер контента. */
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
+/** Карточка — основной контейнер контента. id — якорь перехода (срезы статистики). */
+export function Card({
+  children,
+  className = '',
+  id,
+}: {
+  children: ReactNode;
+  className?: string;
+  id?: string;
+}) {
   return (
     <section
+      id={id}
       className={`min-w-0 rounded-xl border border-line bg-surface p-5 shadow-sm ${className}`}
     >
       {children}

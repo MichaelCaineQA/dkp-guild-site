@@ -7,14 +7,16 @@ import {
 import { Badge, Table } from './data';
 import { Button } from './controls';
 import { Muted } from './layout';
-const LABELS: Record<string, string> = {
+/** Итоговый статус пары игрок–ивент (проводится и статистикой). */
+export const ATTENDANCE_STATUS_LABELS: Record<string, string> = {
   PRESENT: 'Участвовал',
   LATE: 'Опоздал',
   LEFT_EARLY: 'Ушёл раньше',
   NO_SHOW: 'Отсутствовал',
   EXCUSED_ABSENCE: 'Отсутствовал по ув. причине',
 };
-const CODE_LABELS: Record<string, string> = {
+/** Состояние кода фазы чек-ина. */
+export const CHECKIN_CODE_LABELS: Record<string, string> = {
   PENDING: '—',
   ACTIVE: 'Вводит',
   PASSED: 'Самостоятельно',
@@ -22,6 +24,8 @@ const CODE_LABELS: Record<string, string> = {
   EXPIRED: 'Не успел',
   MANUAL: 'Ручная отметка',
 };
+const LABELS = ATTENDANCE_STATUS_LABELS;
+const CODE_LABELS = CHECKIN_CODE_LABELS;
 export function describeSummaryAction(action: SummaryAction): string {
   if (action.kind === 'CHECKIN')
     return `+ код: ${action.phase === 'START' ? 'старт' : 'финал'} — ${action.comment}`;

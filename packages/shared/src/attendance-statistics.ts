@@ -79,6 +79,22 @@ export function aggregateAttendance(rows: AttendanceDetail[]): AttendanceTotals 
   };
 }
 
+/**
+ * Порядок рейтинга посещаемости (план 2.8): процент по убыванию до округления,
+ * затем число учитываемых ивентов, затем ник. Игроки без ивентов в рейтинг
+ * не попадают (фильтруется вызывающей стороной).
+ */
+export function compareAttendanceGroups(
+  a: { name: string | null; totals: AttendanceTotals },
+  b: { name: string | null; totals: AttendanceTotals },
+): number {
+  return (
+    b.totals.checks / (b.totals.events || 1) - a.totals.checks / (a.totals.events || 1) ||
+    b.totals.events - a.totals.events ||
+    (a.name ?? '').localeCompare(b.name ?? '', 'ru')
+  );
+}
+
 /** One final participant/event result. A phase can contribute at most once. */
 export function attendanceStatisticsResult(input: {
   checkinStart: string | null;
