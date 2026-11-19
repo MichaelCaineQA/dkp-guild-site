@@ -29,6 +29,7 @@ export * from './org';
 export * from './prime-time';
 export * from './bidder-profile';
 export * from './statistics';
+export * from './gear-score-statistics';
 export * from './attendance-statistics';
 export * from './activity-statistics';
 export * from './dkp-statistics';

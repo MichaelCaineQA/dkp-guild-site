@@ -45,6 +45,7 @@ const inputs: Record<string, unknown> = {
   ActivityReport: shared.activityReportSchema,
   DkpStatisticsReport: shared.dkpStatisticsReportSchema,
   LootStatisticsReport: shared.lootStatisticsReportSchema,
+  GearScoreStatisticsReport: shared.gearScoreStatisticsReportSchema,
   AuctionsQuery: shared.auctionsQuerySchema,
   ParticipationInput: shared.participationInputSchema,
   SubmitCheckIn: shared.submitCheckInSchema,

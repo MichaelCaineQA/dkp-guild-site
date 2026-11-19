@@ -1,11 +1,12 @@
-import { Controller, Get, Header, Query, UseGuards } from '@nestjs/common';
-import { AuthGuard } from '../auth/auth.guard';
+import { Controller, Get, Header, Query, Req, UseGuards } from '@nestjs/common';
+import { AuthGuard, type AuthedRequest } from '../auth/auth.guard';
 import { PermissionsGuard, RequirePermission } from '../permissions/permissions.guard';
 import { StatisticsService } from './statistics.service';
 import { AttendanceStatisticsService } from './attendance-statistics.service';
 import { ActivityStatisticsService } from './activity-statistics.service';
 import { DkpStatisticsService } from './dkp-statistics.service';
 import { LootStatisticsService } from './loot-statistics.service';
+import { GearScoreStatisticsService } from './gear-score-statistics.service';
 
 @Controller('statistics')
 @UseGuards(AuthGuard, PermissionsGuard)
@@ -16,7 +17,16 @@ export class StatisticsController {
     private readonly activityStatistics: ActivityStatisticsService,
     private readonly dkpStatistics: DkpStatisticsService,
     private readonly lootStatistics: LootStatisticsService,
+    private readonly gearScoreStatistics: GearScoreStatisticsService,
   ) {}
+
+  /** Защищённый блок GS (план 2.5/2.8): доступ проверяет сервис по актору. */
+  @Get('gear-score')
+  @Header('Cache-Control', 'private, no-store')
+  @RequirePermission('members.view_roster')
+  gearScore(@Query() query: Record<string, string>, @Req() req: AuthedRequest) {
+    return this.gearScoreStatistics.get(query, req.session!.user!);
+  }
 
   @Get('attendance')
   @Header('Cache-Control', 'private, no-store')
