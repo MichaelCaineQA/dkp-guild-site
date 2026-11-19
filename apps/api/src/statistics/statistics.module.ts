@@ -4,6 +4,7 @@ import { StatisticsService } from './statistics.service';
 import { AttendanceStatisticsService } from './attendance-statistics.service';
 import { ActivityStatisticsService } from './activity-statistics.service';
 import { DkpStatisticsService } from './dkp-statistics.service';
+import { LootStatisticsService } from './loot-statistics.service';
 
 @Module({
   controllers: [StatisticsController],
@@ -12,6 +13,7 @@ import { DkpStatisticsService } from './dkp-statistics.service';
     AttendanceStatisticsService,
     ActivityStatisticsService,
     DkpStatisticsService,
+    LootStatisticsService,
   ],
 })
 export class StatisticsModule {}
