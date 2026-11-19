@@ -1,7 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { statisticsQueryString, type StatisticsReport, type StatisticsQuery } from '@dkp/shared';
+import {
+  statisticsQueryString,
+  type GamePhaseConfig,
+  type StatisticsReport,
+  type StatisticsQuery,
+} from '@dkp/shared';
 import { api } from '../lib/api';
 import { Button, ErrorText, Muted } from './ui';
 
@@ -53,6 +58,30 @@ export function useStatisticsEndpoint<T>(path: string, query: StatisticsQuery | 
 export function useStatisticsReport(query: StatisticsQuery | null) {
   const endpoint = useStatisticsEndpoint<StatisticsReport>('/statistics', query);
   return { ...endpoint, report: endpoint.data };
+}
+
+/** Московское игровое время для шкалы фаз общей карточки ивента (#220/#222). */
+export function useGameTime(): GamePhaseConfig | null {
+  const [gameTime, setGameTime] = useState<GamePhaseConfig | null>(null);
+  useEffect(() => {
+    let active = true;
+    api<{ gameTimeAnchor: string; gameTimeDayMinutes: number; gameTimeNightMinutes: number }>(
+      '/settings/game-time',
+    )
+      .then((time) => {
+        if (active)
+          setGameTime({
+            anchor: new Date(time.gameTimeAnchor),
+            dayMinutes: time.gameTimeDayMinutes,
+            nightMinutes: time.gameTimeNightMinutes,
+          });
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  return gameTime;
 }
 
 /** Каркас карточек и графиков на время загрузки/обновления. */

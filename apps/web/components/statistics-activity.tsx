@@ -6,11 +6,10 @@ import {
   canManageEvent,
   type ActivityReport,
   type DashboardEvent,
-  type GamePhaseConfig,
   type StatisticsQuery,
 } from '@dkp/shared';
 import { EventCard } from './event-card';
-import { ReportError, useStatisticsEndpoint } from './statistics-report';
+import { ReportError, useGameTime, useStatisticsEndpoint } from './statistics-report';
 import type { StatisticsFilterOptions } from './statistics-filters';
 import type { StatisticsFocus } from './statistics-navigation';
 import { useSession } from './session-context';
@@ -368,30 +367,7 @@ export function StatisticsActivityTab({
   );
 }
 
-/** Московское игровое время для шкалы фаз карточки ивента. */
-function useGameTime(): GamePhaseConfig | null {
-  const [gameTime, setGameTime] = useState<GamePhaseConfig | null>(null);
-  useEffect(() => {
-    let active = true;
-    api<{ gameTimeAnchor: string; gameTimeDayMinutes: number; gameTimeNightMinutes: number }>(
-      '/settings/game-time',
-    )
-      .then((time) => {
-        if (active)
-          setGameTime({
-            anchor: new Date(time.gameTimeAnchor),
-            dayMinutes: time.gameTimeDayMinutes,
-            nightMinutes: time.gameTimeNightMinutes,
-          });
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, []);
-  return gameTime;
-}
-
+/** Команда участия: исторический пак/КП или пометка недостаточной истории. */
 function teamNameOf(
   packId: string | null,
   kpId: string | null,
