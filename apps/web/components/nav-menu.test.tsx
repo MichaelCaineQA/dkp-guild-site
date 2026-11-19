@@ -47,6 +47,14 @@ it('по умолчанию свёрнуто, активный пункт отм
   expect(screen.queryByRole('link', { name: 'Настройки' })).toBeNull();
   expect(screen.getByRole('link', { name: 'Лог действий' })).toBeDefined();
 });
+it('«Статистика» доступна участнику и подсвечена на своём маршруте', () => {
+  vi.mocked(usePathname).mockReturnValue('/statistics');
+  render(<NavMenu />);
+  expect(screen.getByRole('link', { name: 'Статистика' }).getAttribute('aria-current')).toBe(
+    'page',
+  );
+  expect(screen.getByRole('link', { name: 'Статистика' }).getAttribute('href')).toBe('/statistics');
+});
 it('раскрытие сохраняется при смене страницы и новом монтировании', async () => {
   const view = render(<NavMenu />);
   fireEvent.click(screen.getByRole('button', { name: 'Развернуть меню' }));

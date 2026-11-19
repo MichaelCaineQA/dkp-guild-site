@@ -12,6 +12,8 @@ export * from './navigation';
 
 export * from './schedule';
 
+export * from './tabs';
+
 export * from './audit';
 
 export * from './absences';

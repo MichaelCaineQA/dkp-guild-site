@@ -161,6 +161,34 @@ export function statisticsEventMembers(
   });
 }
 
+/**
+ * Default statistics period: the current Moscow calendar month as inclusive
+ * calendar dates. The browser timezone must not shift the boundaries (#218).
+ */
+export function moscowMonthBounds(now: Date): { from: string; to: string } {
+  const moscow = new Date(now.getTime() + MOSCOW_OFFSET);
+  const year = moscow.getUTCFullYear();
+  const month = moscow.getUTCMonth();
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return { from: `${year}-${pad(month + 1)}-01`, to: `${year}-${pad(month + 1)}-${pad(lastDay)}` };
+}
+
+/**
+ * Query string of the shared report context (#212 contracts) without empty
+ * values. Contract values are dates, ids and an enum, so no escaping needed.
+ */
+export function statisticsQueryString(query: StatisticsQuery): string {
+  const parts: string[] = [];
+  if (query.from) parts.push(`from=${query.from}`);
+  if (query.to) parts.push(`to=${query.to}`);
+  if (query.kpId) parts.push(`kpId=${query.kpId}`);
+  if (query.packId) parts.push(`packId=${query.packId}`);
+  if (query.eventTypeId) parts.push(`eventTypeId=${query.eventTypeId}`);
+  if (query.mode) parts.push(`mode=${query.mode}`);
+  return parts.join('&');
+}
+
 /** Resolve once per report, using the same injected instant for its default month. */
 export function resolveStatisticsPeriod(query: StatisticsQuery, now: Date): StatisticsPeriod {
   const validated = statisticsQuerySchema.parse(query);

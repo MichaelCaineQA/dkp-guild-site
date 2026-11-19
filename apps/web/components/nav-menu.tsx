@@ -17,6 +17,7 @@ const NAV_ITEMS: Array<{ href: string; label: string; icon: string; permission: 
   { href: '/absences', label: 'Отсутствия', icon: 'clock', permission: 'members.view_roster' },
   { href: '/auction', label: 'Аукцион', icon: 'auction', permission: 'members.view_roster' },
   { href: '/dkp', label: 'Журнал ДКП', icon: 'book', permission: 'members.view_roster' },
+  { href: '/statistics', label: 'Статистика', icon: 'chart', permission: 'members.view_roster' },
   {
     href: '/rules/guild-rules',
     label: 'Правила гильдии',

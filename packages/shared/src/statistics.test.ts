@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  moscowMonthBounds,
   resolveStatisticsPeriod,
   statisticsEventMembers,
+  statisticsQueryString,
   statisticsQuerySchema,
 } from './statistics';
 
@@ -12,6 +14,38 @@ describe('statistics period', () => {
       '2026-02-28T21:00:00.000Z',
       '2026-03-31T21:00:00.000Z',
     ]);
+  });
+
+  it('default month bounds follow Moscow, not the browser timezone', () => {
+    // 30 ноября 23:00 UTC: в Москве уже 1 декабря, в зонах позади UTC — ещё 30 ноября.
+    expect(moscowMonthBounds(new Date('2026-11-30T23:00:00Z'))).toEqual({
+      from: '2026-12-01',
+      to: '2026-12-31',
+    });
+    // 1 января 01:00 UTC — московский январь уже наступил, год сменился.
+    expect(moscowMonthBounds(new Date('2027-01-01T01:00:00Z'))).toEqual({
+      from: '2027-01-01',
+      to: '2027-01-31',
+    });
+    // Високосный февраль заканчивается 29-м числом.
+    expect(moscowMonthBounds(new Date('2028-02-10T12:00:00Z'))).toEqual({
+      from: '2028-02-01',
+      to: '2028-02-29',
+    });
+  });
+
+  it('query string keeps the contract order and drops empty filters', () => {
+    expect(
+      statisticsQueryString({
+        from: '2026-12-01',
+        to: '2026-12-31',
+        kpId: 'kp1',
+        packId: undefined,
+        eventTypeId: undefined,
+        mode: undefined,
+      }),
+    ).toBe('from=2026-12-01&to=2026-12-31&kpId=kp1');
+    expect(statisticsQueryString({ from: undefined, to: undefined })).toBe('');
   });
 
   it('clips Monday-to-Sunday weeks to inclusive date boundaries', () => {

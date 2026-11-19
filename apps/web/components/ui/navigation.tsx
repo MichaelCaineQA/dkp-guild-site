@@ -17,6 +17,7 @@ function MenuIcon({ name }: { name: string }) {
       'M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M2 21v-3a6 6 0 0 1 12 0v3M16 4a4 4 0 0 1 0 8M18 15a5 5 0 0 1 4 6',
     clock: 'M12 8v5l3 2M22 12a10 10 0 1 0-20 0 10 10 0 0 0 20 0',
     book: 'M4 3h16v18H4zM8 7h8M8 11h8M8 15h5',
+    chart: 'M3 21h18M7 17v-6M12 17V7M17 17v-9',
     audit: 'M5 3h14v18H5zM8 7h8M8 11h8M8 15h8',
     settings: 'M4 7h16M4 17h16M8 4v6M16 14v6',
     shield: 'M12 2 3 6v6c0 5 9 10 9 10s9-5 9-10V6zM8 11l3 3 5-6',
