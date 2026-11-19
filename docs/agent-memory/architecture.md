@@ -57,6 +57,16 @@
   в `snapshotIgnoresFilters` (UI/CSV обязаны подписать). Порог
   `profile.gearScoreStaleDays` и asOf возвращаются явно; значений GS в отчёте
   нет — только категории и дата последнего скрина.
+  UI-оболочка статистики (#218): маршрут `/statistics` и пункт навигации,
+  вкладки — примитив `Tabs` (`apps/web/components/ui/tabs.tsx`: tablist,
+  стрелки, горизонтальная прокрутка, `?tab=` в URL). Общие период и фильтры —
+  `apps/web/components/statistics-filters.tsx`: дефолт — текущий московский
+  месяц (`moscowMonthBounds` в shared, зона браузера не влияет), произвольные
+  даты включительно, паки зависят от КП, несовместимый сбрасывается.
+  Состояния и один общий запрос основы #212 — `statistics-report.tsx`
+  (поколения против гонки; «нет данных» ≠ «не найдено»; запрос только для
+  авторизованных). Содержимое вкладок — каркас для #219–#222; query-строку
+  контракта строит `statisticsQueryString` (shared, для будущих CSV #223).
 
 - `apps/web` — Next.js, App Router, TypeScript strict.
 - `apps/api` — NestJS; Prisma-схема: `apps/api/prisma/schema.prisma`.
