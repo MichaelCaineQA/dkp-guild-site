@@ -5,6 +5,7 @@ import { StatisticsService } from './statistics.service';
 import { AttendanceStatisticsService } from './attendance-statistics.service';
 import { ActivityStatisticsService } from './activity-statistics.service';
 import { DkpStatisticsService } from './dkp-statistics.service';
+import { LootStatisticsService } from './loot-statistics.service';
 
 @Controller('statistics')
 @UseGuards(AuthGuard, PermissionsGuard)
@@ -14,6 +15,7 @@ export class StatisticsController {
     private readonly attendanceStatistics: AttendanceStatisticsService,
     private readonly activityStatistics: ActivityStatisticsService,
     private readonly dkpStatistics: DkpStatisticsService,
+    private readonly lootStatistics: LootStatisticsService,
   ) {}
 
   @Get('attendance')
@@ -28,6 +30,13 @@ export class StatisticsController {
   @RequirePermission('members.view_roster')
   dkp(@Query() query: Record<string, string>) {
     return this.dkpStatistics.get(query);
+  }
+
+  @Get('loot')
+  @Header('Cache-Control', 'private, no-store')
+  @RequirePermission('members.view_roster')
+  loot(@Query() query: Record<string, string>) {
+    return this.lootStatistics.get(query);
   }
 
   @Get('activity')
