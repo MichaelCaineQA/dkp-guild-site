@@ -10,8 +10,8 @@ import {
 } from '@dkp/shared';
 import { ReportError, useStatisticsEndpoint } from './statistics-report';
 import type { StatisticsFilterOptions } from './statistics-filters';
-import type { StatisticsFocus } from './statistics-navigation';
-import { BarChart, formatAttendancePct, weekLabel } from './ui/charts';
+import { csvPath, type StatisticsFocus } from './statistics-navigation';
+import { BarChart, CsvButton, formatAttendancePct, weekLabel } from './ui/charts';
 import { ATTENDANCE_STATUS_LABELS, CHECKIN_CODE_LABELS } from './ui/event-summary';
 import { Badge, Card, Muted, SectionTitle, Table } from './ui/index';
 
@@ -161,26 +161,36 @@ export function StatisticsAttendanceTab({
     <div className="space-y-4">
       <Card>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <SectionTitle>Посещаемость</SectionTitle>
-          <div role="group" aria-label="Разрез посещаемости" className="flex flex-wrap gap-2">
-            {CUTS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                aria-pressed={cut === item.key}
-                onClick={() => {
-                  setCut(item.key);
-                  setExpanded(null);
-                }}
-                className={`rounded-lg border px-3 py-1 text-sm ${
-                  cut === item.key
-                    ? 'border-accent bg-accent-soft text-accent'
-                    : 'border-line bg-surface text-primary hover:bg-surface-muted'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
+          <SectionTitle className="mb-0">Посещаемость</SectionTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <CsvButton
+              path={csvPath('attendance', { cut }, query)}
+              label={`посещаемость: ${CUTS.find((item) => item.key === cut)?.label ?? cut}`}
+            />
+            <CsvButton
+              path={csvPath('attendance', { cut: 'details' }, query)}
+              label="детали посещаемости"
+            />
+            <div role="group" aria-label="Разрез посещаемости" className="flex flex-wrap gap-2">
+              {CUTS.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  aria-pressed={cut === item.key}
+                  onClick={() => {
+                    setCut(item.key);
+                    setExpanded(null);
+                  }}
+                  className={`rounded-lg border px-3 py-1 text-sm ${
+                    cut === item.key
+                      ? 'border-accent bg-accent-soft text-accent'
+                      : 'border-line bg-surface text-primary hover:bg-surface-muted'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         {/* Формула доступна по нажатию и с клавиатуры (нативный details). */}

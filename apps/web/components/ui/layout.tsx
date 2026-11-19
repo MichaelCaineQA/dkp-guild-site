@@ -72,8 +72,14 @@ export function Card({
 }
 
 /** Заголовок секции внутри карточки/страницы. */
-export function SectionTitle({ children }: { children: ReactNode }) {
-  return <h2 className="mb-3 text-lg font-semibold text-primary">{children}</h2>;
+export function SectionTitle({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <h2 className={`mb-3 text-lg font-semibold text-primary ${className}`}>{children}</h2>;
 }
 
 /** Строка состояния: приглашение войти, пояснение про доступ. */

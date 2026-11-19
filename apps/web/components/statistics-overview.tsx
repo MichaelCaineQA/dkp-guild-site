@@ -10,9 +10,10 @@ import {
 } from '@dkp/shared';
 import { Avatar } from './avatar';
 import { ReportError, useStatisticsEndpoint } from './statistics-report';
-import type { StatisticsFocus, StatisticsTab } from './statistics-navigation';
+import { csvPath, type StatisticsFocus, type StatisticsTab } from './statistics-navigation';
 import {
   BarChart,
+  CsvButton,
   formatAttendancePct,
   formatDkp,
   moscowDateTime,
@@ -163,7 +164,10 @@ export function StatisticsOverview({
         {/* Топ по посещаемости: сортировка сервера, N=0 в рейтинг не попадает. */}
         {!attendance.failed && (
           <Card>
-            <SectionTitle>Топ по посещаемости</SectionTitle>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <SectionTitle className="mb-0">Топ по посещаемости</SectionTitle>
+              <CsvButton path={csvPath('', { table: 'top' }, query)} label="топ посещаемости" />
+            </div>
             {attendanceData ? (
               attendanceData.top.length === 0 ? (
                 <Muted>Нет данных за выбранный период</Muted>
@@ -212,7 +216,10 @@ export function StatisticsOverview({
 
         {/* Активность по типам ивентов (#214): клик — срез типа на вкладке. */}
         <Card>
-          <SectionTitle>Активность по типам ивентов</SectionTitle>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <SectionTitle className="mb-0">Активность по типам ивентов</SectionTitle>
+            <CsvButton path={csvPath('', { table: 'types' }, query)} label="активность по типам" />
+          </div>
           {activity.failed ? (
             <ReportError onRetry={activity.reload} />
           ) : activity.data ? (
@@ -260,7 +267,10 @@ export function StatisticsOverview({
 
       {/* Топ выпавших предметов (#216): знаменатель — вся выборка «Выпало». */}
       <Card>
-        <SectionTitle>Чаще всего выпадает</SectionTitle>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <SectionTitle className="mb-0">Чаще всего выпадает</SectionTitle>
+          <CsvButton path={csvPath('', { table: 'items' }, query)} label="топ предметов" />
+        </div>
         {loot.failed ? (
           <ReportError onRetry={loot.reload} />
         ) : loot.data ? (
@@ -326,7 +336,10 @@ export function StatisticsOverview({
           </Card>
         ) : gearScore.data ? (
           <Card>
-            <SectionTitle>Свежесть GS</SectionTitle>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <SectionTitle className="mb-0">Свежесть GS</SectionTitle>
+              <CsvButton path={csvPath('', { table: 'gear-score' }, query)} label="свежесть GS" />
+            </div>
             <div className="flex flex-wrap gap-3">
               <Badge tone="success">Актуальные: {gearScore.data.totals.fresh}</Badge>
               <Badge tone="warning">Устаревшие: {gearScore.data.totals.stale}</Badge>

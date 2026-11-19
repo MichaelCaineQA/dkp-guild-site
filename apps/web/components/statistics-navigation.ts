@@ -5,9 +5,26 @@
  * не меняя общую панель фильтров.
  */
 
-import { moscowWeekLabel } from '@dkp/shared';
+import { moscowWeekLabel, statisticsQueryString, type StatisticsQuery } from '@dkp/shared';
 
 export type StatisticsTab = 'overview' | 'attendance' | 'activity' | 'dkp' | 'loot';
+
+/**
+ * Путь CSV-выгрузки таблицы (#223): общие условия запроса плюс параметры
+ * конкретной таблицы. endpoint='' — обзорные таблицы (/statistics/export.csv).
+ */
+export function csvPath(
+  endpoint: '' | 'attendance' | 'activity' | 'dkp' | 'loot',
+  params: Record<string, string>,
+  query: StatisticsQuery,
+): string {
+  const base = endpoint ? `/statistics/${endpoint}/export.csv` : '/statistics/export.csv';
+  const extra = Object.entries(params)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+  const qs = statisticsQueryString(query);
+  return `${base}?${[qs, extra].filter(Boolean).join('&')}`;
+}
 export type StatisticsFocus =
   /** Неделя графика: детализация тех дат в посещаемости. */
   | { kind: 'week'; start: string; end: string }

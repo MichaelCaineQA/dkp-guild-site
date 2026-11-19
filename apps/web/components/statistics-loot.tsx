@@ -12,10 +12,10 @@ import {
 import { EventCard } from './event-card';
 import { ReportError, useGameTime, useStatisticsEndpoint } from './statistics-report';
 import type { StatisticsFilterOptions } from './statistics-filters';
-import type { StatisticsFocus } from './statistics-navigation';
+import { csvPath, type StatisticsFocus } from './statistics-navigation';
 import { useSession } from './session-context';
 import { api } from '../lib/api';
-import { formatDkp, moscowDateTime } from './ui/charts';
+import { CsvButton, formatDkp, moscowDateTime } from './ui/charts';
 import { Badge, Card, Muted, SectionTitle, Table, TextLink } from './ui/index';
 
 /**
@@ -136,7 +136,19 @@ export function StatisticsLootTab({
       {view === 'dropped' ? (
         <>
           <Card>
-            <SectionTitle>Выпавшие предметы</SectionTitle>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <SectionTitle className="mb-0">Выпавшие предметы</SectionTitle>
+              <span className="flex flex-wrap gap-2">
+                <CsvButton
+                  path={csvPath('loot', { table: 'dropped' }, query)}
+                  label="выпавшие предметы"
+                />
+                <CsvButton
+                  path={csvPath('loot', { table: 'dropped-details' }, query)}
+                  label="факты выпадений"
+                />
+              </span>
+            </div>
             <p className="text-sm text-secondary">
               Всего выпадений: {data.dropped.totals.drops} · разных предметов:{' '}
               {data.dropped.totals.items}. Доля — от всех выпадений выборки.
@@ -188,12 +200,15 @@ export function StatisticsLootTab({
             </Table>
             {droppedItems.length === 0 && <Muted>Нет данных за выбранный период</Muted>}
           </Card>
-          <WithoutEventDrops report={data} />
+          <WithoutEventDrops report={data} query={query} />
         </>
       ) : (
         <>
           <Card>
-            <SectionTitle>Выдачи</SectionTitle>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <SectionTitle className="mb-0">Выдачи</SectionTitle>
+              <CsvButton path={csvPath('loot', { table: 'awarded' }, query)} label="выдачи лута" />
+            </div>
             <p className="text-sm text-secondary">
               Получено предметов: {data.awarded.totals.awards} · сумма фактических цен:{' '}
               {formatDkp(data.awarded.totals.spent)} ДКП.
@@ -251,33 +266,39 @@ export function StatisticsLootTab({
 
           <Card>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <SectionTitle>Итоги по получателям</SectionTitle>
-              <div
-                role="group"
-                aria-label="Разрез полученного лута"
-                className="flex flex-wrap gap-2"
-              >
-                {(
-                  [
-                    { key: 'members', label: 'Игроки' },
-                    { key: 'packs', label: 'Паки' },
-                    { key: 'kps', label: 'КП' },
-                  ] as const
-                ).map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    aria-pressed={awardCut === item.key}
-                    onClick={() => setAwardCut(item.key)}
-                    className={`rounded-lg border px-3 py-1 text-sm ${
-                      awardCut === item.key
-                        ? 'border-accent bg-accent-soft text-accent'
-                        : 'border-line bg-surface text-primary hover:bg-surface-muted'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+              <SectionTitle className="mb-0">Итоги по получателям</SectionTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                <CsvButton
+                  path={csvPath('loot', { table: `awarded-${awardCut}` }, query)}
+                  label={`итоги полученного: ${awardCut === 'members' ? 'игроки' : awardCut === 'packs' ? 'паки' : 'КП'}`}
+                />
+                <div
+                  role="group"
+                  aria-label="Разрез полученного лута"
+                  className="flex flex-wrap gap-2"
+                >
+                  {(
+                    [
+                      { key: 'members', label: 'Игроки' },
+                      { key: 'packs', label: 'Паки' },
+                      { key: 'kps', label: 'КП' },
+                    ] as const
+                  ).map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      aria-pressed={awardCut === item.key}
+                      onClick={() => setAwardCut(item.key)}
+                      className={`rounded-lg border px-3 py-1 text-sm ${
+                        awardCut === item.key
+                          ? 'border-accent bg-accent-soft text-accent'
+                          : 'border-line bg-surface text-primary hover:bg-surface-muted'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             <AwardTotals
@@ -299,7 +320,13 @@ export function StatisticsLootTab({
           </Card>
 
           <Card>
-            <SectionTitle>Получено без ивента</SectionTitle>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <SectionTitle className="mb-0">Получено без ивента</SectionTitle>
+              <CsvButton
+                path={csvPath('loot', { table: 'without-event-awarded' }, query)}
+                label="получено без ивента"
+              />
+            </div>
             <p className="text-sm text-secondary">
               Выдачи лотов хранилища гильдии: без команды и без типа ивента, фильтрами не
               ограничиваются.
@@ -413,10 +440,22 @@ function teamOfDrop(detail: LootDropFact, options: StatisticsFilterOptions | nul
   return [pack?.name ?? 'Без пака', kp?.name].filter(Boolean).join(' · ');
 }
 
-function WithoutEventDrops({ report }: { report: LootStatisticsReport }) {
+function WithoutEventDrops({
+  report,
+  query,
+}: {
+  report: LootStatisticsReport;
+  query: StatisticsQuery;
+}) {
   return (
     <Card>
-      <SectionTitle>Выпало без ивента</SectionTitle>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <SectionTitle className="mb-0">Выпало без ивента</SectionTitle>
+        <CsvButton
+          path={csvPath('loot', { table: 'without-event-dropped' }, query)}
+          label="выпало без ивента"
+        />
+      </div>
       <p className="text-sm text-secondary">
         Дропы хранилища гильдии: без типа, режима и команды, фильтрами не ограничиваются и в топ
         выпадений не входят.
