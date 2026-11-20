@@ -83,6 +83,8 @@ test('пустой период не скрывает свежесть GS от �
   await expect(page.getByText('Свежесть GS', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Скачать CSV: свежесть GS' })).toBeVisible();
   await expect(page.getByText(/участников среза/)).toBeVisible();
+});
+
 test('CSV деталей посещаемости сохраняет выбранную неделю (#249)', async ({ page, context }) => {
   await login(context, 'test-member');
   await page.goto('/statistics');
