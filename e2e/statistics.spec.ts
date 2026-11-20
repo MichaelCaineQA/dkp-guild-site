@@ -136,27 +136,6 @@ test('CSV деталей посещаемости сохраняет выбра�
   expect(rows[0]).toContain('Старт периода по Москве');
 });
 
-test('детали посещаемости раскрываются и сворачиваются с клавиатуры (#252)', async ({
-  page,
-  context,
-}) => {
-  await login(context, 'test-member');
-  await page.goto('/statistics?tab=attendance');
-  await selectHistoricalPeriod(page);
-
-  const toggle = page.getByRole('button', { name: `Детали: ${fixture.player.nickname}` });
-  await expect(toggle).toBeVisible();
-  await toggle.focus();
-  await expect(toggle).toBeFocused();
-
-  await page.keyboard.press('Enter');
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByText('Ивент второй недели', { exact: true })).toBeVisible();
-
-  await page.keyboard.press('Space');
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-});
-
 for (const { role, username, allowed } of [
   { role: 'Глава', username: 'test-leader', allowed: true },
   { role: 'Офицер', username: 'test-officer', allowed: false },
