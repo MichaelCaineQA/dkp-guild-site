@@ -64,6 +64,10 @@ export class AttendanceStatisticsService {
         const memberMap = new Map(members.map((row) => [row.id, row]));
         const details: AttendanceDetail[] = [];
         let finishedEvents = 0;
+        // Разные завершённые ивенты по неделям (#251): участники не умножают.
+        const finishedByWeek = new Array<number>(period.weeks.length).fill(0);
+        const weekOf = (startsAt: Date) =>
+          period.weeks.findIndex((week) => startsAt >= week.start && startsAt < week.end);
         for (const event of events) {
           const participants = statisticsEventMembers(
             event,
@@ -83,6 +87,8 @@ export class AttendanceStatisticsService {
           );
           if ((query.kpId || query.packId) && participants.length === 0) continue;
           finishedEvents++;
+          const weekIndex = weekOf(event.startsAt);
+          if (weekIndex >= 0) finishedByWeek[weekIndex]!++;
           for (const participant of participants) {
             const excused =
               participant.attendanceStatus === 'EXCUSED_ABSENCE' ||
@@ -156,9 +162,10 @@ export class AttendanceStatisticsService {
             finishedEvents,
             totals: aggregateAttendance(details),
           },
-          weeks: period.weeks.map((week) => ({
+          weeks: period.weeks.map((week, index) => ({
             start: week.start.toISOString(),
             end: week.end.toISOString(),
+            finishedEvents: finishedByWeek[index]!,
             totals: aggregateAttendance(
               details.filter(
                 (row) =>

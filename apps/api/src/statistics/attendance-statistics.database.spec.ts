@@ -209,6 +209,82 @@ suite('Статистика посещаемости в PostgreSQL', () => {
     expect(JSON.stringify(report)).not.toContain('database integration fixture');
   });
 
+  it('counts each finished event once per week regardless of participants (#251)', async () => {
+    // Отдельная гильдия: один завершённый ивент и два участника — график недель
+    // обязан считать разные ивенты, а знаменатель посещаемости — пары.
+    // Ивент до 2025 года исключает участников соседних фикстур и сида (createdAt).
+    const old = new Date('2024-06-01T00:00:00Z');
+    const guild = await db.guild.create({
+      data: { name: `attweek-${suffix}`, gameTimeAnchor: old, createdAt: old },
+    });
+    const kp = await db.kP.create({
+      data: { name: `attweek-${suffix}`, guildId: guild.id, createdAt: old },
+    });
+    const pack = await db.pack.create({
+      data: { name: `attweek-${suffix}`, kpId: kp.id, createdAt: old },
+    });
+    const type = await db.eventType.create({ data: { name: `attweek-${suffix}` } });
+    const first = await db.member.create({
+      data: { nickname: `attweek-a-${suffix}`, packId: pack.id, createdAt: old },
+    });
+    const second = await db.member.create({
+      data: { nickname: `attweek-b-${suffix}`, packId: pack.id, createdAt: old },
+    });
+    const startsAt = new Date('2024-12-31T16:00:00Z');
+    const event = await db.event.create({
+      data: {
+        name: `attweek-single-${suffix}`,
+        eventTypeId: type.id,
+        mode: 'PVE',
+        // Область пака: соседние фикстуры этого же файла не попадают в выборку.
+        scope: 'PACK',
+        packId: pack.id,
+        status: 'FINISHED',
+        raidLeadId: first.id,
+        startsAt,
+        endsAt: new Date(startsAt.getTime() + 60 * 60 * 1000),
+        dkpReward: 0,
+      },
+    });
+    try {
+      await db.attendance.create({
+        data: {
+          eventId: event.id,
+          memberId: first.id,
+          checkinStart: 'PASSED',
+          checkinEnd: 'PASSED',
+        },
+      });
+      await db.attendance.create({
+        data: { eventId: event.id, memberId: second.id, checkinStart: 'PASSED' },
+      });
+      const report = await service.get({
+        from: '2024-12-01',
+        to: '2024-12-31',
+        eventTypeId: type.id,
+        mode: 'PVE',
+      });
+      expect(report.overview.finishedEvents).toBe(1);
+      expect(report.details).toHaveLength(2);
+      // Сумма недель совпадает с карточкой; ивент один, а не пять участий.
+      expect(report.weeks.reduce((sum, week) => sum + week.finishedEvents, 0)).toBe(1);
+      // Неделя понедельника 30 декабря 00:00 МСК.
+      const week = report.weeks.find((row) => row.start === '2024-12-29T21:00:00.000Z');
+      expect(week?.finishedEvents).toBe(1);
+      // Знаменатель посещаемости — по-прежнему пары игрок–ивент.
+      expect(week?.totals.events).toBe(2);
+      expect(week?.totals.checks).toBe(3);
+    } finally {
+      await db.attendance.deleteMany({ where: { eventId: event.id } });
+      await db.event.delete({ where: { id: event.id } });
+      await db.member.deleteMany({ where: { id: { in: [first.id, second.id] } } });
+      await db.pack.delete({ where: { id: pack.id } });
+      await db.kP.delete({ where: { id: kp.id } });
+      await db.eventType.delete({ where: { id: type.id } });
+      await db.guild.delete({ where: { id: guild.id } });
+    }
+  });
+
   it('keeps past attendance attributed to the old pack and KP after both move', async () => {
     const createdAt = new Date('2025-01-01T00:00:00Z');
     const otherKp = await db.kP.create({
