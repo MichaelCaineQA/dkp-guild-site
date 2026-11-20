@@ -9,7 +9,8 @@ import {
 } from './statistics-fixtures';
 import { api } from '../lib/api';
 
-vi.mock('../lib/api', () => ({ api: vi.fn() }));
+// API_URL_VALUE нужен CsvButton (ui/charts): без экспорта мок ломает скачивание.
+vi.mock('../lib/api', () => ({ api: vi.fn(), API_URL_VALUE: '/api' }));
 
 const QUERY = { from: '2026-12-01', to: '2026-12-31' };
 const OPTIONS = {
@@ -95,7 +96,11 @@ function renderTab(
 }
 
 beforeEach(() => vi.clearAllMocks());
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 it('показывает разрез игроков и раскрывает строку до ивентов и отметок', async () => {
   renderTab();
@@ -190,6 +195,24 @@ it('срез недели оставляет только детали этих 
   fireEvent.click(row);
   expect(screen.getByText('Ивенты и принятые отметки (1 пар игрок–ивент)')).toBeDefined();
   expect(screen.queryByText('Ночной рейд')).toBeNull();
+});
+
+it('CSV деталей в срезе недели выгружает её границы по Москве (#249)', async () => {
+  renderTab(detailsFixture(), { kind: 'week', start: WEEK.start, end: WEEK.end });
+  await screen.findByRole('row', { name: /Детали: Игрок Один/ });
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response('a;b', {
+      status: 200,
+      headers: { 'Content-Disposition': 'attachment; filename=details.csv' },
+    }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  fireEvent.click(screen.getByRole('button', { name: 'Скачать CSV: детали посещаемости' }));
+  // Выгрузка сужается до выбранной недели, общие фильтры сохраняются.
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  expect(fetchMock.mock.calls[0]![0]).toBe(
+    '/api/statistics/attendance/export.csv?from=2026-12-01&to=2026-12-07&cut=details',
+  );
 });
 
 it('N=0 в разрезе — «—» и подсказка «Нет ивентов для расчёта»', async () => {

@@ -5,6 +5,7 @@ import {
   aggregateAttendance,
   compareAttendanceGroups,
   formatMoscowDayShort,
+  moscowInclusiveDates,
   type AttendanceDetail,
   type AttendanceReport,
   type StatisticsQuery,
@@ -90,6 +91,12 @@ export function StatisticsAttendanceTab({
     [data, weekFocus?.start, weekFocus?.end],
   );
 
+  // CSV деталей содержит полную выборку выбранной недели: границы по Москве
+  // сужают период выгрузки, общие фильтры сохраняются (#249).
+  const detailsQuery = weekFocus
+    ? { ...query, ...moscowInclusiveDates(weekFocus.start, weekFocus.end) }
+    : query;
+
   const rows = useMemo<AttendanceRow[]>(() => {
     if (!data) return [];
     if (cut === 'guild') {
@@ -169,7 +176,7 @@ export function StatisticsAttendanceTab({
               label={`посещаемость: ${CUTS.find((item) => item.key === cut)?.label ?? cut}`}
             />
             <CsvButton
-              path={csvPath('attendance', { cut: 'details' }, query)}
+              path={csvPath('attendance', { cut: 'details' }, detailsQuery)}
               label="детали посещаемости"
             />
             <div role="group" aria-label="Разрез посещаемости" className="flex flex-wrap gap-2">

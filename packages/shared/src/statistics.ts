@@ -250,6 +250,22 @@ export function formatMoscowDayShort(value: string): string {
 }
 
 /**
+ * Инклюзивные календарные даты Москвы для полуоткрытого интервала [start, end)
+ * с границами в московскую полночь (недели отчётов): для сужения периода
+ * CSV-выгрузки до выбранной недели (#249).
+ */
+export function moscowInclusiveDates(start: string, end: string): { from: string; to: string } {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  const dateKey = (ms: number) => {
+    const moscow = new Date(ms + MOSCOW_OFFSET);
+    return [moscow.getUTCFullYear(), pad(moscow.getUTCMonth() + 1), pad(moscow.getUTCDate())].join(
+      '-',
+    );
+  };
+  return { from: dateKey(Date.parse(start)), to: dateKey(Date.parse(end) - 1) };
+}
+
+/**
  * Фактические даты недели по Москве («1 дек – 7 янв»): границы обрезаны
  * периодом, подпись всегда отражает реальные даты выборки (#219, план 2.8).
  */

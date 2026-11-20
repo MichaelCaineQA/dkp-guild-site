@@ -124,6 +124,34 @@ test('пустой период не скрывает свежесть GS от �
   await expect(page.getByText(/участников среза/)).toBeVisible();
 });
 
+test('CSV деталей посещаемости сохраняет выбранную неделю (#249)', async ({ page, context }) => {
+  await login(context, 'test-member');
+  await page.goto('/statistics');
+  await selectHistoricalPeriod(page);
+  // Столбец первой недели на графике обзора открывает вкладку с срезом недели.
+  await page
+    .getByRole('button', { name: /2 янв – 5 янв/ })
+    .first()
+    .click();
+  await expect(page.getByText(/Неделя: 2 янв – 5 янв/)).toBeVisible();
+
+  const row = page.getByRole('row', { name: `Детали: ${fixture.player.nickname}` });
+  await row.click();
+  // На экране остаются только ивенты первой недели.
+  await expect(page.getByText('Старт периода по Москве', { exact: true })).toBeVisible();
+  await expect(page.getByText('Ивент второй недели', { exact: true })).toHaveCount(0);
+
+  const pendingDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Скачать CSV: детали посещаемости' }).click();
+  const file = await pendingDownload;
+  const csv = await readFile(await file.path(), 'utf8');
+  // Период выгрузки — границы выбранной недели по Москве; строки совпадают с экраном.
+  expect(csv).toContain('02.01.2025–05.01.2025');
+  const rows = csv.split('\r\n').filter((line) => line.startsWith(fixture.player.nickname));
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toContain('Старт периода по Москве');
+});
+
 for (const { role, username, allowed } of [
   { role: 'Глава', username: 'test-leader', allowed: true },
   { role: 'Офицер', username: 'test-officer', allowed: false },
