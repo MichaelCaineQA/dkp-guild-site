@@ -127,7 +127,7 @@ export function StatisticsOverview({
                 ...weekColumn(week),
                 value: week.totals.percentage,
                 display: formatAttendancePct(week.totals.percentage),
-                hint: `Отметки ${week.totals.checks} из ${week.totals.events * 2}, ивентов ${week.totals.events}`,
+                hint: `Отметки ${week.totals.checks} из ${week.totals.events * 2}, участий ${week.totals.events}`,
               }))}
               onSelect={(column) =>
                 go('attendance', {
@@ -144,9 +144,11 @@ export function StatisticsOverview({
               label="Завершённые ивенты по неделям"
               columns={attendanceData.weeks.map((week) => ({
                 ...weekColumn(week),
-                value: week.totals.events,
-                display: String(week.totals.events),
-                hint: `Завершённых ивентов ${week.totals.events}`,
+                // Разные ивенты недели (#251): участники не умножают, сумма недель
+                // сходится с карточкой «Завершено ивентов».
+                value: week.finishedEvents,
+                display: String(week.finishedEvents),
+                hint: `Завершённых ивентов ${week.finishedEvents}`,
               }))}
               onSelect={(column) =>
                 go('attendance', {

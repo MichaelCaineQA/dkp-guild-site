@@ -45,7 +45,13 @@ export const attendanceReportSchema = z.object({
     totals: attendanceTotalsSchema,
   }),
   weeks: z.array(
-    z.object({ start: z.iso.datetime(), end: z.iso.datetime(), totals: attendanceTotalsSchema }),
+    z.object({
+      start: z.iso.datetime(),
+      end: z.iso.datetime(),
+      totals: attendanceTotalsSchema,
+      /** Разные завершённые ивенты недели; знаменатель посещаемости — пары. */
+      finishedEvents: z.number().int(),
+    }),
   ),
   members: z.array(attendanceGroupSchema),
   packs: z.array(attendanceGroupSchema),

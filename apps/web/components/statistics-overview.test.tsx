@@ -60,6 +60,10 @@ it('показывает карточки и недельные графики �
   expect(screen.getByRole('img', { name: 'Посещаемость по неделям, процентов' })).toBeDefined();
   expect(screen.getByRole('img', { name: 'Завершённые ивенты по неделям' })).toBeDefined();
   expect(screen.getAllByText('1 дек – 7 дек').length).toBeGreaterThan(0);
+  // График завершённых ивентов считает разные ивенты (2), не участия (5) (#251).
+  expect(
+    screen.getByRole('button', { name: '1 дек – 7 дек: 2. Завершённых ивентов 2' }),
+  ).toBeDefined();
 });
 
 it('клик по карточке, неделе графика и топу открывает вкладку с срезом', async () => {
@@ -71,7 +75,7 @@ it('клик по карточке, неделе графика и топу от
   expect(go).toHaveBeenCalledWith('activity', { kind: 'activityTable', table: 'events' });
   // Столбец недели: подпись дат + значение + исходные числа в подсказке.
   fireEvent.click(
-    screen.getByRole('button', { name: '1 дек – 7 дек: 80%. Отметки 8 из 10, ивентов 5' }),
+    screen.getByRole('button', { name: '1 дек – 7 дек: 80%. Отметки 8 из 10, участий 5' }),
   );
   expect(go).toHaveBeenCalledWith('attendance', {
     kind: 'week',

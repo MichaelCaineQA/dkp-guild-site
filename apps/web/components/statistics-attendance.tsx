@@ -242,7 +242,7 @@ export function StatisticsAttendanceTab({
             label: weekLabel(week.start, week.end),
             value: week.totals.percentage,
             display: formatAttendancePct(week.totals.percentage),
-            hint: `Отметки ${week.totals.checks} из ${week.totals.events * 2}, ивентов ${week.totals.events}`,
+            hint: `Отметки ${week.totals.checks} из ${week.totals.events * 2}, участий ${week.totals.events}`,
           }))}
         />
       </Card>

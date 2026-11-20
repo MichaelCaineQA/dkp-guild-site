@@ -36,7 +36,9 @@ export const contracts: Record<string, Contract> = {
     query: 'StatisticsQuery',
     errors: [400],
     description:
-      'NO_HISTORICAL_DATA означает недостаточную историю; показатели включают возможных участников и требуют осторожной интерпретации.',
+      'NO_HISTORICAL_DATA означает недостаточную историю; показатели включают возможных участников и требуют осторожной интерпретации. ' +
+      'weeks[].finishedEvents — разные завершённые ивенты недели (сумма сходится с overview.finishedEvents), ' +
+      'totals.events — пары игрок–ивент, знаменатель посещаемости.',
   }),
   Statistics_activity: c('Активность по типам, режимам, неделям и времени', 'ActivityReport', {
     query: 'StatisticsQuery',
