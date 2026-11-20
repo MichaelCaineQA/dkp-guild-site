@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatMoscowDayShort,
   moscowMonthBounds,
   moscowWeekLabel,
   resolveStatisticsPeriod,
@@ -155,5 +156,13 @@ describe('moscowWeekLabel', () => {
 
   it('однодневная выборка подписывается одной датой', () => {
     expect(moscowWeekLabel('2026-12-05T21:00:00.000Z', '2026-12-06T21:00:00.000Z')).toBe('6 дек');
+  });
+});
+
+describe('formatMoscowDayShort', () => {
+  it('полночь Москвы относится к тому же календарному дню (#254)', () => {
+    // 2 января 00:00 МСК = 21:00 UTC предыдущих суток; фиксированный сдвиг
+    // не зависит от зоны браузера.
+    expect(formatMoscowDayShort('2026-01-01T21:00:00.000Z')).toBe('2 янв');
   });
 });

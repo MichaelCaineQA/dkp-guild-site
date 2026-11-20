@@ -45,6 +45,9 @@ for (const timezoneId of ['America/Los_Angeles', 'Asia/Tokyo']) {
       await row.click();
       await expect(row).toHaveAttribute('aria-expanded', 'true');
       await expect(page.getByText('Старт периода по Москве', { exact: true })).toBeVisible();
+      // Полночь Москвы (2 января 00:00 МСК) — одна календарная дата, не диапазон (#254).
+      await expect(page.getByText('2 янв', { exact: true })).toBeVisible();
+      await expect(page.getByText('2 янв – 1 янв', { exact: true })).toHaveCount(0);
       await expect(page.getByText('Ивент второй недели', { exact: true })).toBeVisible();
       await expect(page.getByText('Пак до перевода · КП до перевода', { exact: true })).toHaveCount(
         2,

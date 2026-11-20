@@ -4,6 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   can,
   canManageEvent,
+  formatMoscowDayShort,
   type ActivityReport,
   type DashboardEvent,
   type StatisticsQuery,
@@ -322,8 +323,9 @@ export function StatisticsActivityTab({
                         <tbody>
                           {row.details.map((detail) => (
                             <tr key={`${row.id}:${detail.eventId}`}>
+                              {/* Дата одиночного ивента — один день Москвы (#254). */}
                               <Table.Td className="tabular-nums">
-                                {weekLabel(detail.startsAt, detail.startsAt)}
+                                {formatMoscowDayShort(detail.startsAt)}
                               </Table.Td>
                               <Table.Td>{detail.eventName || detail.eventId}</Table.Td>
                               <Table.Td>{detail.eventTypeName}</Table.Td>
@@ -373,9 +375,8 @@ export function StatisticsActivityTab({
           <tbody>
             {events.map((row) => (
               <tr key={row.id} aria-label={`Ивент: ${row.name || row.eventTypeName}`}>
-                <Table.Td className="tabular-nums">
-                  {weekLabel(row.startsAt, row.startsAt)}
-                </Table.Td>
+                {/* Дата одиночного ивента — один день Москвы (#254). */}
+                <Table.Td className="tabular-nums">{formatMoscowDayShort(row.startsAt)}</Table.Td>
                 <Table.Td className="font-medium">
                   <button
                     type="button"

@@ -155,6 +155,14 @@ it('срез игрока из обзора раскрывает его стро
   expect(screen.getByText('Ушёл раньше')).toBeDefined();
 });
 
+it('дата ивента в полночь Москвы — один день, а не обратный диапазон (#254)', async () => {
+  // 2 января 00:00 МСК = 21:00 UTC предыдущих суток.
+  renderTab([{ ...detailsFixture()[0]!, startsAt: '2026-01-01T21:00:00.000Z' }]);
+  fireEvent.click(await screen.findByRole('row', { name: /Детали: Игрок Один/ }));
+  expect(screen.getByText('2 янв', { exact: true })).toBeDefined();
+  expect(screen.queryByText(/1 янв/)).toBeNull();
+});
+
 it('срез недели оставляет только детали этих дат', async () => {
   renderTab(detailsFixture(), { kind: 'week', start: WEEK.start, end: WEEK.end });
   await screen.findByRole('row', { name: /Детали: Игрок Один/ });

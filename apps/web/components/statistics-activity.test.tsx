@@ -96,6 +96,33 @@ it('таблица игроков раскрывает участия с ист�
   );
 });
 
+it('дата одиночного ивента в полночь Москвы — один день, а не диапазон (#254)', async () => {
+  // 2 января 00:00 МСК = 21:00 UTC предыдущих суток: таблица ивентов и детали участий.
+  const midnight = '2026-01-01T21:00:00.000Z';
+  vi.mocked(api).mockImplementation(
+    statisticsApiMock({
+      activity: activityReportFixture({
+        events: [{ ...activityReportFixture().events[0]!, startsAt: midnight }],
+        members: [
+          {
+            ...activityReportFixture().members[0]!,
+            details: [{ ...activityReportFixture().members[0]!.details[0]!, startsAt: midnight }],
+          },
+        ],
+      }),
+    }).implementation as typeof api,
+  );
+  render(<StatisticsActivityTab query={QUERY} focus={null} options={OPTIONS} />);
+  expect(await screen.findAllByRole('row', { name: /Ивент: Вечерний гильдбосс/ })).toBeDefined();
+  expect(screen.getByRole('row', { name: /Ивент: Вечерний гильдбосс/ }).textContent).toContain(
+    '2 янв',
+  );
+  expect(screen.queryByText(/1 янв/)).toBeNull();
+  fireEvent.click(screen.getByRole('row', { name: /Детали активности: Игрок Один/ }));
+  // Таблица ивентов и раскрытые детали участий — обе с одной датой «2 янв».
+  expect(screen.getAllByText('2 янв', { exact: true }).length).toBe(2);
+});
+
 it('клик по ивенту открывает общую карточку ивента', async () => {
   const mock = statisticsApiMock({
     activity: activityReportFixture(),
