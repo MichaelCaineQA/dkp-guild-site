@@ -157,7 +157,10 @@ export class DkpStatisticsService {
               (row.kpId === null && row.teamStatus === 'NO_HISTORICAL_DATA')),
         );
         const selectedIds = [
-          ...new Set([...roster.map((row) => row.memberId), ...movements.map((row) => row.memberId)]),
+          ...new Set([
+            ...roster.map((row) => row.memberId),
+            ...movements.map((row) => row.memberId),
+          ]),
         ];
         const balanceEntries = selectedIds.length
           ? await tx.dkpEntry.findMany({

@@ -152,10 +152,7 @@ test('CSV деталей посещаемости сохраняет выбра�
   expect(rows[0]).toContain('Старт периода по Москве');
 });
 
-test('срез недели сужает и CSV разреза игроков посещаемости (#263)', async ({
-  page,
-  context,
-}) => {
+test('срез недели сужает и CSV разреза игроков посещаемости (#263)', async ({ page, context }) => {
   await login(context, 'test-member');
   await page.goto('/statistics');
   await selectHistoricalPeriod(page);
@@ -220,9 +217,9 @@ test('срез предмета сужает таблицу и обе выгру
   await expect(page.getByText('Срез: Предмет: Предмет среза')).toBeVisible();
 
   await expect(page.getByRole('row', { name: /Детали выпадений: Предмет среза/ })).toBeVisible();
-  await expect(
-    page.getByRole('row', { name: /Детали выпадений: Предмет вне среза/ }),
-  ).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Детали выпадений: Предмет вне среза/ })).toHaveCount(
+    0,
+  );
 
   for (const label of ['выпавшие предметы', 'факты выпадений']) {
     const pendingDownload = page.waitForEvent('download');
@@ -267,9 +264,9 @@ test('тип ивента не убирает игрока с полным ба�
 
   // Возврат к первому типу возвращает движения, баланс не меняется.
   await page.getByRole('combobox', { name: /^Тип ивента:/ }).selectOption(fixture.type.id);
-  await expect(page.getByRole('row', { name: `Операции: ${fixture.player.nickname}` })).toContainText(
-    '+42',
-  );
+  await expect(
+    page.getByRole('row', { name: `Операции: ${fixture.player.nickname}` }),
+  ).toContainText('+42');
 });
 
 test('пустой период сохраняет баланс в таблице и CSV ДКП (#264)', async ({ page, context }) => {

@@ -1,7 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { StatisticsActivityTab } from './statistics-activity';
-import { activityReportFixture, activityTotalsFixture, statisticsApiMock } from './statistics-fixtures';
+import {
+  activityReportFixture,
+  activityTotalsFixture,
+  statisticsApiMock,
+} from './statistics-fixtures';
 import { api } from '../lib/api';
 import { useSession } from './session-context';
 

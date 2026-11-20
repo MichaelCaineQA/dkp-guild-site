@@ -77,8 +77,7 @@ export function StatisticsLootTab({
 
   // Обе выгрузки «Выпало» несут срез предмета (#263): сервер сужает таблицы
   // до него, доли остаются от всей выборки — как в срезе интерфейса.
-  const itemQuery =
-    focus?.kind === 'lootItem' ? { ...query, itemId: focus.itemId } : query;
+  const itemQuery = focus?.kind === 'lootItem' ? { ...query, itemId: focus.itemId } : query;
 
   const openEventCard = async (eventId: string) => {
     setEventError(false);
