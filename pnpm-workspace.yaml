@@ -7,6 +7,8 @@ packages:
 overrides:
   'next>postcss': '^8.5.32'
   '@prisma/config>deepmerge-ts': '^8.0.0'
+  # ReDoS в Schema.TemplateLiteral (high, GHSA); патч >=3.22.1 (упал audit в CI #255).
+  'effect': '^3.22.1'
 
 # Разрешённые postinstall-скрипты (pnpm 12 по умолчанию блокирует все)
 allowBuilds:
