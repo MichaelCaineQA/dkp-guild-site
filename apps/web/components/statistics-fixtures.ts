@@ -57,6 +57,8 @@ export function attendanceReportFixture(
   const week = {
     start: '2026-11-30T21:00:00.000Z',
     end: '2026-12-07T21:00:00.000Z',
+    // Разные ивенты недели сходятся с overview.finishedEvents (#251).
+    finishedEvents: 2,
     totals: attendanceTotalsFixture({ checks: 8, events: 5, excused: 0, noShow: 1 }),
   };
   const topMember = {

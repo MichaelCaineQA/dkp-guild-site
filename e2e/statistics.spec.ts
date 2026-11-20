@@ -46,7 +46,9 @@ for (const timezoneId of ['America/Los_Angeles', 'Asia/Tokyo']) {
       const row = page.getByRole('row', { name: `Детали: ${fixture.player.nickname}` });
       await expect(row).toContainText('75%');
       await row.click();
-      await expect(row).toHaveAttribute('aria-expanded', 'true');
+      // Состояние раскрытия держит кнопка: мышь и клавиатура синхронны (#252).
+      const toggle = page.getByRole('button', { name: `Детали: ${fixture.player.nickname}` });
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
       await expect(page.getByText('Старт периода по Москве', { exact: true })).toBeVisible();
       // Полночь Москвы (2 января 00:00 МСК) — одна календарная дата, не диапазон (#254).
       await expect(page.getByText('2 янв', { exact: true })).toBeVisible();
@@ -86,6 +88,40 @@ test('связка после перевода выбираема; период 
   await page.getByRole('combobox', { name: /^Пак:/ }).selectOption(fixture.currentPack.id);
   // В январе игрок был в прежнем паке прежней КП — выборка этого периода пуста.
   await expect(page.getByText('По выбранным фильтрам ничего не найдено')).toBeVisible();
+});
+
+test('детали посещаемости раскрываются и сворачиваются с клавиатуры (#252)', async ({
+  page,
+  context,
+}) => {
+  await login(context, 'test-member');
+  await page.goto('/statistics?tab=attendance');
+  await selectHistoricalPeriod(page);
+
+  const toggle = page.getByRole('button', { name: `Детали: ${fixture.player.nickname}` });
+  await expect(toggle).toBeVisible();
+  await toggle.focus();
+  await expect(toggle).toBeFocused();
+
+  await page.keyboard.press('Enter');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByText('Ивент второй недели', { exact: true })).toBeVisible();
+
+  await page.keyboard.press('Space');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+});
+
+test('пустой период не скрывает свежесть GS от Главы (#253)', async ({ page, context }) => {
+  await login(context, 'test-leader');
+  await page.goto('/statistics');
+  // Период без ивентов и операций, но с участниками исторического среза GS.
+  await page.getByRole('combobox', { name: /^Период:/ }).selectOption('range');
+  await page.getByLabel('С:', { exact: true }).fill('2025-02-01');
+  await page.getByLabel('По:', { exact: true }).fill('2025-02-10');
+  await expect(page.getByText('Нет данных за выбранный период', { exact: true })).toBeVisible();
+  await expect(page.getByText('Свежесть GS', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Скачать CSV: свежесть GS' })).toBeVisible();
+  await expect(page.getByText(/участников среза/)).toBeVisible();
 });
 
 for (const { role, username, allowed } of [

@@ -21,6 +21,8 @@ function renderOverview(options?: {
   dkp?: () => DkpStatisticsReport | Promise<DkpStatisticsReport>;
   loot?: LootStatisticsReport | Promise<LootStatisticsReport>;
   canViewGearScore?: boolean;
+  emptySelection?: boolean;
+  filtered?: boolean;
 }) {
   const mock = statisticsApiMock({
     attendance:
@@ -36,6 +38,9 @@ function renderOverview(options?: {
       query={QUERY}
       eventFilterActive={false}
       canViewGearScore={options?.canViewGearScore ?? false}
+      emptySelection={options?.emptySelection ?? false}
+      filtered={options?.filtered ?? false}
+      onResetFilters={() => undefined}
       go={go}
     />,
   );
@@ -60,6 +65,10 @@ it('показывает карточки и недельные графики �
   expect(screen.getByRole('img', { name: 'Посещаемость по неделям, процентов' })).toBeDefined();
   expect(screen.getByRole('img', { name: 'Завершённые ивенты по неделям' })).toBeDefined();
   expect(screen.getAllByText('1 дек – 7 дек').length).toBeGreaterThan(0);
+  // График завершённых ивентов считает разные ивенты (2), не участия (5) (#251).
+  expect(
+    screen.getByRole('button', { name: '1 дек – 7 дек: 2. Завершённых ивентов 2' }),
+  ).toBeDefined();
 });
 
 it('клик по карточке, неделе графика и топу открывает вкладку с срезом', async () => {
@@ -71,7 +80,7 @@ it('клик по карточке, неделе графика и топу от
   expect(go).toHaveBeenCalledWith('activity', { kind: 'activityTable', table: 'events' });
   // Столбец недели: подпись дат + значение + исходные числа в подсказке.
   fireEvent.click(
-    screen.getByRole('button', { name: '1 дек – 7 дек: 80%. Отметки 8 из 10, ивентов 5' }),
+    screen.getByRole('button', { name: '1 дек – 7 дек: 80%. Отметки 8 из 10, участий 5' }),
   );
   expect(go).toHaveBeenCalledWith('attendance', {
     kind: 'week',
@@ -102,6 +111,18 @@ it('N=0 показывает «—» и пояснение вместо нуля
   expect(screen.getByText('—')).toBeDefined();
   expect(screen.getByText('Нет ивентов для расчёта')).toBeDefined();
   expect(screen.queryByRole('button', { name: /Посещаемость Игрок/ })).toBeNull();
+});
+
+it('пустая выборка ивентов не скрывает блок GS и экспорт (#253)', async () => {
+  const mock = renderOverview({ canViewGearScore: true, emptySelection: true });
+  expect(await screen.findByText('Свежесть GS')).toBeDefined();
+  expect(screen.getByRole('button', { name: 'Скачать CSV: свежесть GS' })).toBeDefined();
+  // Сообщение пустой выборки сохранено для отчётов, зависящих от ивентов.
+  expect(screen.getByText('Нет данных за выбранный период')).toBeDefined();
+  expect(screen.queryByText('Активные участники')).toBeNull();
+  // Зависящие от ивентов отчёты в пустой выборке не запрашиваются.
+  expect(mock.paths('/statistics/attendance')).toEqual([]);
+  expect(mock.paths('/statistics/dkp')).toEqual([]);
 });
 
 it('ошибка ДКП не превращается в ноль: карточка с повтором', async () => {
