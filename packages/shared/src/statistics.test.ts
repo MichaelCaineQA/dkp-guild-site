@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatMoscowDayShort,
+  moscowInclusiveDates,
   moscowMonthBounds,
   moscowWeekLabel,
   resolveStatisticsPeriod,
@@ -139,6 +140,20 @@ describe('historical statistics participants', () => {
         checkinEnd: null,
       },
     ]);
+  });
+});
+
+describe('moscowInclusiveDates', () => {
+  it('полуоткрытая неделя становится инклюзивными датами Москвы (#249)', () => {
+    expect(moscowInclusiveDates('2026-11-30T21:00:00.000Z', '2026-12-07T21:00:00.000Z')).toEqual({
+      from: '2026-12-01',
+      to: '2026-12-07',
+    });
+    // Однодневный интервал: обе границы — один и тот же день.
+    expect(moscowInclusiveDates('2026-01-01T21:00:00.000Z', '2026-01-02T21:00:00.000Z')).toEqual({
+      from: '2026-01-02',
+      to: '2026-01-02',
+    });
   });
 });
 
