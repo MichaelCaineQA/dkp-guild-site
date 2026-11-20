@@ -432,7 +432,8 @@ export function statisticsApiMock(responses: {
   dkp?: Lazy<DkpStatisticsReport>;
   loot?: Lazy<LootStatisticsReport>;
   gearScore?: Lazy<GearScoreStatisticsReport>;
-  roster?: unknown;
+  /** Ответ /statistics/filter-options (#250): КП с паками, включая исторические. */
+  filterOptions?: unknown;
   eventTypes?: unknown;
 }) {
   const base = responses.base ?? [];
@@ -441,14 +442,14 @@ export function statisticsApiMock(responses: {
   const dkp = responses.dkp ?? dkpReportFixture();
   const loot = responses.loot ?? lootReportFixture();
   const gearScore = responses.gearScore ?? gearScoreReportFixture();
-  const roster = responses.roster ?? {
-    groups: [{ id: 'kp1', name: 'КП Альфа', packs: [{ id: 'p1', name: 'Пак Один' }] }],
+  const filterOptions = responses.filterOptions ?? {
+    kps: [{ id: 'kp1', name: 'КП Альфа', packs: [{ id: 'p1', name: 'Пак Один' }] }],
   };
   const eventTypes = responses.eventTypes ?? [{ id: 't1', name: 'Гильдбосс' }];
   const calls: string[] = [];
   const implementation = (path: string): Promise<unknown> => {
     calls.push(path);
-    if (path.startsWith('/org/roster')) return Promise.resolve(roster);
+    if (path.startsWith('/statistics/filter-options')) return Promise.resolve(filterOptions);
     if (path.startsWith('/event-types')) return Promise.resolve(eventTypes);
     if (path.startsWith('/statistics/attendance')) return resolveLazy(attendance);
     if (path.startsWith('/statistics/activity')) return resolveLazy(activity);

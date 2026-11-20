@@ -164,7 +164,10 @@ const lootReport = {
 @Module({
   controllers: [StatisticsController],
   providers: [
-    { provide: StatisticsService, useValue: { get: () => ({ events: [] }) } },
+    {
+      provide: StatisticsService,
+      useValue: { get: () => ({ events: [] }), filterOptions: async () => ({ kps: [] }) },
+    },
     { provide: AttendanceStatisticsService, useValue: { get: async () => attendanceReport } },
     { provide: ActivityStatisticsService, useValue: { get: async () => activityReport } },
     { provide: DkpStatisticsService, useValue: { get: async () => dkpReport } },
@@ -207,6 +210,7 @@ describe('Доступ к статистике через HTTP', () => {
     expect((await fetch(`${url}/statistics/dkp`)).status).toBe(401);
     expect((await fetch(`${url}/statistics/loot`)).status).toBe(401);
     expect((await fetch(`${url}/statistics/gear-score`)).status).toBe(401);
+    expect((await fetch(`${url}/statistics/filter-options`)).status).toBe(401);
   });
   it('отказывает ожидающему участнику', async () => {
     actor = { ...member, memberId: null, rank: null };
@@ -216,6 +220,7 @@ describe('Доступ к статистике через HTTP', () => {
     expect((await fetch(`${url}/statistics/dkp`)).status).toBe(403);
     expect((await fetch(`${url}/statistics/loot`)).status).toBe(403);
     expect((await fetch(`${url}/statistics/gear-score`)).status).toBe(403);
+    expect((await fetch(`${url}/statistics/filter-options`)).status).toBe(403);
   });
   it('отказывает заблокированному участнику', async () => {
     actor = { ...member, blocked: true };

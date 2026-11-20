@@ -123,9 +123,15 @@ export function StatisticsFilters({
       !value.packId || (packs ? packs.some((pack) => pack.id === value.packId) : true);
     onChange({ ...value, kpId, packId: keepPack ? value.packId : '' });
   };
+  // Исторические связки (#250): пак одной КП может быть и в списке прежней —
+  // без выбранной КП список общий, дубли паков убираем по id.
   const packs = value.kpId
     ? (options?.kps.find((kp) => kp.id === value.kpId)?.packs ?? [])
-    : (options?.kps.flatMap((kp) => kp.packs) ?? []);
+    : [
+        ...new Map(
+          (options?.kps.flatMap((kp) => kp.packs) ?? []).map((pack) => [pack.id, pack]),
+        ).values(),
+      ];
   const error = periodError(value);
   return (
     <Card className="mb-4">

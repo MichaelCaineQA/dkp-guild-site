@@ -89,6 +89,15 @@ export const contracts: Record<string, Contract> = {
       'недостаточная история — NO_HISTORICAL_DATA и не означает отсутствия скрина. ' +
       'snapshotIgnoresFilters перечисляет фильтры запроса без влияния на срез (у среза нет фактов ивентов); UI и CSV обязаны подписать исключение.',
   }),
+  Statistics_filterOptions: c(
+    'Фильтры статистики: КП и паки, включая исторические связки',
+    'StatisticsFilterOptions',
+    {
+      description:
+        'Паки каждой КП — текущие и входившие в неё ранее (PackMembershipHistory): ' +
+        'за период до перевода можно совместно выбрать прежнюю КП и пак; отчёты и CSV принимают оба исторических ID.',
+    },
+  ),
   Statistics_get: c('Получить основу статистики', 'StatisticsReport', {
     query: 'StatisticsQuery',
     errors: [400],

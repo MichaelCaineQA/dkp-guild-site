@@ -39,6 +39,9 @@ for (const timezoneId of ['America/Los_Angeles', 'Asia/Tokyo']) {
       await page.goto('/statistics?tab=attendance');
       await selectHistoricalPeriod(page);
       await page.getByRole('combobox', { name: /^КП:/ }).selectOption(fixture.pastKp.id);
+      // Историческая связка (#250): пак до перевода выбирается под прежней КП
+      // и не сбрасывается — детали и CSV сохраняют общий фильтр.
+      await page.getByRole('combobox', { name: /^Пак:/ }).selectOption(fixture.pastPack.id);
 
       const row = page.getByRole('row', { name: `Детали: ${fixture.player.nickname}` });
       await expect(row).toContainText('75%');
@@ -73,6 +76,19 @@ for (const timezoneId of ['America/Los_Angeles', 'Asia/Tokyo']) {
     });
   });
 }
+
+test('связка после перевода выбираема; период до перевода пуст (#250)', async ({
+  page,
+  context,
+}) => {
+  await login(context, 'test-member');
+  await page.goto('/statistics?tab=attendance');
+  await selectHistoricalPeriod(page);
+  await page.getByRole('combobox', { name: /^КП:/ }).selectOption(fixture.currentKp.id);
+  await page.getByRole('combobox', { name: /^Пак:/ }).selectOption(fixture.currentPack.id);
+  // В январе игрок был в прежнем паке прежней КП — выборка этого периода пуста.
+  await expect(page.getByText('По выбранным фильтрам ничего не найдено')).toBeVisible();
+});
 
 test('детали посещаемости раскрываются и сворачиваются с клавиатуры (#252)', async ({
   page,

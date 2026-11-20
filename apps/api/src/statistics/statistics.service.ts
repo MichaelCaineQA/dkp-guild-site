@@ -4,6 +4,7 @@ import {
   statisticsEventMembers,
   statisticsQuerySchema,
   packKpAt,
+  type StatisticsFilterOptions,
   type StatisticsReport,
 } from '@dkp/shared';
 import type { Event } from '@prisma/client';
@@ -12,6 +13,38 @@ import { PrismaService } from '../prisma/prisma.service';
 @Injectable()
 export class StatisticsService {
   constructor(private readonly db: PrismaService) {}
+
+  /**
+   * Параметры фильтров (#250): паки каждой КП — текущие и исторические
+   * (когда-либо входившие), чтобы за период до перевода можно было выбрать
+   * прежнюю связку КП и пака; API отчётов принимает оба исторических ID.
+   */
+  async filterOptions(): Promise<StatisticsFilterOptions> {
+    const [kps, packs] = await Promise.all([
+      this.db.kP.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+      this.db.pack.findMany({
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          kpId: true,
+          membershipHistory: { select: { kpId: true, previousKpId: true } },
+        },
+      }),
+    ]);
+    return {
+      kps: kps.map((kp) => ({
+        ...kp,
+        packs: packs
+          .filter(
+            (pack) =>
+              pack.kpId === kp.id ||
+              pack.membershipHistory.some((h) => h.kpId === kp.id || h.previousKpId === kp.id),
+          )
+          .map(({ id, name }) => ({ id, name })),
+      })),
+    };
+  }
 
   async get(rawQuery: unknown): Promise<StatisticsReport> {
     const query = statisticsQuerySchema.parse(rawQuery);
