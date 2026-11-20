@@ -347,6 +347,23 @@ suite('Лут-статистика в PostgreSQL', () => {
     expect(report.top.reduce((sum, row) => sum + row.sharePct, 0)).toBe(100);
   });
 
+  it('narrows dropped tables to the sliced item without recomputing shares (#263)', async () => {
+    const report = await service.get({ ...june, itemId: ids.items[0]! });
+    // Таблица «Выпало» — только выбранный предмет; итоги и доли остаются
+    // от всей выборки, как в срезе интерфейса.
+    expect(report.dropped.items).toHaveLength(1);
+    const sword = report.dropped.items[0]!;
+    expect(sword.itemName).toBe(itemNames('sword'));
+    expect(sword.count).toBe(2);
+    expect(sword.sharePct).toBe(33);
+    expect(sword.details).toHaveLength(2);
+    expect(report.dropped.totals).toEqual({ drops: 6, items: 3 });
+    // Категория хранилища и выдачи срезом предмета не затрагиваются.
+    expect(report.dropped.withoutEvent.items).toHaveLength(1);
+    expect(report.awarded.totals).toEqual({ awards: 3, spent: 55 });
+    await expect(service.get({ ...june, itemId: 'missing' })).rejects.toThrow('Неизвестный фильтр');
+  });
+
   it('counts only LootAward with actual spend and historical attribution', async () => {
     const report = await service.get(june);
     expect(report.awarded.totals).toEqual({ awards: 3, spent: 55 });

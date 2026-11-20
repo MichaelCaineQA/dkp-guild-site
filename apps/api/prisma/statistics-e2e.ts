@@ -84,24 +84,98 @@ export async function seedStatisticsE2e() {
           { eventId: eventIds[1]!, memberId: player.id, checkinStart: 'PASSED' },
         ],
       });
-      return { pastKp, currentKp, pastPack, currentPack, player, type, eventIds };
+      // Различимые данные срезов приёмки (#263): второй тип ивента со своим
+      // участием, два выпавших предмета и начисление 42 ДКП на ивенте первого
+      // типа — баланс игрока виден даже без совпавших движений (#264).
+      const secondType = await tx.eventType.create({ data: { name: 'Второй тип приёмки' } });
+      const type2Event = await tx.event.create({
+        data: {
+          name: 'Ивент второго типа',
+          startsAt: new Date('2025-01-03T20:00:00Z'),
+          endsAt: new Date('2025-01-03T21:00:00Z'),
+          mode: 'PVE',
+          scope: 'PACK',
+          packId: pastPack.id,
+          eventTypeId: secondType.id,
+          raidLeadId: player.id,
+          status: 'FINISHED',
+          dkpReward: 0,
+        },
+      });
+      eventIds.push(type2Event.id);
+      await tx.attendance.create({
+        data: { eventId: type2Event.id, memberId: player.id, checkinStart: 'PASSED' },
+      });
+      const slicedItem = await tx.item.create({ data: { name: 'Предмет среза' } });
+      const outsideItem = await tx.item.create({ data: { name: 'Предмет вне среза' } });
+      await tx.lootDrop.createMany({
+        data: [
+          {
+            itemId: slicedItem.id,
+            eventId: eventIds[0]!,
+            createdAt: new Date('2025-01-02T20:00:00Z'),
+          },
+          {
+            itemId: outsideItem.id,
+            eventId: eventIds[1]!,
+            createdAt: new Date('2025-01-10T21:00:00Z'),
+          },
+        ],
+      });
+      await tx.dkpEntry.create({
+        data: {
+          memberId: player.id,
+          type: 'CHECKIN_EARN',
+          amount: 42,
+          eventId: eventIds[0]!,
+          createdAt: new Date('2025-01-02T20:00:00Z'),
+        },
+      });
+      return {
+        pastKp,
+        currentKp,
+        pastPack,
+        currentPack,
+        player,
+        type,
+        secondType,
+        slicedItem,
+        outsideItem,
+        eventIds,
+      };
     });
 
     return {
       ...fixture,
       async cleanup() {
-        const { pastPack, currentPack, pastKp, currentKp, player, type, eventIds } = fixture;
+        const {
+          pastPack,
+          currentPack,
+          pastKp,
+          currentKp,
+          player,
+          type,
+          secondType,
+          slicedItem,
+          outsideItem,
+          eventIds,
+        } = fixture;
         try {
           await db.$transaction([
             db.attendance.deleteMany({ where: { eventId: { in: eventIds } } }),
+            db.dkpEntry.deleteMany({ where: { memberId: player.id } }),
+            db.lootDrop.deleteMany({
+              where: { itemId: { in: [slicedItem.id, outsideItem.id] } },
+            }),
             db.event.deleteMany({ where: { id: { in: eventIds } } }),
+            db.item.deleteMany({ where: { id: { in: [slicedItem.id, outsideItem.id] } } }),
             db.memberPackHistory.deleteMany({ where: { memberId: player.id } }),
             db.packMembershipHistory.deleteMany({ where: { packId: pastPack.id } }),
             db.member.delete({ where: { id: player.id } }),
             db.user.delete({ where: { id: player.userId! } }),
             db.pack.deleteMany({ where: { id: { in: [pastPack.id, currentPack.id] } } }),
             db.kP.deleteMany({ where: { id: { in: [pastKp.id, currentKp.id] } } }),
-            db.eventType.delete({ where: { id: type.id } }),
+            db.eventType.deleteMany({ where: { id: { in: [type.id, secondType.id] } } }),
           ]);
         } finally {
           await db.$disconnect();

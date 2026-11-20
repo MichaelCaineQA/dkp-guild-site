@@ -135,6 +135,10 @@ export function StatisticsScreen({ now = new Date() }: { now?: Date }) {
     report.report.events.length === 0 &&
     report.report.facts.length === 0 &&
     report.report.factsWithoutEvent.length === 0;
+  // Пустая выборка основания скрывает зависящие от ивентов вкладки; полный
+  // баланс ДКП — своя выборка и виден даже без движений периода (#264),
+  // блок GS Главы/Админа — #253.
+  const tabBeyondEvents = tab === 'dkp' || (tab === 'overview' && gearScoreAllowed);
 
   if (sessionLoading) {
     return <Page>Загрузка…</Page>;
@@ -193,7 +197,7 @@ export function StatisticsScreen({ now = new Date() }: { now?: Date }) {
           </Card>
         ) : report.loading ? (
           <ReportSkeleton refreshing={report.refreshing} />
-        ) : emptySelection && !(tab === 'overview' && gearScoreAllowed) ? (
+        ) : emptySelection && !tabBeyondEvents ? (
           <Card>
             <ReportEmpty
               filtered={hasFilters}

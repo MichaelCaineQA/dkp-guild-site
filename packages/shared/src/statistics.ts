@@ -21,6 +21,12 @@ export const statisticsQuerySchema = z
     packId: z.string().min(1).optional(),
     eventTypeId: z.string().min(1).optional(),
     mode: z.enum(['PVE', 'PVP']).optional(),
+    /**
+     * Срез предмета топа лута (#263): сужает таблицы «Выпало» до одного
+     * предмета без пересчёта долей. Читает только отчёт лута; остальные
+     * отчёты его игнорируют, как GS игнорирует тип и режим.
+     */
+    itemId: z.string().min(1).optional(),
   })
   .refine((v) => (v.from === undefined) === (v.to === undefined), {
     message: 'Укажите обе границы периода',
@@ -201,6 +207,7 @@ export function statisticsQueryString(query: StatisticsQuery): string {
   if (query.packId) parts.push(`packId=${query.packId}`);
   if (query.eventTypeId) parts.push(`eventTypeId=${query.eventTypeId}`);
   if (query.mode) parts.push(`mode=${query.mode}`);
+  if (query.itemId) parts.push(`itemId=${query.itemId}`);
   return parts.join('&');
 }
 

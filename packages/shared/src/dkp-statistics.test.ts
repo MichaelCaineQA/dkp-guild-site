@@ -125,6 +125,36 @@ describe('dkp member rows', () => {
     ];
     expect(dkpMemberRows(rows, new Map()).map((row) => row.nickname)).toEqual(['Альфа', 'Бета']);
   });
+
+  it('keeps roster players without movements with zero totals and full balance (#264)', () => {
+    const rows = [movement({ id: 'd1', memberId: 'm1', nickname: 'Альфа', amount: 10 })];
+    const balances = new Map([
+      ['m1', 100],
+      ['m2', 42],
+      ['m3', 0],
+    ]);
+    // m2 — выбран составом, движений по фильтрам нет; m3 не выбран.
+    const result = dkpMemberRows(rows, balances, [
+      { id: 'm1', nickname: 'Альфа' },
+      { id: 'm2', nickname: 'Бета' },
+    ]);
+    expect(result).toEqual([
+      {
+        id: 'm1',
+        nickname: 'Альфа',
+        totals: { earned: 10, spent: 0, adjustments: 0, net: 10 },
+        balance: 100,
+        details: [rows[0]!],
+      },
+      {
+        id: 'm2',
+        nickname: 'Бета',
+        totals: { earned: 0, spent: 0, adjustments: 0, net: 0 },
+        balance: 42,
+        details: [],
+      },
+    ]);
+  });
 });
 
 describe('dkp team rows', () => {

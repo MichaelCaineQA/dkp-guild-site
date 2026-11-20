@@ -152,6 +152,145 @@ test('CSV деталей посещаемости сохраняет выбра�
   expect(rows[0]).toContain('Старт периода по Москве');
 });
 
+test('срез недели сужает и CSV разреза игроков посещаемости (#263)', async ({ page, context }) => {
+  await login(context, 'test-member');
+  await page.goto('/statistics');
+  await selectHistoricalPeriod(page);
+  await page
+    .getByRole('button', { name: /2 янв – 5 янв/ })
+    .first()
+    .click();
+  await expect(page.getByText(/Неделя: 2 янв – 5 янв/)).toBeVisible();
+
+  // В строке игрока — проценты выбранной недели (100%), не всего периода (75%).
+  const row = page.getByRole('row', { name: `Детали: ${fixture.player.nickname}` });
+  await expect(row).toContainText('100%');
+
+  const pendingDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Скачать CSV: посещаемость: Игроки' }).click();
+  const file = await pendingDownload;
+  const csv = await readFile(await file.path(), 'utf8');
+  expect(file.suggestedFilename()).toMatch(/^statistics-attendance-members-/);
+  // Период выгрузки — выбранная неделя; итоги строки совпадают с таблицей:
+  // один ивент и две отметки недели, а не два ивента и три отметки периода.
+  expect(csv).toContain('02.01.2025–05.01.2025');
+  const rows = csv.split('\r\n').filter((line) => line.startsWith(fixture.player.nickname));
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toContain(';1;2;100;');
+  expect(rows[0]).not.toContain(';2;3;75;');
+});
+
+test('срез типа сужает таблицы активности и CSV ивентов (#263)', async ({ page, context }) => {
+  await login(context, 'test-member');
+  await page.goto('/statistics');
+  // Тип ивента в общих фильтрах не выбран: обзор показывает оба типа.
+  await page.getByRole('combobox', { name: /^Период:/ }).selectOption('range');
+  await page.getByLabel('С:', { exact: true }).fill('2025-01-02');
+  await page.getByLabel('По:', { exact: true }).fill('2025-01-12');
+  await page.getByRole('combobox', { name: /^Режим:/ }).selectOption('PVE');
+  await page.getByRole('row', { name: 'Активность: Второй тип приёмки' }).click();
+  await expect(page.getByText('Срез: Тип ивента: Второй тип приёмки')).toBeVisible();
+
+  // Таблица ивентов — только выбранный тип, ивенты первого типа скрыты.
+  await expect(page.getByRole('row', { name: /Ивент: Ивент второго типа/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Ивент: Старт периода по Москве/ })).toHaveCount(0);
+
+  const pendingDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Скачать CSV: ивенты активности' }).click();
+  const file = await pendingDownload;
+  const csv = await readFile(await file.path(), 'utf8');
+  // Выгрузка несёт тот же набор строк, что таблица: только второй тип.
+  expect(csv).toContain('Ивент второго типа');
+  expect(csv).not.toContain('Старт периода по Москве');
+  expect(csv).not.toContain('Ивент второй недели');
+});
+
+test('срез предмета сужает таблицу и обе выгрузки «Выпало» (#263)', async ({ page, context }) => {
+  await login(context, 'test-member');
+  await page.goto('/statistics');
+  await page.getByRole('combobox', { name: /^Период:/ }).selectOption('range');
+  await page.getByLabel('С:', { exact: true }).fill('2025-01-02');
+  await page.getByLabel('По:', { exact: true }).fill('2025-01-12');
+  await page.getByRole('combobox', { name: /^Режим:/ }).selectOption('PVE');
+  // В топе обзора два различимых предмета; клик — срез первого.
+  await page.getByRole('row', { name: 'Выпадения: Предмет среза' }).click();
+  await expect(page.getByText('Срез: Предмет: Предмет среза')).toBeVisible();
+
+  await expect(page.getByRole('row', { name: /Детали выпадений: Предмет среза/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Детали выпадений: Предмет вне среза/ })).toHaveCount(
+    0,
+  );
+
+  for (const label of ['выпавшие предметы', 'факты выпадений']) {
+    const pendingDownload = page.waitForEvent('download');
+    await page.getByRole('button', { name: `Скачать CSV: ${label}` }).click();
+    const file = await pendingDownload;
+    const csv = await readFile(await file.path(), 'utf8');
+    // Обе выгрузки «Выпало» ограничены выбранным предметом.
+    expect(csv).toContain('Предмет среза');
+    expect(csv).not.toContain('Предмет вне среза');
+  }
+});
+
+test('тип ивента не убирает игрока с полным балансом из таблицы ДКП (#264)', async ({
+  page,
+  context,
+}) => {
+  await login(context, 'test-member');
+  await page.goto('/statistics?tab=dkp');
+  await page.getByRole('combobox', { name: /^Период:/ }).selectOption('range');
+  await page.getByLabel('С:', { exact: true }).fill('2025-01-02');
+  await page.getByLabel('По:', { exact: true }).fill('2025-01-12');
+  await page.getByRole('combobox', { name: /^КП:/ }).selectOption(fixture.pastKp.id);
+  await page.getByRole('combobox', { name: /^Пак:/ }).selectOption(fixture.pastPack.id);
+  // Начисление 42 — на ивенте первого типа; у второго типа движений нет.
+  await page.getByRole('combobox', { name: /^Тип ивента:/ }).selectOption(fixture.secondType.id);
+  const row = page.getByRole('row', { name: `Операции: ${fixture.player.nickname}` });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('42');
+
+  // API: движений нет, полный баланс выбранного игрока сохранён.
+  const empty = await (
+    await context.request.get(
+      `/api/statistics/dkp?from=2025-01-02&to=2025-01-12&kpId=${fixture.pastKp.id}` +
+        `&packId=${fixture.pastPack.id}&eventTypeId=${fixture.secondType.id}`,
+    )
+  ).json();
+  const emptied = empty.members.find((row: { id: string }) => row.id === fixture.player.id);
+  expect(emptied).toMatchObject({
+    balance: 42,
+    totals: { earned: 0, spent: 0, adjustments: 0, net: 0 },
+  });
+
+  // Возврат к первому типу возвращает движения, баланс не меняется.
+  await page.getByRole('combobox', { name: /^Тип ивента:/ }).selectOption(fixture.type.id);
+  await expect(
+    page.getByRole('row', { name: `Операции: ${fixture.player.nickname}` }),
+  ).toContainText('+42');
+});
+
+test('пустой период сохраняет баланс в таблице и CSV ДКП (#264)', async ({ page, context }) => {
+  await login(context, 'test-member');
+  await page.goto('/statistics?tab=dkp');
+  // Февраль без операций; игрок уже в паке после перевода — баланс 42 виден.
+  await page.getByRole('combobox', { name: /^Период:/ }).selectOption('range');
+  await page.getByLabel('С:', { exact: true }).fill('2025-02-01');
+  await page.getByLabel('По:', { exact: true }).fill('2025-02-10');
+  await page.getByRole('combobox', { name: /^КП:/ }).selectOption(fixture.currentKp.id);
+  await page.getByRole('combobox', { name: /^Пак:/ }).selectOption(fixture.currentPack.id);
+  const row = page.getByRole('row', { name: `Операции: ${fixture.player.nickname}` });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('42');
+
+  const pendingDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Скачать CSV: показатели ДКП: Игроки' }).click();
+  const file = await pendingDownload;
+  const csv = await readFile(await file.path(), 'utf8');
+  const rows = csv.split('\r\n').filter((line) => line.startsWith(fixture.player.nickname));
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toContain(';42');
+});
+
 for (const { role, username, allowed } of [
   { role: 'Глава', username: 'test-leader', allowed: true },
   { role: 'Офицер', username: 'test-officer', allowed: false },

@@ -75,6 +75,10 @@ export function StatisticsLootTab({
     [data, focus],
   );
 
+  // Обе выгрузки «Выпало» несут срез предмета (#263): сервер сужает таблицы
+  // до него, доли остаются от всей выборки — как в срезе интерфейса.
+  const itemQuery = focus?.kind === 'lootItem' ? { ...query, itemId: focus.itemId } : query;
+
   const openEventCard = async (eventId: string) => {
     setEventError(false);
     try {
@@ -140,11 +144,11 @@ export function StatisticsLootTab({
               <SectionTitle className="mb-0">Выпавшие предметы</SectionTitle>
               <span className="flex flex-wrap gap-2">
                 <CsvButton
-                  path={csvPath('loot', { table: 'dropped' }, query)}
+                  path={csvPath('loot', { table: 'dropped' }, itemQuery)}
                   label="выпавшие предметы"
                 />
                 <CsvButton
-                  path={csvPath('loot', { table: 'dropped-details' }, query)}
+                  path={csvPath('loot', { table: 'dropped-details' }, itemQuery)}
                   label="факты выпадений"
                 />
               </span>
