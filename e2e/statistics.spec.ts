@@ -43,7 +43,9 @@ for (const timezoneId of ['America/Los_Angeles', 'Asia/Tokyo']) {
       const row = page.getByRole('row', { name: `Детали: ${fixture.player.nickname}` });
       await expect(row).toContainText('75%');
       await row.click();
-      await expect(row).toHaveAttribute('aria-expanded', 'true');
+      // Состояние раскрытия держит кнопка: мышь и клавиатура синхронны (#252).
+      const toggle = page.getByRole('button', { name: `Детали: ${fixture.player.nickname}` });
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
       await expect(page.getByText('Старт периода по Москве', { exact: true })).toBeVisible();
       // Полночь Москвы (2 января 00:00 МСК) — одна календарная дата, не диапазон (#254).
       await expect(page.getByText('2 янв', { exact: true })).toBeVisible();
@@ -71,6 +73,27 @@ for (const timezoneId of ['America/Los_Angeles', 'Asia/Tokyo']) {
     });
   });
 }
+
+test('детали посещаемости раскрываются и сворачиваются с клавиатуры (#252)', async ({
+  page,
+  context,
+}) => {
+  await login(context, 'test-member');
+  await page.goto('/statistics?tab=attendance');
+  await selectHistoricalPeriod(page);
+
+  const toggle = page.getByRole('button', { name: `Детали: ${fixture.player.nickname}` });
+  await expect(toggle).toBeVisible();
+  await toggle.focus();
+  await expect(toggle).toBeFocused();
+
+  await page.keyboard.press('Enter');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByText('Ивент второй недели', { exact: true })).toBeVisible();
+
+  await page.keyboard.press('Space');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+});
 
 for (const { role, username, allowed } of [
   { role: 'Глава', username: 'test-leader', allowed: true },

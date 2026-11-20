@@ -161,6 +161,22 @@ it('дата ивента в полночь Москвы — один день, 
   fireEvent.click(await screen.findByRole('row', { name: /Детали: Игрок Один/ }));
   expect(screen.getByText('2 янв', { exact: true })).toBeDefined();
   expect(screen.queryByText(/1 янв/)).toBeNull();
+it('кнопка раскрытия переключает детали, клик по строке продолжает работать (#252)', async () => {
+  renderTab();
+  const button = await screen.findByRole('button', { name: 'Детали: Игрок Один' });
+  expect(button.getAttribute('aria-expanded')).toBe('false');
+  // Активация кнопки (Enter/Space в браузере посылают click) раскрывает детали;
+  // stopPropagation не даёт строке переключить состояние повторно.
+  fireEvent.click(button);
+  expect(screen.getByText('Ивенты и принятые отметки (2 пар игрок–ивент)')).toBeDefined();
+  expect(
+    screen.getByRole('button', { name: 'Детали: Игрок Один' }).getAttribute('aria-expanded'),
+  ).toBe('true');
+  // Клик мышью по строке сворачивает обратно.
+  fireEvent.click(screen.getByRole('row', { name: /Детали: Игрок Один/ }));
+  expect(
+    screen.getByRole('button', { name: 'Детали: Игрок Один' }).getAttribute('aria-expanded'),
+  ).toBe('false');
 });
 
 it('срез недели оставляет только детали этих дат', async () => {
