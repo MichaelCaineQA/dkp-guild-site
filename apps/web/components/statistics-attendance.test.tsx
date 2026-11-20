@@ -215,6 +215,25 @@ it('CSV деталей в срезе недели выгружает её гра
   );
 });
 
+it('CSV разреза посещаемости в срезе недели выгружает её границы (#263)', async () => {
+  renderTab(detailsFixture(), { kind: 'week', start: WEEK.start, end: WEEK.end });
+  await screen.findByRole('row', { name: /Детали: Игрок Один/ });
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response('a;b', {
+      status: 200,
+      headers: { 'Content-Disposition': 'attachment; filename=members.csv' },
+    }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  fireEvent.click(screen.getByRole('button', { name: 'Скачать CSV: посещаемость: Игроки' }));
+  // Разрезы ограничиваются срезом недели так же, как детали: сервер считает
+  // ту же выборку, что видна в таблице.
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  expect(fetchMock.mock.calls[0]![0]).toBe(
+    '/api/statistics/attendance/export.csv?from=2026-12-01&to=2026-12-07&cut=members',
+  );
+});
+
 it('N=0 в разрезе — «—» и подсказка «Нет ивентов для расчёта»', async () => {
   renderTab([]);
   await screen.findByText('Нет данных за выбранный период');

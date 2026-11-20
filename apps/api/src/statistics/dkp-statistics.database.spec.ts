@@ -309,17 +309,28 @@ suite('ДКП-статистика в PostgreSQL', () => {
   it('changes movements with type/mode but never trims the full balance', async () => {
     const siege = await service.get({ ...june, eventTypeId: ids.types[1]! });
     expect(siege.balanceIgnoresFilters).toEqual(['eventTypeId']);
-    // Осада: движения alpha без поздней корректировки beta, баланс тот же.
+    // Осада: движения alpha; beta без совпавших движений остаётся в таблице
+    // с нулевыми показателями и полным балансом (#264).
     expect(siege.members).toEqual([
       expect.objectContaining({
         id: ids.members[0],
         totals: { earned: 10, spent: -30, adjustments: 5, net: -15 },
         balance: 100 + 10 - 30 + 5 - 20,
       }),
+      expect.objectContaining({
+        id: ids.members[1],
+        totals: { earned: 0, spent: 0, adjustments: 0, net: 0 },
+        balance: 50 - 7,
+      }),
     ]);
-    // Рейд: только поздняя корректировка beta, баланс полной истории.
+    // Рейд: только поздняя корректировка beta; alpha — нули с тем же балансом.
     const raid = await service.get({ ...june, eventTypeId: ids.types[0]! });
     expect(raid.members).toEqual([
+      expect.objectContaining({
+        id: ids.members[0],
+        totals: { earned: 0, spent: 0, adjustments: 0, net: 0 },
+        balance: 100 + 10 - 30 + 5 - 20,
+      }),
       expect.objectContaining({
         id: ids.members[1],
         totals: { earned: 0, spent: 0, adjustments: -7, net: -7 },
@@ -329,14 +340,41 @@ suite('ДКП-статистика в PostgreSQL', () => {
     // PvE–PvP меняет движения так же, полный баланс не урезается.
     const pvp = await service.get({ ...june, mode: 'PVP' });
     expect(pvp.balanceIgnoresFilters).toEqual(['mode']);
-    expect(pvp.members[0]).toMatchObject({ id: ids.members[0], balance: 65 });
+    expect(pvp.members.map((row) => row.id)).toEqual(ids.members);
+    expect(pvp.members.map((row) => row.balance)).toEqual([65, 43]);
     const pve = await service.get({ ...june, mode: 'PVE' });
-    expect(pve.members.map((row) => row.id)).toEqual([ids.members[1]]);
-    // Пустая выборка отличима от отсутствия данных: нули, а не вымысел.
+    expect(pve.members.map((row) => row.id)).toEqual(ids.members);
+    // Пустая выборка отличима от отсутствия данных: нули, а не вымысел;
+    // выбранные игроки остаются с полным балансом (#264).
     const none = await service.get({ ...june, eventTypeId: ids.types[0]!, mode: 'PVP' });
-    expect(none.members).toEqual([]);
+    expect(none.members.map((row) => row.balance)).toEqual([65, 43]);
+    expect(none.members.every((row) => row.details.length === 0)).toBe(true);
     expect(none.totals).toEqual({ earned: 0, spent: 0, adjustments: 0, net: 0 });
     expect(none.withoutEvent.totals.net).toBe(30);
+  });
+
+  it('keeps balances of the selected players in a period without movements', async () => {
+    const july = { from: '2026-07-01', to: '2026-07-31' };
+    const report = await service.get(july);
+    expect(report.balanceAsOf).toBe('2026-07-31T21:00:00.000Z');
+    expect(report.totals).toEqual({ earned: 0, spent: 0, adjustments: 0, net: 0 });
+    // Движений нет, но состав на границу баланса остаётся в таблице
+    // с полным балансом по журналу (#264).
+    expect(report.members).toEqual([
+      expect.objectContaining({
+        id: ids.members[0],
+        nickname: `dkpstats-alpha-${suffix}`,
+        totals: { earned: 0, spent: 0, adjustments: 0, net: 0 },
+        balance: 65,
+        details: [],
+      }),
+      expect.objectContaining({
+        id: ids.members[1],
+        totals: { earned: 0, spent: 0, adjustments: 0, net: 0 },
+        balance: 43,
+        details: [],
+      }),
+    ]);
   });
 
   it('filters by historical pack and kp of the event date', async () => {
@@ -345,9 +383,12 @@ suite('ДКП-статистика в PostgreSQL', () => {
     expect(aggregateDkpTotals(byPack.members.flatMap((row) => row.details))).toEqual(byPack.totals);
     const byKp = await service.get({ ...june, kpId: ids.kp });
     expect(byKp.totals).toEqual(totals);
-    // Поздняя корректировка мая атрибутируется старой команде и после фильтров.
+    // Поздняя корректировка мая атрибутируется старой команде и после фильтров;
+    // alpha без движений рейда остаётся строкой с нулевыми показателями (#264).
     const raidKp = await service.get({ ...june, kpId: ids.kp, eventTypeId: ids.types[0]! });
-    expect(raidKp.members[0]!.details[0]).toMatchObject({ packId: ids.pack, kpId: ids.kp });
+    expect(raidKp.members.map((row) => row.id)).toEqual(ids.members);
+    const betaRaid = raidKp.members.find((row) => row.id === ids.members[1])!;
+    expect(betaRaid.details[0]).toMatchObject({ packId: ids.pack, kpId: ids.kp });
     await expect(service.get({ ...june, kpId: 'missing' })).rejects.toThrow('Неизвестный фильтр');
   });
 });

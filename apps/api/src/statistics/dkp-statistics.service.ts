@@ -5,6 +5,7 @@ import {
   dkpTeamRows,
   dkpWeekRows,
   dkpWithoutEventRows,
+  gearScoreSnapshotRows,
   resolveStatisticsPeriod,
   statisticsEventMembers,
   statisticsQuerySchema,
@@ -132,9 +133,32 @@ export class DkpStatisticsService {
           });
         }
         // Полный баланс выбранных игроков: вся история до границы периода,
-        // фильтры типа/PvE–PvP её не ограничивают.
-        const selectedIds = [...new Set(movements.map((row) => row.memberId))];
+        // фильтры типа/PvE–PvP её не ограничивают. Выбор игроков — состав
+        // на границу баланса по фильтрам КП/пака (разрешение команд — то же,
+        // что в срезе свежести GS, #217) плюс игроки отфильтрованных
+        // движений: тип/режим состав не меняют, пустой период баланса
+        // не скрывает (#264).
         const balanceAsOf = period.end <= generatedAt ? period.end : generatedAt;
+        const roster = gearScoreSnapshotRows(
+          members,
+          packs,
+          new Map(),
+          0,
+          balanceAsOf,
+          generatedAt,
+          kps,
+        ).filter(
+          (row) =>
+            (!query.packId ||
+              row.packId === query.packId ||
+              (row.packId === null && row.teamStatus === 'NO_HISTORICAL_DATA')) &&
+            (!query.kpId ||
+              row.kpId === query.kpId ||
+              (row.kpId === null && row.teamStatus === 'NO_HISTORICAL_DATA')),
+        );
+        const selectedIds = [
+          ...new Set([...roster.map((row) => row.memberId), ...movements.map((row) => row.memberId)]),
+        ];
         const balanceEntries = selectedIds.length
           ? await tx.dkpEntry.findMany({
               where: { memberId: { in: selectedIds }, createdAt: { lt: balanceAsOf } },
@@ -155,7 +179,11 @@ export class DkpStatisticsService {
           ],
           totals: aggregateDkpTotals(movements),
           weeks: dkpWeekRows(period.weeks, movements),
-          members: dkpMemberRows(movements, balances),
+          members: dkpMemberRows(
+            movements,
+            balances,
+            roster.map((row) => ({ id: row.memberId, nickname: row.nickname })),
+          ),
           packs: dkpTeamRows(movements, 'packId', new Map(packs.map((row) => [row.id, row.name]))),
           kps: dkpTeamRows(movements, 'kpId', new Map(kps.map((row) => [row.id, row.name]))),
           withoutEvent: dkpWithoutEventRows(withoutEventMovements),

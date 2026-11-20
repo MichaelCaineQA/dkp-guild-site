@@ -142,18 +142,23 @@ export function dkpWeekRows(
 
 /**
  * Строки игроков: движения периода с раскрытием до записей журнала и полный
- * баланс на границу периода по всей истории выбранных игроков.
+ * баланс на границу периода по всей истории выбранных игроков. roster —
+ * выбранные игроки без движений по фильтрам (#264): строка с нулевыми
+ * показателями и тем же полным балансом, чтобы смена типа/режима и пустой
+ * период не убирали игрока из таблицы.
  */
 export function dkpMemberRows(
   entries: DkpMovement[],
   balances: ReadonlyMap<string, number>,
+  roster: ReadonlyArray<Pick<z.infer<typeof dkpMemberRowSchema>, 'id' | 'nickname'>> = [],
 ): z.infer<typeof dkpMemberRowSchema>[] {
   const groups = new Map<string, DkpMovement[]>();
   for (const row of entries) groups.set(row.memberId, [...(groups.get(row.memberId) ?? []), row]);
+  for (const member of roster) groups.set(member.id, groups.get(member.id) ?? []);
   return [...groups]
     .map(([memberId, group]) => ({
       id: memberId,
-      nickname: group[0]!.nickname,
+      nickname: group[0]?.nickname ?? roster.find((row) => row.id === memberId)!.nickname,
       totals: aggregateDkpTotals(group),
       balance: balances.get(memberId) ?? 0,
       details: [...group].sort(byOccurrence),

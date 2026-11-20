@@ -91,9 +91,10 @@ export function StatisticsAttendanceTab({
     [data, weekFocus?.start, weekFocus?.end],
   );
 
-  // CSV деталей содержит полную выборку выбранной недели: границы по Москве
-  // сужают период выгрузки, общие фильтры сохраняются (#249).
-  const detailsQuery = weekFocus
+  // CSV среза недели содержит полную выборку выбранной недели: границы
+  // по Москве сужают период выгрузки, общие фильтры сохраняются (#249);
+  // срез действует на все разрезы и детали одинаково (#263).
+  const weekQuery = weekFocus
     ? { ...query, ...moscowInclusiveDates(weekFocus.start, weekFocus.end) }
     : query;
 
@@ -172,11 +173,11 @@ export function StatisticsAttendanceTab({
           <SectionTitle className="mb-0">Посещаемость</SectionTitle>
           <div className="flex flex-wrap items-center gap-2">
             <CsvButton
-              path={csvPath('attendance', { cut }, query)}
+              path={csvPath('attendance', { cut }, weekQuery)}
               label={`посещаемость: ${CUTS.find((item) => item.key === cut)?.label ?? cut}`}
             />
             <CsvButton
-              path={csvPath('attendance', { cut: 'details' }, detailsQuery)}
+              path={csvPath('attendance', { cut: 'details' }, weekQuery)}
               label="детали посещаемости"
             />
             <div role="group" aria-label="Разрез посещаемости" className="flex flex-wrap gap-2">

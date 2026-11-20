@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { LootStatisticsReport } from '@dkp/shared';
 import { StatisticsLootTab } from './statistics-loot';
@@ -6,7 +6,8 @@ import { lootReportFixture, statisticsApiMock } from './statistics-fixtures';
 import { api } from '../lib/api';
 import { useSession } from './session-context';
 
-vi.mock('../lib/api', () => ({ api: vi.fn() }));
+// API_URL_VALUE нужен CsvButton (ui/charts): без экспорта мок ломает скачивание.
+vi.mock('../lib/api', () => ({ api: vi.fn(), API_URL_VALUE: '/api' }));
 vi.mock('./session-context', () => ({ useSession: vi.fn() }));
 vi.mock('./event-card', () => ({ EventCard: vi.fn(() => <div>Карточка ивента</div>) }));
 
@@ -229,3 +230,49 @@ function rerenderEmpty() {
   render(<StatisticsLootTab query={QUERY} focus={null} options={OPTIONS} />);
   return screen.findByText('Нет данных за выбранный период');
 }
+
+it('срез предмета сужает таблицу и обе выгрузки «Выпало» (#263)', async () => {
+  const report = lootReportFixture();
+  // Два предмета различимы: Клинок зари (75%) и Плащ тьмы (25%).
+  const secondDrop = report.dropped.items[0]!.details[0]!;
+  report.dropped.items.push({
+    itemId: 'i2',
+    itemName: 'Плащ тьмы',
+    rarity: 'Эпический 1',
+    slot: 'Плащ',
+    isArchboss: true,
+    count: 1,
+    sharePct: 25,
+    details: [{ ...secondDrop, id: 'drop2' }],
+  });
+  const mock = statisticsApiMock({ loot: report });
+  vi.mocked(api).mockImplementation(mock.implementation as typeof api);
+  render(
+    <StatisticsLootTab
+      query={QUERY}
+      focus={{ kind: 'lootItem', itemId: 'i1', name: 'Клинок зари' }}
+      options={OPTIONS}
+    />,
+  );
+  // Таблица — только выбранный предмет, доля остаётся от всей выборки.
+  await screen.findByRole('row', { name: /Детали выпадений: Клинок зари/ });
+  expect(screen.queryByRole('row', { name: /Детали выпадений: Плащ тьмы/ })).toBeNull();
+  // Обе выгрузки «Выпало» несут срез предмета: сервер сужает до него.
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response('a;b', {
+      status: 200,
+      headers: { 'Content-Disposition': 'attachment; filename=loot.csv' },
+    }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  fireEvent.click(screen.getByRole('button', { name: 'Скачать CSV: выпавшие предметы' }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  expect(fetchMock.mock.calls[0]![0]).toBe(
+    '/api/statistics/loot/export.csv?from=2026-12-01&to=2026-12-31&itemId=i1&table=dropped',
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Скачать CSV: факты выпадений' }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  expect(fetchMock.mock.calls[1]![0]).toBe(
+    '/api/statistics/loot/export.csv?from=2026-12-01&to=2026-12-31&itemId=i1&table=dropped-details',
+  );
+});

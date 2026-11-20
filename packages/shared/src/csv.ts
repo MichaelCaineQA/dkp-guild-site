@@ -74,11 +74,13 @@ export function csvFiltersLabel(query: {
   packId?: string;
   eventTypeId?: string;
   mode?: string;
+  itemId?: string;
 }): string {
   const parts: string[] = [];
   if (query.kpId) parts.push(`КП ${query.kpId}`);
   if (query.packId) parts.push(`Пак ${query.packId}`);
   if (query.eventTypeId) parts.push(`Тип ивента ${query.eventTypeId}`);
   if (query.mode) parts.push(query.mode === 'PVE' ? 'PvE' : 'PvP');
+  if (query.itemId) parts.push(`Предмет ${query.itemId}`);
   return parts.length > 0 ? parts.join('; ') : 'нет';
 }

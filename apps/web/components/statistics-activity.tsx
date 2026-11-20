@@ -42,6 +42,10 @@ export function StatisticsActivityTab({
   const typeFocus = focus?.kind === 'activityType' ? focus : null;
   const data = report.data;
 
+  // Срез типа одинаково ограничивает таблицы и их выгрузки (#263): запрос
+  // экспортов несёт тип ивента, сервер строит отчёт по тому же набору строк.
+  const typeQuery = typeFocus ? { ...query, eventTypeId: typeFocus.eventTypeId } : query;
+
   const byType = useMemo(
     () =>
       data
@@ -55,11 +59,20 @@ export function StatisticsActivityTab({
     () =>
       data
         ? typeFocus
-          ? data.members.map((row) => ({
-              ...row,
-              byType: row.byType.filter((t) => t.eventTypeId === typeFocus.eventTypeId),
-              details: row.details.filter((d) => d.eventTypeId === typeFocus.eventTypeId),
-            }))
+          ? data.members.flatMap((row) => {
+              // Итоги строки — из участия выбранного типа: тот же набор строк,
+              // что в таблице и выгрузке; игроков без участий типа нет (#263).
+              const type = row.byType.find((t) => t.eventTypeId === typeFocus.eventTypeId);
+              if (!type) return [];
+              return [
+                {
+                  ...row,
+                  totals: type.totals,
+                  byType: [type],
+                  details: row.details.filter((d) => d.eventTypeId === typeFocus.eventTypeId),
+                },
+              ];
+            })
           : data.members
         : [],
     [data, typeFocus?.eventTypeId],
@@ -124,7 +137,7 @@ export function StatisticsActivityTab({
           <SectionTitle className="mb-0">Активность по типам ивентов</SectionTitle>
           <span className="flex flex-wrap gap-2">
             <CsvButton
-              path={csvPath('activity', { table: 'types' }, query)}
+              path={csvPath('activity', { table: 'types' }, typeQuery)}
               label="типы активности"
             />
             <CsvButton
@@ -265,11 +278,11 @@ export function StatisticsActivityTab({
           <SectionTitle className="mb-0">Игроки</SectionTitle>
           <span className="flex flex-wrap gap-2">
             <CsvButton
-              path={csvPath('activity', { table: 'members' }, query)}
+              path={csvPath('activity', { table: 'members' }, typeQuery)}
               label="игроки активности"
             />
             <CsvButton
-              path={csvPath('activity', { table: 'member-details' }, query)}
+              path={csvPath('activity', { table: 'member-details' }, typeQuery)}
               label="участия игроков"
             />
           </span>
@@ -355,7 +368,7 @@ export function StatisticsActivityTab({
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <SectionTitle className="mb-0">Ивенты</SectionTitle>
           <CsvButton
-            path={csvPath('activity', { table: 'events' }, query)}
+            path={csvPath('activity', { table: 'events' }, typeQuery)}
             label="ивенты активности"
           />
         </div>

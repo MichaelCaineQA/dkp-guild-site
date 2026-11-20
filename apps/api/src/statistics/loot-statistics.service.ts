@@ -35,7 +35,7 @@ export class LootStatisticsService {
     const period = resolveStatisticsPeriod(query, generatedAt);
     return this.db.$transaction(
       async (tx) => {
-        const [kps, packs, members, drops, awards, eventType] = await Promise.all([
+        const [kps, packs, members, drops, awards, eventType, item] = await Promise.all([
           tx.kP.findMany(),
           tx.pack.findMany({ include: { membershipHistory: true } }),
           tx.member.findMany({ include: { packHistory: true } }),
@@ -57,10 +57,16 @@ export class LootStatisticsService {
             orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           }),
           query.eventTypeId ? tx.eventType.findUnique({ where: { id: query.eventTypeId } }) : null,
+          query.itemId ? tx.item.findUnique({ where: { id: query.itemId } }) : null,
         ]);
         const kp = query.kpId ? kps.find((row) => row.id === query.kpId) : undefined;
         const pack = query.packId ? packs.find((row) => row.id === query.packId) : undefined;
-        if ((query.kpId && !kp) || (query.packId && !pack) || (query.eventTypeId && !eventType))
+        if (
+          (query.kpId && !kp) ||
+          (query.packId && !pack) ||
+          (query.eventTypeId && !eventType) ||
+          (query.itemId && !item)
+        )
           throw new BadRequestException('Неизвестный фильтр');
         if (
           query.kpId &&
@@ -234,7 +240,12 @@ export class LootStatisticsService {
           end: period.end.toISOString(),
           dropped: {
             totals: lootDroppedTotals(dropped),
-            items: droppedItems,
+            // Срез предмета из топа обзора (#263): таблицы «Выпало» сужаются
+            // до одного предмета без пересчёта — доли и итоги остаются от
+            // всей выборки, как в срезе интерфейса.
+            items: query.itemId
+              ? droppedItems.filter((row) => row.itemId === query.itemId)
+              : droppedItems,
             withoutEvent: {
               totals: lootDroppedTotals(droppedWithoutEvent),
               items: lootDroppedItemRows(droppedWithoutEvent),
