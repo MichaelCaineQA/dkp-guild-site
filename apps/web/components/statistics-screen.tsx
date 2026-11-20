@@ -95,11 +95,11 @@ export function StatisticsScreen({ now = new Date() }: { now?: Date }) {
     if (!sessionLoading && (user?.memberId || user?.isAdmin)) {
       let active = true;
       Promise.all([
-        api<{ groups: StatisticsFilterOptions['kps'] }>('/org/roster'),
+        api<{ kps: StatisticsFilterOptions['kps'] }>('/statistics/filter-options'),
         api<StatisticsFilterOptions['eventTypes']>('/event-types'),
       ])
-        .then(([roster, eventTypes]) => {
-          if (active) setOptions({ kps: roster.groups, eventTypes });
+        .then(([filterOptions, eventTypes]) => {
+          if (active) setOptions({ kps: filterOptions.kps, eventTypes });
         })
         .catch(() => undefined);
       return () => {

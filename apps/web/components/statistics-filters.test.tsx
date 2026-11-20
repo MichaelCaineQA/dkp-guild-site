@@ -86,6 +86,62 @@ describe('совместимость КП и пака', () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ kpId: '', packId: 'p1' }));
   });
 
+  it('историческая связка: пак прежней КП остаётся выбираемым (#250)', () => {
+    const now = new Date('2026-12-05T12:00:00Z');
+    // Пак Один когда-то входил в КП Бета — он в списках обеих КП.
+    const options: StatisticsFilterOptions = {
+      ...OPTIONS,
+      kps: [
+        OPTIONS.kps[0]!,
+        {
+          id: 'kp2',
+          name: 'КП Бета',
+          packs: [
+            { id: 'p1', name: 'Пак Один' },
+            { id: 'p3', name: 'Пак Три' },
+          ],
+        },
+      ],
+    };
+    // Под исторической КП список паков содержит прежний пак.
+    render(
+      <StatisticsFilters
+        now={now}
+        options={options}
+        value={{ ...defaultStatisticsFilters(now), kpId: 'kp2' }}
+        onChange={vi.fn()}
+      />,
+    );
+    const packs = screen.getByLabelText('Пак:') as HTMLSelectElement;
+    expect([...packs.options].map((option) => option.value)).toEqual(['', 'p1', 'p3']);
+    cleanup();
+
+    // Совместный выбор прежней КП и исторического пака не сбрасывается.
+    const onChange = vi.fn();
+    render(
+      <StatisticsFilters
+        now={now}
+        options={options}
+        value={{ ...defaultStatisticsFilters(now), kpId: 'kp1', packId: 'p1' }}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('КП:'), { target: { value: 'kp2' } });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ kpId: 'kp2', packId: 'p1' }));
+    cleanup();
+
+    // Без выбранной КП дубли пака в общем списке убираются.
+    render(
+      <StatisticsFilters
+        now={now}
+        options={options}
+        value={defaultStatisticsFilters(now)}
+        onChange={vi.fn()}
+      />,
+    );
+    const allPacks = screen.getByLabelText('Пак:') as HTMLSelectElement;
+    expect([...allPacks.options].map((option) => option.value)).toEqual(['', 'p1', 'p2', 'p3']);
+  });
   it('без выбранной КП список паков общий для всех КП', () => {
     const now = new Date('2026-12-05T12:00:00Z');
     mount(now, { ...defaultStatisticsFilters(now), kpId: '' });

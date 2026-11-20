@@ -179,4 +179,16 @@ suite('Историческая статистика в PostgreSQL', () => {
       expect.objectContaining({ kind: 'DKP', amount: 3, eventId: null, kpId: null }),
     ]);
   });
+
+  it('filterOptions перечисляет пак в текущей и исторической КП (#250)', async () => {
+    // Первый тест уже перевёл pack из oldKp в newKp с записью истории.
+    const options = await service.filterOptions();
+    const packIds = (kpId: string) =>
+      options.kps.find((kp) => kp.id === kpId)?.packs.map((pack) => pack.id) ?? [];
+    // Прежняя связка выбираема: пак остаётся в списке старой КП и входит в новую.
+    expect(packIds(ids.oldKp)).toContain(ids.pack);
+    expect(packIds(ids.newKp)).toContain(ids.pack);
+    expect(packIds(ids.newKp)).toContain(ids.newPack);
+    expect(packIds(ids.oldKp)).not.toContain(ids.newPack);
+  });
 });

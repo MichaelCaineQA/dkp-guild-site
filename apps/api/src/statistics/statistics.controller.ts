@@ -31,6 +31,14 @@ export class StatisticsController {
     return this.gearScoreStatistics.get(query, req.session!.user!);
   }
 
+  /** Параметры фильтров: паки КП включают исторические связки (#250). */
+  @Get('filter-options')
+  @Header('Cache-Control', 'private, no-store')
+  @RequirePermission('members.view_roster')
+  filterOptions() {
+    return this.statistics.filterOptions();
+  }
+
   @Get('attendance')
   @Header('Cache-Control', 'private, no-store')
   @RequirePermission('members.view_roster')

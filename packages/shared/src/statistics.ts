@@ -31,6 +31,21 @@ export const statisticsQuerySchema = z
 
 export type StatisticsQuery = z.infer<typeof statisticsQuerySchema>;
 
+/**
+ * Параметры фильтров статистики (#250): у каждой КП — текущие паки и те, что
+ * когда-либо в ней состояли (исторические связки для периодов до перевода).
+ */
+export const statisticsFilterOptionsSchema = z.object({
+  kps: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      packs: z.array(z.object({ id: z.string(), name: z.string() })),
+    }),
+  ),
+});
+export type StatisticsFilterOptions = z.infer<typeof statisticsFilterOptionsSchema>;
+
 export interface StatisticsPeriod {
   start: Date;
   end: Date;
