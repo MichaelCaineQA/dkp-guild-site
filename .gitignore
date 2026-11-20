@@ -23,6 +23,9 @@ next-env.d.ts
 .idea/
 .vscode/
 
+# дампы страниц MCP Playwright-сессий (ломают локальный prettier)
+.playwright-mcp/
+
 # локальный семантический индекс MCP codebase-index
 .codebase-index/
 uploads/
