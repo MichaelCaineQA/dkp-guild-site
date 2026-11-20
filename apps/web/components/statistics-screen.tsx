@@ -110,6 +110,9 @@ export function StatisticsScreen({ now = new Date() }: { now?: Date }) {
 
   const query = statisticsFilterQuery(filters);
   const hasFilters = hasActiveStatisticsFilters(filters);
+  // Блок свежести GS не зависит от ивентов: Глава/Админ видят его и в пустой
+  // выборке периода (#253).
+  const gearScoreAllowed = !!user && canViewGuildGearScore(user);
 
   // Подпись применённых условий: период всегда, фильтры — по выбору.
   const appliedLabel = useMemo(() => {
@@ -190,7 +193,7 @@ export function StatisticsScreen({ now = new Date() }: { now?: Date }) {
           </Card>
         ) : report.loading ? (
           <ReportSkeleton refreshing={report.refreshing} />
-        ) : emptySelection ? (
+        ) : emptySelection && !(tab === 'overview' && gearScoreAllowed) ? (
           <Card>
             <ReportEmpty
               filtered={hasFilters}
@@ -201,7 +204,10 @@ export function StatisticsScreen({ now = new Date() }: { now?: Date }) {
           <StatisticsOverview
             query={query}
             eventFilterActive={!!(query.eventTypeId || query.mode)}
-            canViewGearScore={!!user && canViewGuildGearScore(user)}
+            canViewGearScore={gearScoreAllowed}
+            emptySelection={emptySelection}
+            filtered={hasFilters}
+            onResetFilters={() => changeFilters(defaultStatisticsFilters(now))}
             go={go}
           />
         ) : tab === 'attendance' ? (

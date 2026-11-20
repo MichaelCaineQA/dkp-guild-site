@@ -21,6 +21,8 @@ function renderOverview(options?: {
   dkp?: () => DkpStatisticsReport | Promise<DkpStatisticsReport>;
   loot?: LootStatisticsReport | Promise<LootStatisticsReport>;
   canViewGearScore?: boolean;
+  emptySelection?: boolean;
+  filtered?: boolean;
 }) {
   const mock = statisticsApiMock({
     attendance:
@@ -36,6 +38,9 @@ function renderOverview(options?: {
       query={QUERY}
       eventFilterActive={false}
       canViewGearScore={options?.canViewGearScore ?? false}
+      emptySelection={options?.emptySelection ?? false}
+      filtered={options?.filtered ?? false}
+      onResetFilters={() => undefined}
       go={go}
     />,
   );
@@ -106,6 +111,18 @@ it('N=0 показывает «—» и пояснение вместо нуля
   expect(screen.getByText('—')).toBeDefined();
   expect(screen.getByText('Нет ивентов для расчёта')).toBeDefined();
   expect(screen.queryByRole('button', { name: /Посещаемость Игрок/ })).toBeNull();
+});
+
+it('пустая выборка ивентов не скрывает блок GS и экспорт (#253)', async () => {
+  const mock = renderOverview({ canViewGearScore: true, emptySelection: true });
+  expect(await screen.findByText('Свежесть GS')).toBeDefined();
+  expect(screen.getByRole('button', { name: 'Скачать CSV: свежесть GS' })).toBeDefined();
+  // Сообщение пустой выборки сохранено для отчётов, зависящих от ивентов.
+  expect(screen.getByText('Нет данных за выбранный период')).toBeDefined();
+  expect(screen.queryByText('Активные участники')).toBeNull();
+  // Зависящие от ивентов отчёты в пустой выборке не запрашиваются.
+  expect(mock.paths('/statistics/attendance')).toEqual([]);
+  expect(mock.paths('/statistics/dkp')).toEqual([]);
 });
 
 it('ошибка ДКП не превращается в ноль: карточка с повтором', async () => {

@@ -197,6 +197,18 @@ it('Глава видит блок свежести GS на обзоре', async
   expect(await screen.findByText('Актуальные: 3')).toBeDefined();
 });
 
+it('пустой период скрывает отчёты, но Глава видит срез GS и экспорт (#253)', async () => {
+  session({ memberId: 'm1', rank: 'GUILD_LEADER' });
+  const mock = mockApi([Promise.resolve(emptyReport())]);
+  render(<StatisticsScreen now={NOW} />);
+  expect(await screen.findByText('Актуальные: 3')).toBeDefined();
+  expect(screen.getByRole('button', { name: 'Скачать CSV: свежесть GS' })).toBeDefined();
+  expect(screen.getByText('Нет данных за выбранный период')).toBeDefined();
+  expect(screen.queryByText('Активные участники')).toBeNull();
+  expect(mock.paths('/statistics/gear-score').length).toBeGreaterThan(0);
+  expect(mock.paths('/statistics/attendance')).toEqual([]);
+});
+
 it('без входа и без привязки аккаунта — пояснения вместо отчёта', () => {
   session(null);
   const { rerender } = render(<StatisticsScreen now={NOW} />);

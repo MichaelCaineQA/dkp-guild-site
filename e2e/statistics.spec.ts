@@ -72,6 +72,19 @@ for (const timezoneId of ['America/Los_Angeles', 'Asia/Tokyo']) {
   });
 }
 
+test('пустой период не скрывает свежесть GS от Главы (#253)', async ({ page, context }) => {
+  await login(context, 'test-leader');
+  await page.goto('/statistics');
+  // Период без ивентов и операций, но с участниками исторического среза GS.
+  await page.getByRole('combobox', { name: /^Период:/ }).selectOption('range');
+  await page.getByLabel('С:', { exact: true }).fill('2025-02-01');
+  await page.getByLabel('По:', { exact: true }).fill('2025-02-10');
+  await expect(page.getByText('Нет данных за выбранный период', { exact: true })).toBeVisible();
+  await expect(page.getByText('Свежесть GS', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Скачать CSV: свежесть GS' })).toBeVisible();
+  await expect(page.getByText(/участников среза/)).toBeVisible();
+});
+
 for (const { role, username, allowed } of [
   { role: 'Глава', username: 'test-leader', allowed: true },
   { role: 'Офицер', username: 'test-officer', allowed: false },

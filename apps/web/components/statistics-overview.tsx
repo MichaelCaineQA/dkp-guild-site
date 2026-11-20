@@ -9,7 +9,7 @@ import {
   type StatisticsQuery,
 } from '@dkp/shared';
 import { Avatar } from './avatar';
-import { ReportError, useStatisticsEndpoint } from './statistics-report';
+import { ReportEmpty, ReportError, useStatisticsEndpoint } from './statistics-report';
 import { csvPath, type StatisticsFocus, type StatisticsTab } from './statistics-navigation';
 import {
   BarChart,
@@ -33,6 +33,9 @@ export function StatisticsOverview({
   query,
   eventFilterActive,
   canViewGearScore,
+  emptySelection = false,
+  filtered = false,
+  onResetFilters,
   go,
 }: {
   query: StatisticsQuery & { from: string; to: string };
@@ -40,12 +43,22 @@ export function StatisticsOverview({
   eventFilterActive: boolean;
   /** Блок GS видит и запрашивает только Глава/Админ (план 2.5). */
   canViewGearScore: boolean;
+  /** Пустая выборка ивентов и операций: GS-срез показываем, отчёты — нет (#253). */
+  emptySelection?: boolean;
+  /** Для сообщения пустой выборки: активны ли общие фильтры. */
+  filtered?: boolean;
+  onResetFilters?: () => void;
   go: (tab: StatisticsTab, focus?: StatisticsFocus) => void;
 }) {
-  const attendance = useStatisticsEndpoint<AttendanceReport>('/statistics/attendance', query);
-  const activity = useStatisticsEndpoint<ActivityReport>('/statistics/activity', query);
-  const dkp = useStatisticsEndpoint<DkpStatisticsReport>('/statistics/dkp', query);
-  const loot = useStatisticsEndpoint<LootStatisticsReport>('/statistics/loot', query);
+  // Отчёты, зависящие от ивентов, в пустой выборке не запрашиваем.
+  const reportsQuery = emptySelection ? null : query;
+  const attendance = useStatisticsEndpoint<AttendanceReport>(
+    '/statistics/attendance',
+    reportsQuery,
+  );
+  const activity = useStatisticsEndpoint<ActivityReport>('/statistics/activity', reportsQuery);
+  const dkp = useStatisticsEndpoint<DkpStatisticsReport>('/statistics/dkp', reportsQuery);
+  const loot = useStatisticsEndpoint<LootStatisticsReport>('/statistics/loot', reportsQuery);
   const gearScore = useStatisticsEndpoint<GearScoreStatisticsReport>(
     '/statistics/gear-score',
     canViewGearScore ? query : null,
@@ -57,6 +70,58 @@ export function StatisticsOverview({
     key: week.start,
     label: weekLabel(week.start, week.end),
   });
+
+  /** Защищённый блок GS (#217): виден и в пустой выборке ивентов (#253). */
+  const gearScoreSection = !canViewGearScore ? null : gearScore.failed ? (
+    <Card>
+      <SectionTitle>Свежесть GS</SectionTitle>
+      <ReportError onRetry={gearScore.reload} />
+    </Card>
+  ) : gearScore.data ? (
+    <Card>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <SectionTitle className="mb-0">Свежесть GS</SectionTitle>
+        <CsvButton path={csvPath('', { table: 'gear-score' }, query)} label="свежесть GS" />
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <Badge tone="success">Актуальные: {gearScore.data.totals.fresh}</Badge>
+        <Badge tone="warning">Устаревшие: {gearScore.data.totals.stale}</Badge>
+        <Badge tone="danger">Без скриншота: {gearScore.data.totals.missing}</Badge>
+        <Badge>
+          Доля устаревших:{' '}
+          {gearScore.data.totals.staleSharePct === null
+            ? '—'
+            : `${gearScore.data.totals.staleSharePct}%`}
+        </Badge>
+      </div>
+      <p className="mt-3 text-sm text-secondary">
+        Срез на {moscowDateTime(gearScore.data.asOf)} · порог {gearScore.data.staleDays} дн. ·
+        участников среза {gearScore.data.totals.members}
+      </p>
+      {eventFilterActive && (
+        <p className="mt-1 text-sm text-secondary">
+          Тип ивента и режим не влияют на срез свежести GS.
+        </p>
+      )}
+    </Card>
+  ) : (
+    <Card>
+      <SectionTitle>Свежесть GS</SectionTitle>
+      <div role="status" className="h-16 animate-pulse rounded-lg bg-surface-muted" />
+    </Card>
+  );
+
+  if (emptySelection) {
+    return (
+      <div className="space-y-4">
+        {gearScoreSection}
+        {/* Сообщение пустой выборки сохранено для отчётов, зависящих от ивентов. */}
+        <Card>
+          <ReportEmpty filtered={filtered} onResetFilters={onResetFilters ?? (() => undefined)} />
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -330,45 +395,7 @@ export function StatisticsOverview({
       </Card>
 
       {/* Свежесть GS (#217): только Глава/Админ; значения GS в отчёте нет. */}
-      {canViewGearScore &&
-        (gearScore.failed ? (
-          <Card>
-            <SectionTitle>Свежесть GS</SectionTitle>
-            <ReportError onRetry={gearScore.reload} />
-          </Card>
-        ) : gearScore.data ? (
-          <Card>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <SectionTitle className="mb-0">Свежесть GS</SectionTitle>
-              <CsvButton path={csvPath('', { table: 'gear-score' }, query)} label="свежесть GS" />
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Badge tone="success">Актуальные: {gearScore.data.totals.fresh}</Badge>
-              <Badge tone="warning">Устаревшие: {gearScore.data.totals.stale}</Badge>
-              <Badge tone="danger">Без скриншота: {gearScore.data.totals.missing}</Badge>
-              <Badge>
-                Доля устаревших:{' '}
-                {gearScore.data.totals.staleSharePct === null
-                  ? '—'
-                  : `${gearScore.data.totals.staleSharePct}%`}
-              </Badge>
-            </div>
-            <p className="mt-3 text-sm text-secondary">
-              Срез на {moscowDateTime(gearScore.data.asOf)} · порог {gearScore.data.staleDays} дн. ·
-              участников среза {gearScore.data.totals.members}
-            </p>
-            {eventFilterActive && (
-              <p className="mt-1 text-sm text-secondary">
-                Тип ивента и режим не влияют на срез свежести GS.
-              </p>
-            )}
-          </Card>
-        ) : (
-          <Card>
-            <SectionTitle>Свежесть GS</SectionTitle>
-            <div role="status" className="h-16 animate-pulse rounded-lg bg-surface-muted" />
-          </Card>
-        ))}
+      {gearScoreSection}
     </div>
   );
 }
