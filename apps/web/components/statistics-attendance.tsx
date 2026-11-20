@@ -271,9 +271,24 @@ function AttendanceTableRow({
   const pct = formatAttendancePct(row.totals.percentage);
   return (
     <>
-      <Table.Row onClick={onToggle} aria-expanded={expanded} aria-label={`Детали: ${row.name}`}>
+      {/* Клик по строке — мышью; клавиатурный доступ — кнопка раскрытия (#252). */}
+      <Table.Row onClick={onToggle} aria-label={`Детали: ${row.name}`}>
         <Table.Td className="font-medium">
-          {row.name}
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggle();
+            }}
+            aria-expanded={expanded}
+            aria-label={`Детали: ${row.name}`}
+            className="mr-1 inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2 py-0.5 text-sm font-medium text-primary hover:bg-surface-muted focus:border-accent focus:outline-none"
+          >
+            <span aria-hidden="true" className="text-secondary">
+              {expanded ? '▾' : '▸'}
+            </span>
+            {row.name}
+          </button>
           {row.totals.historyStatus === 'NO_HISTORICAL_DATA' && (
             <Badge tone="warning" className="ml-2">
               Нет исторических данных
