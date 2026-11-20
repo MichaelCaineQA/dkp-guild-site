@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   aggregateAttendance,
   compareAttendanceGroups,
+  formatMoscowDayShort,
   type AttendanceDetail,
   type AttendanceReport,
   type StatisticsQuery,
@@ -309,8 +310,9 @@ function AttendanceTableRow({
                   .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
                   .map((detail) => (
                     <tr key={`${detail.eventId}:${detail.memberId}`}>
+                      {/* Дата одиночного ивента — один день Москвы, без диапазона (#254). */}
                       <Table.Td className="tabular-nums">
-                        {weekLabel(detail.startsAt, detail.startsAt)}
+                        {formatMoscowDayShort(detail.startsAt)}
                       </Table.Td>
                       <Table.Td>{detail.eventName || detail.eventId}</Table.Td>
                       <Table.Td>
