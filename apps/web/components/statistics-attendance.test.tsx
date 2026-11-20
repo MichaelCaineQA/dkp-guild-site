@@ -161,6 +161,8 @@ it('дата ивента в полночь Москвы — один день, 
   fireEvent.click(await screen.findByRole('row', { name: /Детали: Игрок Один/ }));
   expect(screen.getByText('2 янв', { exact: true })).toBeDefined();
   expect(screen.queryByText(/1 янв/)).toBeNull();
+});
+
 it('кнопка раскрытия переключает детали, клик по строке продолжает работать (#252)', async () => {
   renderTab();
   const button = await screen.findByRole('button', { name: 'Детали: Игрок Один' });
