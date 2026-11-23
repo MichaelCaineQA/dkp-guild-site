@@ -1,5 +1,11 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
-import { auditQuerySchema, can, type PermissionActor } from '@dkp/shared';
+import {
+  auditQuerySchema,
+  can,
+  canViewGuildGearScore,
+  canViewProfileGearScore,
+  type PermissionActor,
+} from '@dkp/shared';
 
 export interface AuditRecord {
   actorMemberId: string | null;
@@ -323,14 +329,26 @@ export class AuditService {
     };
     return {
       entries: entries.map(({ actor: author, ...entry }) => {
+        const hideScreenshot =
+          entry.entityType === 'Screenshot' &&
+          !!actor &&
+          !canViewGuildGearScore(actor) &&
+          entry.actorMemberId !== actor.memberId &&
+          !personalIds?.screenshots.includes(entry.entityId);
         const safeDetails =
-          !personalIds ||
-          (entry.entityType === 'Member' && entry.entityId === actor?.memberId) ||
-          (entry.entityType === 'Absence' && personalIds.absences.includes(entry.entityId)) ||
-          (entry.entityType === 'Screenshot' && personalIds.screenshots.includes(entry.entityId)) ||
-          ((entry.entityType === 'DkpEntry' || entry.entityType === 'Event') &&
-            personalIds.entries.includes(entry.entityId)) ||
-          (entry.entityType === 'Event' && entry.entityId.endsWith(`:${actor?.memberId}`));
+          !hideScreenshot &&
+          (!personalIds ||
+            (entry.entityType === 'Member' && entry.entityId === actor?.memberId) ||
+            (entry.entityType === 'Absence' && personalIds.absences.includes(entry.entityId)) ||
+            (entry.entityType === 'Screenshot' &&
+              personalIds.screenshots.includes(entry.entityId)) ||
+            ((entry.entityType === 'DkpEntry' || entry.entityType === 'Event') &&
+              personalIds.entries.includes(entry.entityId)) ||
+            (entry.entityType === 'Event' && entry.entityId.endsWith(`:${actor?.memberId}`)));
+        const hideGearScoreComment =
+          entry.action === 'GEAR_SCORE_UPDATE' &&
+          !!actor &&
+          !canViewProfileGearScore(actor, entry.entityId);
         const hideAbsenceComment =
           entry.entityType === 'Absence' &&
           !!actor &&
@@ -344,7 +362,12 @@ export class AuditService {
         return {
           ...entry,
           ...(safeDetails
-            ? { comment: hideAbsenceComment ? null : readableComment(entry.comment) }
+            ? {
+                comment:
+                  hideAbsenceComment || hideGearScoreComment
+                    ? null
+                    : readableComment(entry.comment),
+              }
             : { comment: null, entityId: '' }),
           actorName: author?.nickname ?? (entry.actorIsAdmin ? 'Админ' : null),
           entityName: !safeDetails

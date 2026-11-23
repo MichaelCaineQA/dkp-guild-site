@@ -5,7 +5,7 @@ import {
   PayloadTooLargeException,
   StreamableFile,
 } from '@nestjs/common';
-import { can, SCREENSHOT_MAX_BYTES, type SessionUser } from '@dkp/shared';
+import { canViewGuildGearScore, SCREENSHOT_MAX_BYTES, type SessionUser } from '@dkp/shared';
 import type { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
@@ -91,15 +91,30 @@ export class ScreenshotsService {
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new NotFoundException();
     const file = await this.db.screenshot.findUnique({ where: { id } });
     let groupAccess = false;
-    if (file && actor.memberId && !actor.blocked && !!kpId !== !!packId) {
+    const privileged = canViewGuildGearScore(actor);
+    if (
+      file &&
+      !privileged &&
+      file.userId !== actor.userId &&
+      actor.memberId &&
+      !actor.blocked &&
+      !!kpId !== !!packId
+    ) {
       const target = await this.db.member.findFirst({
         where: {
           userId: file.userId,
           blockedAt: null,
           ...(kpId ? { pack: { kpId } } : { packId }),
-          gsRecords: { some: { screenshotIds: { has: id } } },
         },
-        select: { pack: { select: { leaderId: true, kp: { select: { leaderId: true } } } } },
+        select: {
+          pack: { select: { leaderId: true, kp: { select: { leaderId: true } } } },
+          gsRecords: {
+            where: { NOT: { screenshotIds: { isEmpty: true } } },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            take: 1,
+            select: { screenshotIds: true },
+          },
+        },
       });
       const viewer = await this.db.member.findUnique({
         where: { id: actor.memberId },
@@ -108,12 +123,11 @@ export class ScreenshotsService {
       groupAccess =
         !!viewer &&
         !viewer.blockedAt &&
-        (target?.pack?.leaderId === actor.memberId || target?.pack?.kp.leaderId === actor.memberId);
+        !!target?.gsRecords[0]?.screenshotIds.includes(id) &&
+        (target.pack?.kp.leaderId === actor.memberId ||
+          (!!packId && target.pack?.leaderId === actor.memberId));
     }
-    if (
-      !file ||
-      (file.userId !== actor.userId && !can(actor, 'link_requests.review') && !groupAccess)
-    )
+    if (!file || (file.userId !== actor.userId && !privileged && !groupAccess))
       throw new NotFoundException('Скриншот недоступен');
     let data: Buffer;
     try {
