@@ -601,6 +601,21 @@ export const contracts: Record<string, Contract> = {
     errors: [400, 404, 409],
     description: 'Создаёт новую версию; история сохраняется. expectedVersion обязателен.',
   }),
+  DiscordSettings_get: c('Получить каналы Discord', 'DiscordSettings', { access: leader }),
+  DiscordSettings_update: c('Изменить каналы Discord', 'DiscordSettings', {
+    access: leader,
+    body: 'DiscordSettingsUpdate',
+    errors: [400, 502],
+  }),
+  DiscordSettings_test: c('Проверить доставку Discord', 'DiscordTest', {
+    access: leader,
+    errors: [400, 502],
+    status: 201,
+  }),
+  DiscordSettings_testStatus: c('Статус проверки Discord', 'DiscordTestStatus', {
+    access: leader,
+    errors: [400],
+  }),
   Settings_getAll: c('Получить настройки системы', 'Settings'),
   Settings_update: c('Изменить настройки системы', 'Settings', {
     access: leader,

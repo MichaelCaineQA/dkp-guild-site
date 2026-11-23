@@ -5,6 +5,10 @@ export async function enqueueDiscordNotification(
   tx: Prisma.TransactionClient,
   notification: { id: string; channelId: string; content: string },
 ): Promise<void> {
+  const guildId = process.env.DISCORD_GUILD_ID;
+  if (!guildId || !/^\d+$/.test(guildId)) {
+    throw new Error('Discord guild is not configured');
+  }
   if (!notification.id || !/^\d+$/.test(notification.channelId)) {
     throw new Error('Invalid Discord notification key or channel');
   }
@@ -13,7 +17,7 @@ export async function enqueueDiscordNotification(
   }
   await tx.discordNotification.upsert({
     where: { id: notification.id },
-    create: notification,
+    create: { ...notification, guildId },
     update: {},
   });
 }

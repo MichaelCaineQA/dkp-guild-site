@@ -20,6 +20,7 @@ datasource db {
 // Transactional outbox: the domain change and notification are committed together.
 model DiscordNotification {
   id          String   @id
+  guildId     String?
   channelId   String
   content     String
   status      String   @default("PENDING")

@@ -12,6 +12,7 @@ suite('Discord outbox on PostgreSQL', () => {
   let service: DiscordDeliveryService;
   let id: string;
   let token: string | undefined;
+  let guild: string | undefined;
   let fetchSpy: jest.SpyInstance;
 
   beforeAll(() => {
@@ -21,7 +22,9 @@ suite('Discord outbox on PostgreSQL', () => {
     db = new PrismaClient({ datasourceUrl: url });
     service = new DiscordDeliveryService(db as unknown as PrismaService);
     token = process.env.DISCORD_BOT_TOKEN;
+    guild = process.env.DISCORD_GUILD_ID;
     process.env.DISCORD_BOT_TOKEN = 'test-token';
+    process.env.DISCORD_GUILD_ID = '100';
   });
 
   beforeEach(async () => {
@@ -39,6 +42,8 @@ suite('Discord outbox on PostgreSQL', () => {
   afterAll(async () => {
     if (token === undefined) delete process.env.DISCORD_BOT_TOKEN;
     else process.env.DISCORD_BOT_TOKEN = token;
+    if (guild === undefined) delete process.env.DISCORD_GUILD_ID;
+    else process.env.DISCORD_GUILD_ID = guild;
     await db.$disconnect();
   });
 
@@ -76,6 +81,17 @@ suite('Discord outbox on PostgreSQL', () => {
     } finally {
       process.env.DISCORD_BOT_TOKEN = 'test-token';
     }
+  });
+
+  it('does not send a notification copied from another Discord server', async () => {
+    await db.discordNotification.create({
+      data: { id, guildId: '999', channelId: '123', content: 'foreign' },
+    });
+    await service.run();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect((await db.discordNotification.findUniqueOrThrow({ where: { id } })).status).toBe(
+      'PENDING',
+    );
   });
 
   it('delivers once and suppresses user-provided mentions', async () => {
