@@ -8,7 +8,25 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   use: { baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3090', trace: 'retain-on-failure' },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    ...(process.env.E2E_BASE_URL
+      ? []
+      : [
+          {
+            name: 'mobile-chromium',
+            testMatch: 'business.spec.ts',
+            grep: /@mobile/,
+            use: { ...devices['Pixel 7'], colorScheme: 'dark' as const },
+          },
+          {
+            name: 'mobile-webkit',
+            testMatch: 'business.spec.ts',
+            grep: /@mobile/,
+            use: { ...devices['iPhone 13'], colorScheme: 'light' as const },
+          },
+        ]),
+  ],
   webServer: process.env.E2E_BASE_URL
     ? undefined
     : [

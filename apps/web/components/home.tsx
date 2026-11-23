@@ -5,7 +5,7 @@ import { OnboardingScreen } from './onboarding';
 import { DashboardScreen } from './dashboard';
 import { useSession } from './session-context';
 import { api, API_URL_VALUE } from '../lib/api';
-import { Page, Modal } from './ui';
+import { Button, Input, Page, Modal } from './ui';
 
 /**
  * Главная (ревью владельца, п.1): гостям — welcome-экран со входом
@@ -136,16 +136,16 @@ function WelcomeScreen() {
         {showAdmin && (
           <Modal title="Вход для Админа" onClose={() => setShowAdmin(false)}>
             <form onSubmit={adminLogin} className="flex flex-col gap-3 text-left">
-              <input
-                className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-primary placeholder:text-disabled focus:border-accent focus:outline-none"
+              <Input
+                className="py-2"
                 aria-label="Логин администратора"
                 placeholder="Логин администратора"
                 value={login}
                 onChange={(e) => setLogin(e.target.value)}
                 autoComplete="username"
               />
-              <input
-                className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-primary placeholder:text-disabled focus:border-accent focus:outline-none"
+              <Input
+                className="py-2"
                 aria-label="Пароль"
                 placeholder="Пароль"
                 type="password"
@@ -153,13 +153,9 @@ function WelcomeScreen() {
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
               />
-              <button
-                type="submit"
-                disabled={busy || !login || !password}
-                className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium hover:bg-surface-muted disabled:opacity-50"
-              >
+              <Button type="submit" disabled={busy || !login || !password} className="py-2">
                 Войти как администратор
-              </button>
+              </Button>
               {error && (
                 <p role="alert" className="text-sm text-danger">
                   {error}

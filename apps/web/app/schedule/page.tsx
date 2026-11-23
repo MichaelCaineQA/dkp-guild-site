@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   EVENT_MODES,
   can,
@@ -36,10 +36,25 @@ interface EventTypeRow {
 }
 const MODE_LABELS: Record<EventMode, string> = { PVE: 'PvE', PVP: 'PvP' };
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+// Тот же порог, что у lg:grid-cols-2 в ScheduleColumns.
+const twoColumns = '(min-width: 64rem)';
+
+function subscribeToScheduleWidth(onChange: () => void) {
+  const media = window.matchMedia?.(twoColumns);
+  media?.addEventListener('change', onChange);
+  return () => media?.removeEventListener('change', onChange);
+}
+
+function hasTwoScheduleColumns() {
+  return window.matchMedia?.(twoColumns).matches ?? true;
+}
 
 export default function SchedulePage() {
   const { user, loading: sessionLoading } = useSession();
   const [view, setView] = useState<'week' | 'calendar'>('week');
+  const showSidePanel =
+    useSyncExternalStore(subscribeToScheduleWidth, hasTwoScheduleColumns, () => true) &&
+    view === 'week';
   const [events, setEvents] = useState<EventRow[]>([]);
   const [weekEvents, setWeekEvents] = useState<WeekEvent[]>([]);
   const [eventTypes, setEventTypes] = useState<EventTypeRow[]>([]);
@@ -136,7 +151,7 @@ export default function SchedulePage() {
         key={selected.id}
         event={selected}
         gameTime={gameTime}
-        presentation={view === 'week' ? 'panel' : 'dialog'}
+        presentation={showSidePanel ? 'panel' : 'dialog'}
         canManage={canManageEvent(user, selected)}
         canConduct={can(user, 'events.conduct', selected)}
         onClose={() => setSelectedId(null)}
@@ -271,11 +286,12 @@ export default function SchedulePage() {
               </Card>
             }
             detail={
-              detail ?? (
+              showSidePanel &&
+              (detail ?? (
                 <Card>
                   <Muted>Выберите событие из списка</Muted>
                 </Card>
-              )
+              ))
             }
           />
         ) : (
@@ -296,7 +312,7 @@ export default function SchedulePage() {
           onChanged={load}
         />
       )}
-      {view === 'calendar' && detail}
+      {!showSidePanel && detail}
     </Page>
   );
   function shift(delta: number) {

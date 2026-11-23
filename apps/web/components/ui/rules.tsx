@@ -48,7 +48,7 @@ export function RulesEditor({
         rows={14}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full min-w-0 rounded-lg border border-line bg-surface p-3 font-mono text-primary focus:border-accent focus:outline-none"
+        className="w-full min-w-0 rounded-lg border border-line bg-surface p-3 font-mono text-base text-primary focus:border-accent focus:outline-none md:text-sm"
       />
     </label>
   );

@@ -103,7 +103,7 @@ export function MobileMenuButton({ onClick }: { onClick: () => void }) {
       type="button"
       aria-label="Открыть меню"
       onClick={onClick}
-      className="fixed left-3 top-3 z-30 flex h-10 w-10 items-center justify-center rounded-lg border border-line bg-surface hover:bg-surface-muted md:hidden"
+      className="fixed left-3 top-2.5 z-30 flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-surface hover:bg-surface-muted md:hidden"
     >
       <MenuIcon name="menu" />
     </button>
@@ -136,13 +136,13 @@ export function MobileNavigation({
       }}
       className="fixed inset-y-0 left-0 m-0 h-dvh max-h-dvh w-72 max-w-[90vw] border-r border-line bg-surface p-0 text-primary backdrop:bg-black/60"
     >
-      <div className="flex items-center justify-between p-4">
-        <strong>Меню</strong>
+      <div className="flex items-center justify-between p-3">
+        <strong className="pl-1">Меню</strong>
         <button
           type="button"
           aria-label="Закрыть меню"
           onClick={onClose}
-          className="rounded-lg px-3 py-2 hover:bg-surface-muted"
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-2xl leading-none text-secondary hover:bg-surface-muted hover:text-primary"
         >
           ×
         </button>
@@ -172,13 +172,17 @@ export function ApplicationFrame({
 }
 export function GuildBrand({ name, crestUrl }: { name: string; crestUrl?: string | null }) {
   return (
-    <Link href="/" title={name} className="flex min-w-0 items-center gap-3 font-semibold">
+    <Link
+      href="/"
+      title={name}
+      className="flex min-w-0 items-center gap-3 font-semibold max-md:flex-1"
+    >
       {crestUrl ? (
         <img src={crestUrl} alt="" className="h-9 w-9 shrink-0 object-contain" />
       ) : (
         <MenuIcon name="shield" />
       )}
-      <span className="max-w-48 truncate">{name}</span>
+      <span className="min-w-0 max-w-48 truncate max-md:max-w-none">{name}</span>
     </Link>
   );
 }
@@ -198,8 +202,10 @@ export function HeaderIdentity({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
-      <span aria-label="Баланс ДКП" className="whitespace-nowrap tabular-nums">
+    // На телефоне блок занимает второй ряд шапки целиком и не переносится:
+    // ник усекается многоточием, остальные элементы не сжимаются.
+    <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm max-md:w-full max-md:flex-nowrap">
+      <span aria-label="Баланс ДКП" className="shrink-0 whitespace-nowrap tabular-nums">
         {balance ?? '—'} ДКП
       </span>
       {memberId ? (
@@ -207,10 +213,10 @@ export function HeaderIdentity({
           aria-label="Мой профиль"
           title={name}
           href={`/profiles/${encodeURIComponent(memberId)}`}
-          className="flex min-w-0 items-center gap-2 text-accent hover:underline"
+          className="flex min-w-0 items-center gap-2 text-accent hover:underline max-md:flex-1"
         >
-          <Avatar avatar={avatar} avatarColor={avatarColor} nickname={name} />
-          <span className="max-w-28 truncate">{name}</span>
+          <Avatar avatar={avatar} avatarColor={avatarColor} nickname={name} size="header" />
+          <span className="min-w-0 max-w-28 truncate max-md:max-w-none">{name}</span>
         </Link>
       ) : (
         <span>{name}</span>

@@ -1,6 +1,10 @@
 import type { ReactNode } from 'react';
 
-/** Шапка переносит навигацию и блок пользователя на узком экране. */
+/**
+ * Шапка переносит навигацию и блок пользователя на узком экране.
+ * На телефоне — два компактных ряда: герб, игровое время и тема; ниже —
+ * баланс, игрок, ранг и выход (этап 5, мобильная доводка).
+ */
 export function SiteHeader({
   navigation,
   children,
@@ -9,9 +13,13 @@ export function SiteHeader({
   children: ReactNode;
 }) {
   return (
-    <header className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 border-b border-line bg-surface py-3 pl-16 pr-4 md:px-6">
-      {navigation}
-      <div className="flex min-w-0 flex-wrap items-center gap-3">{children}</div>
+    <header className="sticky top-0 z-10 border-b border-line bg-surface px-4 md:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1.5 md:gap-4 md:py-3">
+        <div className="min-w-0 max-md:flex-1 max-md:pl-12">{navigation}</div>
+        <div className="contents md:flex md:min-w-0 md:flex-wrap md:items-center md:gap-3">
+          {children}
+        </div>
+      </div>
     </header>
   );
 }

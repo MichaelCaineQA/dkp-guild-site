@@ -58,7 +58,7 @@ export function Tabs<K extends string>({
             aria-selected={active}
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(item.key)}
-            className={`whitespace-nowrap rounded-lg px-4 py-1.5 text-sm font-medium ${
+            className={`min-h-11 whitespace-nowrap rounded-lg px-4 py-1.5 text-sm font-medium md:min-h-0 ${
               active
                 ? 'bg-accent text-accent-contrast'
                 : 'border border-line bg-surface text-primary hover:bg-surface-muted'

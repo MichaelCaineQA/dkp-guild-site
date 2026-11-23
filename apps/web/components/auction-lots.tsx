@@ -426,7 +426,6 @@ function BidForm({
     if (min !== lastMin.current) {
       lastMin.current = min;
       setAmount(String(min));
-      setPlaced(false);
     }
   }, [min]);
 

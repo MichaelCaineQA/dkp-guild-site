@@ -9,9 +9,12 @@ const nextConfig: NextConfig = {
   transpilePackages: ['@dkp/shared'],
   // В dev нет Caddy: сохраняем same-origin /api через прокси Next.
   // В production этот маршрут обслуживает Caddy напрямую, в том числе WebSocket.
+  // DEV_API_ORIGIN — адрес API для прокси, когда он поднят не на :3001
+  // (параллельные локальные стенды на своих портах).
   async rewrites() {
+    const api = process.env.DEV_API_ORIGIN ?? 'http://localhost:3001';
     return process.env.NODE_ENV === 'development'
-      ? [{ source: '/api/:path*', destination: 'http://localhost:3001/:path*' }]
+      ? [{ source: '/api/:path*', destination: `${api}/:path*` }]
       : [];
   },
   // Монорепо: трассировка зависимостей ведётся от корня репозитория
