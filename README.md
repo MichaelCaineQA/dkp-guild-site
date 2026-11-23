@@ -300,6 +300,23 @@ production-базу или production-секреты.
 24 часа при успешных ежедневных копировании на сервере и скачивании.
 При выключенном ПК внешний RPO растёт до следующего успешного запуска.
 
+Production на том же VPS создаёт копию ежедневно в 03:47 МСК в
+`/opt/dkp-production/backups`. Чтобы получать проверенную копию за пределами
+VPS, установите отдельное задание
+`powershell -File scripts/install-local-backup.ps1 -Environment production`.
+Оно скачивает комплект в `%USERPROFILE%\Backups\dkp-production` в 10:00.
+Каталог доступен владельцу Windows и SYSTEM, комплект хранится 30 дней.
+Задание берёт отметку последней успешной копии из
+`/var/log/dkp-production-backup.log`, который пишет production-cron.
+Оба файла сверяются по SHA-256 до публикации `verified.json`.
+Копия старше 26 часов, сбой SSH или несовпадение хэша дают ненулевой
+результат задания и статус `ERROR` в `last-run.txt`.
+На компьютере владельца проверяйте `LastTaskResult` и время последней
+успешной записи через `Get-ScheduledTaskInfo -TaskName 'DKP production backup'`.
+При потере VPS возьмите последний проверенный комплект из этого каталога.
+В нём находятся `database.dump`, `screenshots.tar.gz` и `verified.json`
+с контрольными суммами и SHA API на момент скачивания.
+
 Контрольное восстановление на staging:
 `python3 scripts/verify-restore.py /opt/dkp-guild-site/backups/<UTC-время>`.
 Скрипт восстанавливает БД и файлы в изолированных Docker-контейнерах без
