@@ -93,6 +93,47 @@ export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
             content = absence.content;
             channelId = absence.channelId;
           }
+          if (item.kind === 'LOT_RESULT') {
+            await tx.$queryRaw`SELECT key FROM "Setting" WHERE key = 'discord.channels' FOR SHARE`;
+            const setting = await tx.setting.findUnique({ where: { key: 'discord.channels' } });
+            const value = setting?.value;
+            const channels =
+              value &&
+              typeof value === 'object' &&
+              !Array.isArray(value) &&
+              value.guildId === item.guildId
+                ? value.channels
+                : null;
+            const currentChannel =
+              channels && typeof channels === 'object' && !Array.isArray(channels)
+                ? channels.lots
+                : null;
+            if (typeof currentChannel !== 'string' || !/^\d+$/.test(currentChannel)) {
+              await tx.discordNotification.update({
+                where: { id: item.id },
+                data: { status: 'CANCELLED' },
+              });
+              return;
+            }
+            channelId = currentChannel;
+            if (item.predecessorId) {
+              const previous = await tx.discordNotification.findUnique({
+                where: { id: item.predecessorId },
+                select: { status: true, availableAt: true },
+              });
+              if (previous?.status === 'PENDING') {
+                await tx.discordNotification.update({
+                  where: { id: item.id },
+                  data: {
+                    availableAt: new Date(
+                      Math.max(now.getTime() + 5000, previous.availableAt.getTime()),
+                    ),
+                  },
+                });
+                return;
+              }
+            }
+          }
 
           let status = 'PENDING';
           let error = 'NETWORK';

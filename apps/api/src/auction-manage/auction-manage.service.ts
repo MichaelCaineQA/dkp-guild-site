@@ -22,6 +22,8 @@ import {
   type LotStatus,
 } from '@dkp/shared';
 import { serializable } from '../prisma/serializable';
+import type { Prisma } from '@prisma/client';
+import { enqueueLotResult } from '../discord-notifications/lot-result-notifications';
 import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction-events';
 
 interface StoredBid {
@@ -228,6 +230,10 @@ export class AuctionManageService {
         `Лот «${auction.lootDrop.item.name}» отменён`,
         parsed.data.comment,
       );
+      await enqueueLotResult(tx as unknown as Prisma.TransactionClient, auctionId, 'cancel', {
+        kind: 'cancelled',
+        itemName: auction.lootDrop.item.name,
+      });
       return this.result(updated, null, null, false);
     });
     // Отмена — событие закрытия после фиксации (issue #97).
@@ -266,6 +272,10 @@ export class AuctionManageService {
           `Лот «${itemName}» завершён досрочно без ставок — предмет остаётся в гильдии`,
           parsed.data.comment,
         );
+        await enqueueLotResult(tx as unknown as Prisma.TransactionClient, auctionId, 'close', {
+          kind: 'no-winner',
+          itemName,
+        });
         return this.result({ ...auction, status: 'CLOSED' }, null, null, false);
       }
 
@@ -294,6 +304,13 @@ export class AuctionManageService {
         `Лот «${itemName}» завершён досрочно: победитель ${top.member.nickname}, списано ${top.fullCost} ДКП`,
         parsed.data.comment,
       );
+      await enqueueLotResult(tx as unknown as Prisma.TransactionClient, auctionId, 'close', {
+        kind: 'awarded',
+        itemName,
+        winnerName: top.member.nickname,
+        price: top.fullCost,
+        correction: false,
+      });
       return this.result(
         { ...auction, status: 'CLOSED' },
         {
@@ -441,6 +458,18 @@ export class AuctionManageService {
             (auction.status === 'OPEN' ? ' (торги остановлены)' : '') +
             (refund ? `; прежнему победителю возвращено ${refund.amount} ДКП` : ''),
           input.comment,
+        );
+        await enqueueLotResult(
+          tx as unknown as Prisma.TransactionClient,
+          auctionId,
+          `assign:${input.requestId}`,
+          {
+            kind: 'awarded',
+            itemName,
+            winnerName: winner.nickname,
+            price: input.price,
+            correction: auction.status !== 'OPEN',
+          },
         );
         return this.result(
           { ...auction, status: 'CLOSED' },

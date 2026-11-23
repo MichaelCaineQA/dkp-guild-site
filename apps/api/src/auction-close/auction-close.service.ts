@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { lotExpired, winningBid, type LotCloseResult } from '@dkp/shared';
 import { serializable } from '../prisma/serializable';
+import type { Prisma } from '@prisma/client';
+import { enqueueLotResult } from '../discord-notifications/lot-result-notifications';
 import { NOOP_AUCTION_EVENTS, type AuctionEventsPort } from '../realtime/auction-events';
 
 interface StoredBid {
@@ -186,6 +188,10 @@ export class AuctionCloseService {
             comment: `Лот «${itemName}» завершён без ставок — предмет остаётся в гильдии`,
           },
         });
+        await enqueueLotResult(tx as unknown as Prisma.TransactionClient, auctionId, 'close', {
+          kind: 'no-winner',
+          itemName,
+        });
         return { closed: true, skipped: false, winner: null };
       }
 
@@ -220,6 +226,13 @@ export class AuctionCloseService {
             `списано ${top.fullCost} ДКП` +
             priceModifiers(top),
         },
+      });
+      await enqueueLotResult(tx as unknown as Prisma.TransactionClient, auctionId, 'close', {
+        kind: 'awarded',
+        itemName,
+        winnerName: top.member.nickname,
+        price: top.fullCost,
+        correction: false,
       });
       return {
         closed: true,
