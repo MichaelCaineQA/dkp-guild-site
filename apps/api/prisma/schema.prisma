@@ -23,6 +23,9 @@ model DiscordNotification {
   guildId     String?
   channelId   String
   content     String
+  kind        String   @default("MESSAGE")
+  eventIds    String[] @default([])
+  deliveryPart Int     @default(0)
   status      String   @default("PENDING")
   attempts    Int      @default(0)
   availableAt DateTime @default(now())

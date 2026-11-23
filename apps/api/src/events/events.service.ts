@@ -28,6 +28,8 @@ import {
 } from '@dkp/shared';
 import type { AuditWriter } from '../members/members.service';
 import { serializable } from '../prisma/serializable';
+import type { Prisma } from '@prisma/client';
+import { enqueueEventAnnouncement } from '../discord-notifications/event-announcements';
 
 /** Строка списка/календаря. */
 export interface EventRow extends EventScopeInput {
@@ -107,6 +109,7 @@ export interface EventsDb {
     >;
     create(args: {
       data: {
+        id?: string;
         scope: EventScopeInput['scope'];
         kpId: string | null;
         packId: string | null;
@@ -237,6 +240,13 @@ export class EventsService {
         },
       });
       await this.audit(actor, 'EVENT_CREATE', created.id, this.describeCreated(input), tx.auditLog);
+      if (created.startsAt > new Date()) {
+        await enqueueEventAnnouncement(
+          tx as unknown as Prisma.TransactionClient,
+          `event:${created.id}`,
+          [created.id],
+        );
+      }
       return { id: created.id };
     });
   }
@@ -265,21 +275,21 @@ export class EventsService {
     const seriesId = `series-${randomUUID()}`;
     return serializable(this.db, async (tx) => {
       const scope = await this.validateScope(input, tx);
-      const result = await tx.event.createMany({
-        data: slots.map((slot) => ({
-          ...scope,
-          ...slot,
-          seriesId,
-          name: input.name,
-          eventTypeId: input.eventTypeId,
-          mode: input.mode,
-          dkpReward: input.dkpReward,
-          raidLeadId: input.raidLeadId,
-          creatorId: actor.memberId,
-          place: input.place ?? null,
-          notes: input.notes ?? null,
-        })),
-      });
+      const rows = slots.map((slot) => ({
+        id: randomUUID(),
+        ...scope,
+        ...slot,
+        seriesId,
+        name: input.name,
+        eventTypeId: input.eventTypeId,
+        mode: input.mode,
+        dkpReward: input.dkpReward,
+        raidLeadId: input.raidLeadId,
+        creatorId: actor.memberId,
+        place: input.place ?? null,
+        notes: input.notes ?? null,
+      }));
+      const result = await tx.event.createMany({ data: rows });
       await this.audit(
         actor,
         'EVENT_SERIES_CREATE',
@@ -287,6 +297,11 @@ export class EventsService {
         `Создана серия из ${result.count} ивентов до ${input.until.toISOString()}`,
         tx.auditLog,
         'EventSeries',
+      );
+      await enqueueEventAnnouncement(
+        tx as unknown as Prisma.TransactionClient,
+        `series:${seriesId}`,
+        rows.filter((row) => row.startsAt > new Date()).map((row) => row.id),
       );
       return { seriesId, created: result.count };
     });

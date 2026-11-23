@@ -106,7 +106,7 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
           scope: data.scope,
           kpId: data.kpId,
           packId: data.packId,
-          id: `e-${events.length + 1}`,
+          id: data.id ?? `e-${events.length + 1}`,
           name: data.name,
           eventTypeId: data.eventTypeId,
           mode: data.mode,
