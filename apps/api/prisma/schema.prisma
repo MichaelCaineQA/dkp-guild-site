@@ -26,6 +26,7 @@ model DiscordNotification {
   kind        String   @default("MESSAGE")
   eventIds    String[] @default([])
   subjectId   String?
+  predecessorId String?
   deliveryPart Int     @default(0)
   status      String   @default("PENDING")
   attempts    Int      @default(0)
@@ -40,6 +41,12 @@ model DiscordNotification {
 model DiscordDeliveryGate {
   id       Int      @id
   resumeAt DateTime @default(now())
+}
+
+model DiscordLotCursor {
+  /// Composite key: Discord guild ID followed by auction ID.
+  auctionId String @id
+  lastNotificationId String?
 }
 
 enum Rank {
