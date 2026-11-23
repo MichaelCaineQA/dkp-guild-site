@@ -15,17 +15,31 @@ $backupRoot = [IO.Path]::GetFullPath($Destination)
 New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
 # Production содержит пользовательские данные. Ограничиваем доступ до загрузки.
 if ($production) {
-    $acl = [Security.AccessControl.DirectorySecurity]::new()
-    $acl.SetAccessRuleProtection($true, $false)
     $account = [Security.Principal.WindowsIdentity]::GetCurrent().User
     $system = [Security.Principal.SecurityIdentifier]::new('S-1-5-18')
-    $acl.SetOwner($account)
-    foreach ($identity in @($account, $system)) {
-        $rule = [Security.AccessControl.FileSystemAccessRule]::new(
-            $identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
-        $acl.AddAccessRule($rule)
+    $acl = Get-Acl -LiteralPath $backupRoot
+    $rules = $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])
+    $expected = @($account.Value, $system.Value)
+    $matching = @($rules | Where-Object {
+        $_.IdentityReference.Value -in $expected -and
+        $_.FileSystemRights -eq 'FullControl' -and
+        $_.AccessControlType -eq 'Allow' -and
+        $_.InheritanceFlags -eq 'ContainerInherit,ObjectInherit' -and
+        $_.PropagationFlags -eq 'None'
+    })
+    if (!$acl.AreAccessRulesProtected -or $rules.Count -ne 2 -or
+        @($matching.IdentityReference.Value | Select-Object -Unique).Count -ne 2) {
+        $acl.SetAccessRuleProtection($true, $false)
+        $acl.PurgeAccessRules($account)
+        $acl.PurgeAccessRules($system)
+        foreach ($rule in $rules) { $acl.PurgeAccessRules($rule.IdentityReference) }
+        foreach ($identity in @($account, $system)) {
+            $rule = [Security.AccessControl.FileSystemAccessRule]::new(
+                $identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+            $acl.AddAccessRule($rule)
+        }
+        Set-Acl -LiteralPath $backupRoot -AclObject $acl
     }
-    Set-Acl -LiteralPath $backupRoot -AclObject $acl
 }
 
 function Get-BackupDate([string]$Value) {
@@ -36,8 +50,10 @@ function Get-BackupDate([string]$Value) {
 
 try {
     # Скачивание через существующий SSH alias: ключ и секреты не копируются в скрипт.
-    $stamp = & ssh @sshOptions dkp-stage "flock -s -w 60 /run/lock/dkp-deploy.lock find '$source' -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | grep -E '^[0-9]{8}T[0-9]{6}Z$' | sort | tail -1"
-    if ($LASTEXITCODE -ne 0 -or $stamp -notmatch '^\d{8}T\d{6}Z$') { throw 'No valid server backup' }
+    $stamps = & ssh @sshOptions dkp-stage "flock -s -w 40 /run/lock/dkp-deploy.lock find '$source' -mindepth 1 -maxdepth 1 -type d -printf '%f\n'"
+    if ($LASTEXITCODE -ne 0) { throw 'Could not list server backups (SSH or deploy lock)' }
+    $stamp = $stamps | Where-Object { $_ -match '^\d{8}T\d{6}Z$' } | Sort-Object | Select-Object -Last 1
+    if (!$stamp) { throw 'No valid server backup' }
     if ($production -and (Get-BackupDate $stamp) -lt [DateTime]::UtcNow.AddHours(-26)) {
         throw "Latest production backup is older than 26 hours: $stamp"
     }
