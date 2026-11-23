@@ -160,6 +160,40 @@ describe('аудит через HTTP: права, фильтры, ровно о�
     absenceLookup.mockRestore();
   });
 
+  it('полный журнал офицера скрывает комментарий к чужому GS и идентификатор скриншота', async () => {
+    const rows = [
+      {
+        id: 'log-gs',
+        actorMemberId: 'm2',
+        action: 'GEAR_SCORE_UPDATE',
+        entityType: 'Member',
+        entityId: 'm2',
+        comment: 'GS: 12345',
+        createdAt: new Date('2026-11-06T12:00:00Z'),
+        actor: { nickname: 'Игрок' },
+      },
+      {
+        id: 'log-file',
+        actorMemberId: 'm2',
+        action: 'SCREENSHOT_UPLOAD',
+        entityType: 'Screenshot',
+        entityId: 'private-file',
+        comment: 'Загружен скриншот',
+        createdAt: new Date('2026-11-06T12:00:00Z'),
+        actor: { nickname: 'Игрок' },
+      },
+    ];
+    findMany.mockResolvedValueOnce(rows).mockResolvedValueOnce(rows);
+    const { entries } = (await (await fetch(`${url}/audit`)).json()) as { entries: unknown[] };
+    expect(entries).toMatchObject([
+      { action: 'GEAR_SCORE_UPDATE', entityId: 'm2', comment: null },
+      { action: 'SCREENSHOT_UPLOAD', entityId: '', entityName: null, comment: null },
+    ]);
+    actor!.rank = 'GUILD_LEADER';
+    const leader = (await (await fetch(`${url}/audit`)).json()) as { entries: unknown[] };
+    expect(leader.entries).toMatchObject([{ comment: 'GS: 12345' }, { entityId: 'private-file' }]);
+  });
+
   it('человекочитаемые названия: entityName по типу сущности, имена вместо id в комментарии', async () => {
     const response = await fetch(`${url}/audit`);
     expect(response.status).toBe(200);

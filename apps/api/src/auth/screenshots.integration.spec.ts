@@ -26,6 +26,7 @@ const db = {
     findFirst: jest.fn(
       async (): Promise<{
         pack: { leaderId: string | null; kp: { leaderId: string | null } };
+        gsRecords: { screenshotIds: string[] }[];
       } | null> => null,
     ),
     findUnique: jest.fn(async () => ({ blockedAt: null })),
@@ -147,11 +148,36 @@ describe('Приватные скриншоты через HTTP', () => {
     };
     db.member.findFirst.mockResolvedValue({
       pack: { leaderId: 'leader-member', kp: { leaderId: null } },
+      gsRecords: [{ screenshotIds: [id] }],
     });
     expect((await fetch(`${url}/screenshots/${id}`)).status).toBe(404);
     expect((await fetch(`${url}/screenshots/${id}?packId=own`)).status).toBe(200);
+    expect((await fetch(`${url}/screenshots/${id}?kpId=own-kp`)).status).toBe(404);
     db.member.findFirst.mockResolvedValue(null);
     expect((await fetch(`${url}/screenshots/${id}?packId=other`)).status).toBe(404);
+  });
+  it('лидер КП видит актуальный файл в своей КП, а прежний файл остаётся приватным', async () => {
+    const previous = (await (await upload()).json()) as { id: string };
+    const current = (await (await upload()).json()) as { id: string };
+    actor = {
+      userId: 'kp-leader',
+      username: 'Лидер КП',
+      rank: 'MEMBER',
+      memberId: 'kp-leader-member',
+      isAdmin: false,
+      blocked: false,
+    };
+    db.member.findFirst.mockResolvedValue({
+      pack: { leaderId: null, kp: { leaderId: 'kp-leader-member' } },
+      gsRecords: [{ screenshotIds: [current.id] }],
+    });
+    expect((await fetch(`${url}/screenshots/${current.id}?kpId=own-kp`)).status).toBe(200);
+    expect((await fetch(`${url}/screenshots/${current.id}?packId=pack-in-own-kp`)).status).toBe(
+      200,
+    );
+    expect((await fetch(`${url}/screenshots/${previous.id}?kpId=own-kp`)).status).toBe(404);
+    actor.blocked = true;
+    expect((await fetch(`${url}/screenshots/${current.id}?kpId=own-kp`)).status).toBe(403);
   });
   it('не доверяет расширению и MIME; SVG и пустой файл отклоняются', async () => {
     for (const [data, type] of [
