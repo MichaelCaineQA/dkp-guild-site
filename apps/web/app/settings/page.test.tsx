@@ -23,6 +23,7 @@ function mockSession(user: Record<string, unknown> | null) {
 }
 
 const SETTINGS_FIXTURE = {
+  'discord.reminderMinutes': 15,
   'checkin.generateBeforeStartSec': 180,
   'checkin.windowSec': 180,
   'checkin.attempts': 1,

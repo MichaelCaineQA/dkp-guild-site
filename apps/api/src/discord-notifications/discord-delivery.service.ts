@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { renderEventAnnouncement } from './render-event-announcement';
+import { renderEventReminder } from './render-event-reminder';
 
 @Injectable()
 export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
@@ -21,9 +22,10 @@ export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
   }
 
-  async run(): Promise<void> {
+  async run(at?: Date): Promise<void> {
     const token = process.env.DISCORD_BOT_TOKEN;
     const guildId = process.env.DISCORD_GUILD_ID;
+    const now = at ?? new Date();
     if (this.running || !token || !guildId) return;
     this.running = true;
     try {
@@ -34,14 +36,15 @@ export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
           const gate = await tx.$queryRaw<{ resumeAt: Date }[]>`
           SELECT "resumeAt" FROM "DiscordDeliveryGate" WHERE id = 1
           FOR UPDATE SKIP LOCKED`;
-          if (!gate.length || gate[0].resumeAt.getTime() > Date.now()) return;
+          if (!gate.length || gate[0].resumeAt.getTime() > now.getTime()) return;
           const item = await tx.discordNotification.findFirst({
-            where: { guildId, status: 'PENDING', availableAt: { lte: new Date() } },
+            where: { guildId, status: 'PENDING', availableAt: { lte: now } },
             orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
           });
           if (!item) return;
 
           let content = item.content;
+          let channelId = item.channelId;
           let remaining: string[] = [];
           if (item.kind === 'EVENT_ANNOUNCEMENT') {
             const rendered = await renderEventAnnouncement(tx, item);
@@ -55,6 +58,28 @@ export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
             }
             content = rendered.content;
           }
+          if (item.kind === 'EVENT_REMINDER') {
+            const reminder = await renderEventReminder(tx, item, at);
+            if (reminder.kind === 'cancel') {
+              await tx.discordNotification.update({
+                where: { id: item.id },
+                data: { status: 'CANCELLED' },
+              });
+              return;
+            }
+            if (reminder.kind === 'defer') {
+              await tx.discordNotification.update({
+                where: { id: item.id },
+                data: {
+                  availableAt: reminder.until,
+                  lastError: reminder.reason,
+                },
+              });
+              return;
+            }
+            content = reminder.content;
+            channelId = reminder.channelId;
+          }
 
           let status = 'PENDING';
           let error = 'NETWORK';
@@ -62,7 +87,7 @@ export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
           let delayMs = Math.min(300000, 1000 * 2 ** Math.min(attempts, 8));
           try {
             const response = await fetch(
-              `https://discord.com/api/v10/channels/${item.channelId}/messages`,
+              `https://discord.com/api/v10/channels/${channelId}/messages`,
               {
                 method: 'POST',
                 headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
@@ -96,7 +121,7 @@ export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
               );
               await tx.discordDeliveryGate.update({
                 where: { id: 1 },
-                data: { resumeAt: new Date(Date.now() + delayMs) },
+                data: { resumeAt: new Date((at ?? new Date()).getTime() + delayMs) },
               });
             } else if (response.status >= 500 || response.status === 408) {
               error = `HTTP_${response.status}`;
@@ -111,12 +136,14 @@ export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
             where: { id: item.id },
             data: {
               status: status === 'SENT' && remaining.length ? 'PENDING' : status,
+              channelId,
               attempts: status === 'SENT' && remaining.length ? 0 : attempts,
               lastError: error || null,
               availableAt: new Date(
-                Date.now() + (status === 'SENT' && remaining.length ? 5000 : delayMs),
+                (at ?? new Date()).getTime() +
+                  (status === 'SENT' && remaining.length ? 5000 : delayMs),
               ),
-              sentAt: status === 'SENT' && !remaining.length ? new Date() : null,
+              sentAt: status === 'SENT' && !remaining.length ? (at ?? new Date()) : null,
               ...(status === 'SENT' && item.kind === 'EVENT_ANNOUNCEMENT'
                 ? { eventIds: remaining, deliveryPart: item.deliveryPart + 1 }
                 : {}),
