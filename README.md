@@ -246,11 +246,11 @@ Redirect `https://suneclipse.ru/api/auth/discord/callback`; без OAuth дос�
 При переходе существующего standalone-стенда добавьте это поле явно.
 В env двух стендов задайте уникальные upstream-алиасы:
 
-| Поле | Stage | Production |
-|---|---|---|
+| Поле                   | Stage            | Production       |
+| ---------------------- | ---------------- | ---------------- |
 | `COMPOSE_PROJECT_NAME` | `dkp-guild-site` | `dkp-production` |
-| `API_UPSTREAM` | `staging-api` | `production-api` |
-| `WEB_UPSTREAM` | `staging-web` | `production-web` |
+| `API_UPSTREAM`         | `staging-api`    | `production-api` |
+| `WEB_UPSTREAM`         | `staging-web`    | `production-web` |
 
 Порты 80/443 занимает отдельный проект `dkp-edge`. Файлы
 `docker-compose.edge.yml` и `Caddyfile.edge` размещаются в `/opt/dkp-edge`;
@@ -271,6 +271,53 @@ docker compose -f docker-compose.edge.yml up -d --wait
 Проверьте `/api/health` и HTTPS обоих сайтов; SHA должен соответствовать
 выбранному для каждого стенда коммиту. GitHub variable `DEPLOY_PATH`
 production должна быть `/opt/dkp-production`, staging — `/opt/dkp-guild-site`.
+
+### Discord-бот уведомлений
+
+Токен бота задаётся отдельно от OAuth-пары `DISCORD_CLIENT_ID` /
+`DISCORD_CLIENT_SECRET`. Для production/stage добавьте `DISCORD_BOT_TOKEN`
+в соответствующий `.env.production`: используйте разные боты и токены для
+stage и production. Installer читает `DKP_DISCORD_BOT_TOKEN`
+из своего env-файла и передаёт его API как `DISCORD_BOT_TOKEN`. После изменения
+пересоздайте API (`docker compose ... up -d --force-recreate api`). Токен
+не коммитьте и не публикуйте в логах. Пустое или отсутствующее значение
+отключает подключение бота; для отключения очистите переменную и пересоздайте
+API.
+
+Создайте приложение и bot в Discord Developer Portal, скопируйте bot token,
+затем добавьте бота на сервер гильдии с минимальными правами в целевом канале:
+**View Channel** и **Send Messages**. Не выдавайте Administrator. Если бот
+не видит канал, проверьте разрешения канала и настроенный для него ID.
+
+Outbox-модель `DiscordNotification` хранит очередь (поля `status`,
+`attempts`, `availableAt`, `lastError`, `sentAt`). При проблемах сначала
+проверьте, включён ли отправитель в используемой версии, затем логи API
+(`docker compose logs --since=30m api`) и доступность Discord/канала. Для
+диагностики записей можно выполнить на сервере:
+
+```sql
+SELECT status, count(*) AS count, min("createdAt") AS oldest,
+       max("lastError") AS last_error
+FROM "DiscordNotification"
+GROUP BY status
+ORDER BY status;
+```
+
+Имена полей в БД — quoted camelCase. Не сбрасывайте статус и не создавайте
+копии записей для ручного повтора: если Discord принял сообщение, но ответ
+потерялся, повторная отправка может дать дубль. Сверьте канал и время сообщения
+перед любым повтором; неоднозначный результат доставки требует учитывать риск
+дубликата. Очередь сама по себе не означает, что все типы уведомлений или
+пользовательский интерфейс настройки уже доступны, а наличие записи не
+подтверждает фактическую доставку.
+
+`PENDING` означает ожидание или отложенный повтор, `SENT` — подтверждённый
+ответ Discord, `FAILED` — постоянная ошибка (например, `HTTP_403`: проверить
+права бота). Ошибки и сетевые ответы не записываются в журнал целиком.
+При 429 общая пауза сохраняется в `DiscordDeliveryGate`; после сбоя сети
+отправка повторяется с тем же nonce. Discord устраняет повторы по nonce
+лишь в течение ограниченного времени, поэтому доставка не гарантирует
+отсутствие дублей после долгого сбоя или потери ответа.
 
 Установите отдельное ежедневное расписание бэкапа production; используйте
 общую блокировку `/run/lock/dkp-deploy.lock` для cron обоих стендов, чтобы
@@ -367,17 +414,17 @@ PostgreSQL и скриншоты во внутренней Docker-сети бе�
    `/srv/dkp-backups/dkp-guild-site`, и SSH-доступ к нему по ключу.
 2. Настройте и проверьте `known_hosts` и SSH-ключ **root**, поскольку cron
    ниже выполняется от root. Проверьте `sudo ssh -o BatchMode=yes
-   dkp-backup@backup.example.net true`; ключ сервера сверяйте отдельно.
+dkp-backup@backup.example.net true`; ключ сервера сверяйте отдельно.
 3. Скопируйте `scripts/backup-prod.cron` во временный файл, укажите реальный
    абсолютный путь checkout (в примере `/opt/dkp-guild-site`) и
    `BACKUP_REMOTE`. Установите его: `sudo install -o root -g root -m 644
-   <файл> /etc/cron.d/dkp-guild-backup`, затем `sudo systemctl enable --now
-   cron`. Копия запускается ежедневно в 03:00 **по часовому поясу хоста**;
+<файл> /etc/cron.d/dkp-guild-backup`, затем `sudo systemctl enable --now
+cron`. Копия запускается ежедневно в 03:00 **по часовому поясу хоста**;
    `timedatectl` показывает его. `flock` предотвращает наложение
    cron-запусков.
 4. До ожидания расписания выполните вручную:
    `sudo env BACKUP_REMOTE=dkp-backup@backup.example.net:/srv/dkp-backups/dkp-guild-site
-   sh /opt/dkp-guild-site/scripts/backup-prod.sh`. Убедитесь, что оба файла
+sh /opt/dkp-guild-site/scripts/backup-prod.sh`. Убедитесь, что оба файла
    появились на другом сервере. Проверяйте код возврата и
    `/var/log/dkp-guild-backup.log`; настройте оповещение при ошибках
    и ротацию этого лога средствами хоста.
@@ -483,15 +530,15 @@ NestJS, схемы запросов — из общей Zod-валидации; 
 
 ## Команды
 
-| Команда | Что делает |
-|---|---|
-| `pnpm site:up` / `pnpm site:down` / `pnpm site:logs` | весь сайт в Docker / остановить / логи |
-| `pnpm dev` | dev-режим web + api |
-| `pnpm build` | сборка всех пакетов |
-| `pnpm lint` / `pnpm typecheck` / `pnpm test` | проверки по всему монорепо |
-| `pnpm format` | prettier |
+| Команда                                                 | Что делает                                  |
+| ------------------------------------------------------- | ------------------------------------------- |
+| `pnpm site:up` / `pnpm site:down` / `pnpm site:logs`    | весь сайт в Docker / остановить / логи      |
+| `pnpm dev`                                              | dev-режим web + api                         |
+| `pnpm build`                                            | сборка всех пакетов                         |
+| `pnpm lint` / `pnpm typecheck` / `pnpm test`            | проверки по всему монорепо                  |
+| `pnpm format`                                           | prettier                                    |
 | `pnpm db:generate` / `pnpm db:migrate` / `pnpm db:seed` | Prisma-клиент / миграции / стартовые данные |
-| `pnpm db:seed:test` | тестовые пользователи для e2e (см. ниже) |
+| `pnpm db:seed:test`                                     | тестовые пользователи для e2e (см. ниже)    |
 
 ## Тестирование
 

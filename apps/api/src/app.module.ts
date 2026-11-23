@@ -24,6 +24,7 @@ import { OrgModule } from './org/org.module';
 import { StatisticsModule } from './statistics/statistics.module';
 import { APP_FILTER } from '@nestjs/core';
 import { ValidationFilter } from './validation.filter';
+import { DiscordNotificationsModule } from './discord-notifications/discord-notifications.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { ValidationFilter } from './validation.filter';
     AuctionsModule,
     OrgModule,
     StatisticsModule,
+    DiscordNotificationsModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_FILTER, useClass: ValidationFilter }],
