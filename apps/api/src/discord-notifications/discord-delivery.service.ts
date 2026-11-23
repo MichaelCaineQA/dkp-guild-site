@@ -11,7 +11,7 @@ export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly db: PrismaService) {}
 
   onModuleInit(): void {
-    if (!process.env.DISCORD_BOT_TOKEN) return;
+    if (!process.env.DISCORD_BOT_TOKEN || !process.env.DISCORD_GUILD_ID) return;
     this.timer = setInterval(() => void this.run(), 5000);
     void this.run();
   }
@@ -22,7 +22,8 @@ export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
 
   async run(): Promise<void> {
     const token = process.env.DISCORD_BOT_TOKEN;
-    if (this.running || !token) return;
+    const guildId = process.env.DISCORD_GUILD_ID;
+    if (this.running || !token || !guildId) return;
     this.running = true;
     try {
       await this.db.$transaction(
@@ -34,7 +35,7 @@ export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
           FOR UPDATE SKIP LOCKED`;
           if (!gate.length || gate[0].resumeAt.getTime() > Date.now()) return;
           const item = await tx.discordNotification.findFirst({
-            where: { status: 'PENDING', availableAt: { lte: new Date() } },
+            where: { guildId, status: 'PENDING', availableAt: { lte: new Date() } },
             orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
           });
           if (!item) return;

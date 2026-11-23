@@ -658,6 +658,20 @@ export const schemas: Record<string, SchemaObject> = {
     version: num,
     createdAt: date,
   }),
+  DiscordChannels: object({
+    announcements: nullable(str),
+    reminders: nullable(str),
+    absences: nullable(str),
+    lots: nullable(str),
+  }),
+  DiscordSettings: object({ channels: ref('DiscordChannels'), configured: { type: 'boolean' } }),
+  DiscordSettingsUpdate: object({
+    channels: ref('DiscordChannels'),
+    absenceAccessConfirmed: { type: 'boolean' },
+    reason: str,
+  }),
+  DiscordTest: object({ id: str }),
+  DiscordTestStatus: object({ status: str, lastError: nullable(str) }),
   Settings: object(settings),
   UpdateSettings: { ...object(settings, []), additionalProperties: false },
   GuildGameTime: object({
