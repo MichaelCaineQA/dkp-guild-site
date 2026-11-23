@@ -1,4 +1,6 @@
 import { serializable } from '../prisma/serializable';
+import type { Prisma } from '@prisma/client';
+import { enqueueAbsenceNotification } from '../discord-notifications/absence-notifications';
 import {
   ConflictException,
   ForbiddenException,
@@ -302,6 +304,7 @@ export class AbsencesService {
           comment: 'Подана заявка на отсутствие',
         },
       });
+      await enqueueAbsenceNotification(tx as unknown as Prisma.TransactionClient, created.id);
       return created;
     });
     return created;

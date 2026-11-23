@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { renderEventAnnouncement } from './render-event-announcement';
 import { renderEventReminder } from './render-event-reminder';
+import { renderAbsenceNotification } from './render-absence-notification';
 
 @Injectable()
 export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
@@ -79,6 +80,18 @@ export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
             }
             content = reminder.content;
             channelId = reminder.channelId;
+          }
+          if (item.kind === 'ABSENCE_CREATED') {
+            const absence = await renderAbsenceNotification(tx, item);
+            if (!absence) {
+              await tx.discordNotification.update({
+                where: { id: item.id },
+                data: { status: 'CANCELLED' },
+              });
+              return;
+            }
+            content = absence.content;
+            channelId = absence.channelId;
           }
 
           let status = 'PENDING';

@@ -25,6 +25,7 @@ model DiscordNotification {
   content     String
   kind        String   @default("MESSAGE")
   eventIds    String[] @default([])
+  subjectId   String?
   deliveryPart Int     @default(0)
   status      String   @default("PENDING")
   attempts    Int      @default(0)
