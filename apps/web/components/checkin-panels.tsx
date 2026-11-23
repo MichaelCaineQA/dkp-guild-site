@@ -18,7 +18,10 @@ interface PlayerCheckInView {
 export function CheckInPanel({ eventId }: { eventId: string }) {
   const [view, setView] = useState<PlayerCheckInView | null>(null);
   const [picked, setPicked] = useState<string | null>(null); // выбор до модалки
-  const [result, setResult] = useState<'PASSED' | 'FAILED' | null>(null);
+  const [result, setResult] = useState<{
+    phase: PlayerCheckInView['phase'];
+    status: 'PASSED' | 'FAILED';
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -40,7 +43,7 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
   }, [load]);
 
   const confirm = async () => {
-    if (picked === null) {
+    if (picked === null || !view) {
       return;
     }
     setBusy(true);
@@ -49,7 +52,7 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
         method: 'POST',
         body: JSON.stringify({ code: picked }),
       });
-      setResult(data.result);
+      setResult({ phase: view.phase, status: data.result });
       if (data.result === 'PASSED') window.dispatchEvent(new Event('dkp:changed'));
       setPicked(null);
       await load();
@@ -73,10 +76,10 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
 
   const phaseLabel = view.phase === 'START' ? 'старт' : 'финал';
 
-  if (result === 'PASSED') {
+  if (result?.phase === view.phase && result.status === 'PASSED') {
     return <p className="text-sm text-success">✅ Отмечены ({phaseLabel}) — ДКП начислены</p>;
   }
-  if (result === 'FAILED') {
+  if (result?.phase === view.phase && result.status === 'FAILED') {
     return (
       <p className="text-sm text-danger">
         ❌ Неверный код: попытка потрачена, дальше — только ручная отметка РЛ
@@ -107,7 +110,10 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
             key={code}
             type="button"
             disabled={busy}
-            onClick={() => setPicked(code)}
+            onClick={(event) => {
+              event.currentTarget.focus({ preventScroll: true });
+              setPicked(code);
+            }}
             className="rounded-lg border border-line bg-surface px-4 py-2 text-lg font-semibold tabular-nums hover:bg-surface-muted"
           >
             {code}

@@ -9,6 +9,7 @@ import {
   Button,
   Card,
   ErrorText,
+  Field,
   Input,
   Select,
   Muted,
@@ -16,6 +17,7 @@ import {
   Page,
   PageHeader,
   SectionTitle,
+  Table,
 } from '../../components/ui';
 
 interface AbsenceRow {
@@ -222,13 +224,12 @@ function AbsenceForm({
       <Muted>
         События, до начала которых осталось меньше установленного срока, не попадут в заявку.
       </Muted>
-      <label>
-        Режим{' '}
-        <select value={mode} onChange={(e) => setMode(e.target.value as 'day' | 'interval')}>
+      <Field label="Режим">
+        <Select value={mode} onChange={(e) => setMode(e.target.value as 'day' | 'interval')}>
           <option value="day">Весь день</option>
           <option value="interval">Промежуток времени</option>
-        </select>
-      </label>
+        </Select>
+      </Field>
       <form
         className="flex flex-col gap-2 sm:flex-row sm:items-end"
         onSubmit={(e) => {
@@ -339,48 +340,38 @@ function AbsenceTable({
   }
 
   return (
-    <table className="w-full border-collapse text-sm">
+    <Table>
       <thead>
         <tr>
-          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">
-            Кто
-          </th>
-          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">
-            Период
-          </th>
-          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">
-            Причина
-          </th>
-          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">
-            Увидели
-          </th>
-          <th className="border-b border-line px-3 py-2 text-left font-semibold text-secondary">
-            Действия
-          </th>
+          <Table.Th>Кто</Table.Th>
+          <Table.Th>Период</Table.Th>
+          <Table.Th>Причина</Table.Th>
+          <Table.Th>Увидели</Table.Th>
+          <Table.Th>Действия</Table.Th>
         </tr>
       </thead>
       <tbody>
         {rows.map((row) => (
           <tr key={row.id}>
-            <td className="border-b border-line px-3 py-2">
+            <Table.Td>
               {row.memberName}
               {myMemberId && row.memberId === myMemberId && <Muted> (вы)</Muted>}
-            </td>
-            <td className="border-b border-line px-3 py-2">
+            </Table.Td>
+            <Table.Td>
               {row.eventName && <span className="block font-medium">{row.eventName}</span>}
               {row.allDay
                 ? `${new Date(row.dateFrom).toLocaleDateString('ru-RU')} — ${new Date(new Date(row.dateTo).getTime() - 1).toLocaleDateString('ru-RU')} (весь день)`
                 : `${new Date(row.dateFrom).toLocaleString('ru-RU')} — ${new Date(row.dateTo).toLocaleString('ru-RU')}`}
-            </td>
-            <td className="border-b border-line px-3 py-2">{row.reason || 'Без причины'}</td>
-            <td className="border-b border-line px-3 py-2">
+            </Table.Td>
+            <Table.Td className="break-words">{row.reason || 'Без причины'}</Table.Td>
+            <Table.Td>
               {row.seenBy.length > 0 ? (
                 <Badge tone="success">{row.seenBy.length} видели</Badge>
               ) : (
                 <Muted>—</Muted>
               )}
-            </td>
-            <td className="border-b border-line px-3 py-2">
+            </Table.Td>
+            <Table.Td>
               {mine && onCancel && (
                 <Button disabled={busy} onClick={() => void onCancel(row.id)}>
                   Отменить
@@ -394,10 +385,10 @@ function AbsenceTable({
                   {row.seenBy.includes(myMemberId ?? '') ? '✓ Увидено' : 'Увидел'}
                 </Button>
               )}
-            </td>
+            </Table.Td>
           </tr>
         ))}
       </tbody>
-    </table>
+    </Table>
   );
 }

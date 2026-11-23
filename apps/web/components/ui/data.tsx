@@ -1,4 +1,13 @@
-import type { HTMLAttributes, ReactNode, ThHTMLAttributes, TdHTMLAttributes } from 'react';
+'use client';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type HTMLAttributes,
+  type ReactNode,
+  type ThHTMLAttributes,
+  type TdHTMLAttributes,
+} from 'react';
 
 /** Бейдж — короткая пометка: роль в бою, ранг, статус. tone задаёт семантику. */
 export function Badge({
@@ -29,10 +38,44 @@ interface TableProps {
   className?: string;
 }
 
+/**
+ * Таблица шире карточки прокручивается вбок. На узком экране это не видно
+ * заранее, поэтому у правого края, пока есть скрытые столбцы, показан
+ * постепенный уход фона (этап 5, мобильная доводка).
+ */
 function TableBase({ children, className = '' }: TableProps) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const [hasHidden, setHasHidden] = useState(false);
+
+  useEffect(() => {
+    const node = scroller.current;
+    if (!node) return;
+    const update = () => {
+      const rest = node.scrollWidth - node.clientWidth - node.scrollLeft;
+      setHasHidden(rest > 1);
+    };
+    update();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    observer?.observe(node);
+    for (const child of node.children) observer?.observe(child);
+    node.addEventListener('scroll', update, { passive: true });
+    return () => {
+      observer?.disconnect();
+      node.removeEventListener('scroll', update);
+    };
+  }, []);
+
   return (
-    <div className={`overflow-x-auto ${className}`}>
-      <table className="w-full border-collapse text-sm">{children}</table>
+    <div className="relative min-w-0">
+      <div ref={scroller} className={`overflow-x-auto ${className}`}>
+        <table className="w-full border-collapse text-sm">{children}</table>
+      </div>
+      {hasHidden && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-neutral-500/25 to-transparent"
+        />
+      )}
     </div>
   );
 }

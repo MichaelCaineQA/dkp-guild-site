@@ -31,7 +31,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="rounded-lg border border-line bg-surface px-2.5 py-1 text-sm hover:bg-surface-muted"
+      className="min-h-11 min-w-11 rounded-lg border border-line bg-surface px-2.5 py-1 text-sm hover:bg-surface-muted md:min-h-0 md:min-w-0"
       title={manual === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
       aria-label="Переключить тему"
     >

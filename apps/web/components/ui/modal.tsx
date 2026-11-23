@@ -30,19 +30,21 @@ export function Modal({
       aria-modal="true"
       onCancel={(e) => {
         e.preventDefault();
+        // Escape закрывает только верхнее окно, например подтверждение чек-ина.
+        e.stopPropagation();
         onClose();
       }}
-      className={`m-auto max-h-[90dvh] w-[calc(100%-2rem)] ${wide ? 'max-w-xl' : 'max-w-sm'} overflow-y-auto rounded-xl border border-line bg-surface p-6 text-primary backdrop:bg-black/60`}
+      className={`m-auto max-h-[90dvh] w-[calc(100%-1rem)] ${wide ? 'max-w-xl' : 'max-w-sm'} overflow-y-auto overscroll-contain rounded-xl border border-line bg-surface p-4 text-primary backdrop:bg-black/60 md:w-[calc(100%-2rem)] md:p-6`}
     >
       <button
         type="button"
         aria-label="Закрыть окно"
         onClick={onClose}
-        className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg text-xl leading-none text-secondary hover:bg-surface-muted hover:text-primary"
+        className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-lg text-xl leading-none text-secondary hover:bg-surface-muted hover:text-primary md:right-3 md:top-3 md:h-8 md:w-8"
       >
         ×
       </button>
-      {heading && <h2 className="mb-4 pr-8 text-xl font-semibold">{title}</h2>}
+      {heading && <h2 className="mb-4 pr-10 text-xl font-semibold md:pr-8">{title}</h2>}
       {children}
     </dialog>
   );

@@ -60,8 +60,14 @@ export function Avatar({
   avatar?: string | null;
   avatarColor?: string | null;
   nickname: string;
-  size?: 'default' | 'large' | 'profile';
+  size?: 'default' | 'large' | 'profile' | 'header';
 }) {
+  const sizes = {
+    default: 'h-12 w-12 text-3xl',
+    large: 'h-16 w-16 text-4xl',
+    profile: 'h-24 w-24 text-5xl',
+    header: 'h-7 w-7 text-base md:h-12 md:w-12 md:text-3xl',
+  };
   const icon = avatar ? ICONS[avatar as AvatarId] : undefined;
   const background =
     (avatarColor ? AVATAR_PALETTE[avatarColor as AvatarColor]?.color : undefined) ??
@@ -70,7 +76,7 @@ export function Avatar({
   return (
     <span
       aria-hidden="true"
-      className={`flex shrink-0 items-center justify-center rounded-2xl text-white shadow-sm ring-1 ring-inset ring-white/20 ${size === 'profile' ? 'h-24 w-24 text-5xl' : size === 'large' ? 'h-16 w-16 text-4xl' : 'h-12 w-12 text-3xl'}`}
+      className={`flex shrink-0 items-center justify-center rounded-2xl text-white shadow-sm ring-1 ring-inset ring-white/20 ${sizes[size]}`}
       style={{
         background: `radial-gradient(circle at 25% 15%, #ffffff70, transparent 65%), linear-gradient(145deg, ${background}, ${background}cc)`,
         fontFamily: '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif',

@@ -44,7 +44,7 @@ export function ScheduleColumns({ list, detail }: { list: ReactNode; detail: Rea
   return (
     <div className="grid items-start gap-4 lg:grid-cols-2">
       <div className="min-w-0">{list}</div>
-      <div className="min-w-0">{detail}</div>
+      {detail && <div className="min-w-0">{detail}</div>}
     </div>
   );
 }
@@ -128,7 +128,10 @@ export function WeekEventButton({
       <button
         type="button"
         aria-pressed={selected}
-        onClick={onSelect}
+        onClick={(event) => {
+          event.currentTarget.focus({ preventScroll: true });
+          onSelect();
+        }}
         className={`w-full rounded-card border p-3 text-left hover:bg-surface-muted ${selected ? 'border-accent bg-accent-soft' : 'border-line bg-surface'} ${past ? 'opacity-60' : ''}`}
       >
         <span className="flex flex-wrap items-center justify-between gap-2">
