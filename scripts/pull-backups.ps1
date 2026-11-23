@@ -38,7 +38,12 @@ if ($production) {
                 $identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
             $acl.AddAccessRule($rule)
         }
-        Set-Acl -LiteralPath $backupRoot -AclObject $acl
+        # Persist the changed DACL without requesting access to the audit ACL.
+        if ($PSVersionTable.PSEdition -eq 'Desktop') {
+            [IO.Directory]::SetAccessControl($backupRoot, $acl)
+        } else {
+            [IO.FileSystemAclExtensions]::SetAccessControl([IO.DirectoryInfo]::new($backupRoot), $acl)
+        }
     }
 }
 
