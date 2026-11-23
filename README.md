@@ -306,6 +306,8 @@ VPS, установите отдельное задание
 `powershell -File scripts/install-local-backup.ps1 -Environment production`.
 Оно скачивает комплект в `%USERPROFILE%\Backups\dkp-production` в 10:00.
 Каталог доступен владельцу Windows и SYSTEM, комплект хранится 30 дней.
+Задание берёт отметку последней успешной копии из
+`/var/log/dkp-production-backup.log`, который пишет production-cron.
 Оба файла сверяются по SHA-256 до публикации `verified.json`.
 Копия старше 26 часов, сбой SSH или несовпадение хэша дают ненулевой
 результат задания и статус `ERROR` в `last-run.txt`.

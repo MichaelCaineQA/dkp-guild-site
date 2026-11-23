@@ -50,8 +50,14 @@ function Get-BackupDate([string]$Value) {
 
 try {
     # Скачивание через существующий SSH alias: ключ и секреты не копируются в скрипт.
-    $stamps = & ssh @sshOptions dkp-stage "flock -s -w 40 /run/lock/dkp-deploy.lock find '$source' -mindepth 1 -maxdepth 1 -type d -printf '%f\n'"
-    if ($LASTEXITCODE -ne 0) { throw 'Could not list server backups (SSH or deploy lock)' }
+    # Production publishes this log line only after both files have been written.
+    # Pulling a completed backup does not wait for a staging deployment lock.
+    if ($production) {
+        $stamps = & ssh @sshOptions dkp-stage "sed -nE 's#^[^:]+: ([.]/)?backups/([0-9]{8}T[0-9]{6}Z)$#\2#p' /var/log/dkp-production-backup.log"
+    } else {
+        $stamps = & ssh @sshOptions dkp-stage "find '$source' -mindepth 1 -maxdepth 1 -type d -printf '%f\n'"
+    }
+    if ($LASTEXITCODE -ne 0) { throw 'Could not list server backups over SSH' }
     $stamp = $stamps | Where-Object { $_ -match '^\d{8}T\d{6}Z$' } | Sort-Object | Select-Object -Last 1
     if (!$stamp) { throw 'No valid server backup' }
     if ($production -and (Get-BackupDate $stamp) -lt [DateTime]::UtcNow.AddHours(-26)) {
