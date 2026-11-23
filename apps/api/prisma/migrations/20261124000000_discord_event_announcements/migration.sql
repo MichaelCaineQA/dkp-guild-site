@@ -1,0 +1,3 @@
+ALTER TABLE "DiscordNotification" ADD COLUMN "kind" TEXT NOT NULL DEFAULT 'MESSAGE';
+ALTER TABLE "DiscordNotification" ADD COLUMN "eventIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE "DiscordNotification" ADD COLUMN "deliveryPart" INTEGER NOT NULL DEFAULT 0;

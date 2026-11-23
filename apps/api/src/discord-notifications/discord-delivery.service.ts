@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { renderEventAnnouncement } from './render-event-announcement';
 
 @Injectable()
 export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
@@ -40,6 +41,21 @@ export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
           });
           if (!item) return;
 
+          let content = item.content;
+          let remaining: string[] = [];
+          if (item.kind === 'EVENT_ANNOUNCEMENT') {
+            const rendered = await renderEventAnnouncement(tx, item);
+            remaining = rendered.remaining;
+            if (!rendered.content) {
+              await tx.discordNotification.update({
+                where: { id: item.id },
+                data: { eventIds: remaining, status: remaining.length ? 'PENDING' : 'CANCELLED' },
+              });
+              return;
+            }
+            content = rendered.content;
+          }
+
           let status = 'PENDING';
           let error = 'NETWORK';
           const attempts = item.attempts + 1;
@@ -51,9 +67,16 @@ export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
                 method: 'POST',
                 headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  content: item.content,
+                  content,
                   allowed_mentions: { parse: [] },
-                  nonce: createHash('sha256').update(item.id).digest('hex').slice(0, 24),
+                  nonce: createHash('sha256')
+                    .update(
+                      item.kind === 'EVENT_ANNOUNCEMENT'
+                        ? `${item.id}:${item.deliveryPart}`
+                        : item.id,
+                    )
+                    .digest('hex')
+                    .slice(0, 24),
                   enforce_nonce: true,
                 }),
                 signal: AbortSignal.timeout(15000),
@@ -87,11 +110,16 @@ export class DiscordDeliveryService implements OnModuleInit, OnModuleDestroy {
           await tx.discordNotification.update({
             where: { id: item.id },
             data: {
-              status,
-              attempts,
+              status: status === 'SENT' && remaining.length ? 'PENDING' : status,
+              attempts: status === 'SENT' && remaining.length ? 0 : attempts,
               lastError: error || null,
-              availableAt: new Date(Date.now() + delayMs),
-              sentAt: status === 'SENT' ? new Date() : null,
+              availableAt: new Date(
+                Date.now() + (status === 'SENT' && remaining.length ? 5000 : delayMs),
+              ),
+              sentAt: status === 'SENT' && !remaining.length ? new Date() : null,
+              ...(status === 'SENT' && item.kind === 'EVENT_ANNOUNCEMENT'
+                ? { eventIds: remaining, deliveryPart: item.deliveryPart + 1 }
+                : {}),
             },
           });
         },
