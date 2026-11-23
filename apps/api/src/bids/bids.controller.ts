@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard';
+import { SessionThrottle } from '../auth/session-throttle';
 import { PermissionsGuard, RequirePermission } from '../permissions/permissions.guard';
 import { BidsService } from './bids.service';
 
@@ -22,6 +23,9 @@ export class BidsController {
   /** Приём ставки. Проверки правил и баланса — в сервисе, атомарно. */
   @Post()
   @RequirePermission('auction.bid')
+  // 20 запросов в минуту оставляют запас для быстрых перебиваний в 30-секундном
+  // лоте. Один аккаунт делит лимит между лотами и своими сессиями.
+  @SessionThrottle(20)
   place(@Param('auctionId') auctionId: string, @Body() body: unknown, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
     return this.bids.place(auctionId, body, {

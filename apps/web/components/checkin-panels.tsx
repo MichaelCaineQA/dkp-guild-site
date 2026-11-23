@@ -23,6 +23,7 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
     status: 'PASSED' | 'FAILED';
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -30,8 +31,12 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
       const data = await api<PlayerCheckInView>(`/events/${eventId}/checkin/me`);
       setView(data);
       setError(null);
-    } catch {
-      setError('Чек-ин недоступен');
+    } catch (err) {
+      setError(
+        (err as { status?: number }).status === 429
+          ? 'Слишком много запросов. Статус чек-ина обновится автоматически.'
+          : 'Чек-ин недоступен',
+      );
     }
   }, [eventId]);
 
@@ -47,6 +52,7 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
       return;
     }
     setBusy(true);
+    setSubmitError(null);
     try {
       const data = await api<{ result: 'PASSED' | 'FAILED' }>(`/events/${eventId}/checkin/me`, {
         method: 'POST',
@@ -58,8 +64,12 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
       await load();
     } catch (err) {
       const status = (err as { status?: number }).status;
-      setError(
-        status === 409 ? 'Попытка уже использована или окно закрыто' : 'Не удалось отправить код',
+      setSubmitError(
+        status === 429
+          ? 'Слишком много запросов. Повторите отправку кода через минуту, если окно ещё открыто.'
+          : status === 409
+            ? 'Попытка уже использована или окно закрыто'
+            : 'Не удалось отправить код',
       );
       setPicked(null);
     } finally {
@@ -120,7 +130,11 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
           </button>
         ))}
       </div>
-      {error && <p className="mt-1 text-sm text-danger">{error}</p>}
+      {(submitError || error) && (
+        <p role="alert" className="mt-1 text-sm text-danger">
+          {submitError ?? error}
+        </p>
+      )}
 
       {/* Модалка подтверждения (план 2.2): случайный клик не тратит попытку */}
       {picked !== null && (

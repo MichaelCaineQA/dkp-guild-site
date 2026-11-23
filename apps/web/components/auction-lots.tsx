@@ -445,7 +445,11 @@ function BidForm({
       });
       setPlaced(true); // подтверждение видно, пока сокет не обновит историю
     } catch (error) {
-      setFormError(errorMessage(error, 'Не удалось сделать ставку'));
+      setFormError(
+        (error as { status?: number }).status === 429
+          ? 'Слишком много ставок. Повторите попытку через минуту.'
+          : errorMessage(error, 'Не удалось сделать ставку'),
+      );
     } finally {
       setSubmitting(false);
     }

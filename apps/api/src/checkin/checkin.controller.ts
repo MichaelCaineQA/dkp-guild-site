@@ -3,6 +3,7 @@ import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/comm
 import { Throttle } from '@nestjs/throttler';
 import { SETTING_DEFAULTS } from '@dkp/shared';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard';
+import { SessionThrottle } from '../auth/session-throttle';
 import { PermissionsGuard, RequirePermission } from '../permissions/permissions.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { CheckInService, type CheckInDb, type CheckInSettings } from './checkin.service';
@@ -27,7 +28,7 @@ export class CheckInController {
   /** Вид игрока: статус окна + 4 перемешанных варианта. */
   @Get('me')
   @RequirePermission('members.view_roster')
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @SessionThrottle(30)
   async playerView(@Param('eventId') eventId: string, @Req() req: AuthedRequest) {
     const user = req.session!.user!;
     const service = await this.makeService();
@@ -40,7 +41,7 @@ export class CheckInController {
    */
   @Post('me')
   @RequirePermission('members.view_roster')
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @SessionThrottle(10)
   async submit(
     @Param('eventId') eventId: string,
     @Body() body: unknown,
