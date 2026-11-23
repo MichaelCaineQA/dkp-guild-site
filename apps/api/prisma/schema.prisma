@@ -17,6 +17,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Transactional outbox: the domain change and notification are committed together.
+model DiscordNotification {
+  id          String   @id
+  channelId   String
+  content     String
+  status      String   @default("PENDING")
+  attempts    Int      @default(0)
+  availableAt DateTime @default(now())
+  lastError   String?
+  createdAt   DateTime @default(now())
+  sentAt      DateTime?
+
+  @@index([status, availableAt])
+}
+
+model DiscordDeliveryGate {
+  id       Int      @id
+  resumeAt DateTime @default(now())
+}
+
 enum Rank {
   GUILD_LEADER // Глава
   ADMIN // Администратор сайта
