@@ -18,6 +18,7 @@ import {
   type ParticipationState,
 } from '@dkp/shared';
 import { gearScoreStaleDays } from '../settings/gear-score-settings';
+import { enqueueAbsenceNotification } from '../discord-notifications/absence-notifications';
 type ReadDb = Pick<Prisma.TransactionClient, 'event' | 'member' | 'absence' | 'setting'>;
 @Injectable()
 export class ParticipationService {
@@ -227,6 +228,7 @@ export class ParticipationService {
                   comment: 'Не приду на ивент ' + id,
                 },
               });
+              await enqueueAbsenceNotification(tx, absence.id);
             } else {
               for (const absence of state.absences) {
                 await tx.absence.update({
