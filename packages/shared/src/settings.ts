@@ -139,6 +139,12 @@ export const SETTINGS_REGISTRY = {
   ...CHECKIN_SETTINGS,
   ...ABSENCE_SETTINGS,
   ...AUCTION_SETTINGS,
+  'discord.reminderMinutes': {
+    schema: intSetting(1, 10080),
+    label: 'Напоминать об ивенте заранее',
+    unit: 'мин',
+    plan: '2.9',
+  },
   'profile.gearScoreStaleDays': {
     schema: z.number().int().min(1).safe(),
     label: 'Порог устаревания GS',
@@ -163,6 +169,7 @@ export const SETTING_DEFAULTS: Record<SettingKey, number> = Object.fromEntries(
           'checkin.endSharePct': 50,
           'absence.deadlineBeforeStartSec': 180,
           'profile.gearScoreStaleDays': 14,
+          'discord.reminderMinutes': 15,
           'auction.step': 1,
           'auction.liveDurationSec': 60,
           'auction.longDurationDays': 2,

@@ -10,7 +10,7 @@ import {
 } from './settings';
 
 describe('SETTINGS_REGISTRY', () => {
-  it('все настройки из плана 2.2/2.3/2.4/2.5/6 присутствуют (18 ключей)', () => {
+  it('все настройки из плана присутствуют', () => {
     expect(Object.keys(SETTINGS_REGISTRY).sort()).toEqual(
       [
         'checkin.generateBeforeStartSec',
@@ -20,6 +20,7 @@ describe('SETTINGS_REGISTRY', () => {
         'checkin.endSharePct',
         'absence.deadlineBeforeStartSec',
         'profile.gearScoreStaleDays',
+        'discord.reminderMinutes',
         'auction.step',
         'auction.liveDurationSec',
         'auction.longDurationDays',
@@ -75,6 +76,14 @@ describe('SETTINGS_REGISTRY', () => {
     expect(() => parseSettingValue('auction.preferredItemDiscountPct', 101)).toThrow();
     expect(parseSettingValue('auction.foreignClassMarkupPct', 100)).toBe(100);
     expect(parseSettingValue('auction.preferredItemDiscountPct', 0)).toBe(0);
+  });
+
+  it('интервал напоминания ограничен одной минутой и семью днями', () => {
+    expect(SETTING_DEFAULTS['discord.reminderMinutes']).toBe(15);
+    expect(parseSettingValue('discord.reminderMinutes', 1)).toBe(1);
+    expect(parseSettingValue('discord.reminderMinutes', 10080)).toBe(10080);
+    expect(() => parseSettingValue('discord.reminderMinutes', 0)).toThrow();
+    expect(() => parseSettingValue('discord.reminderMinutes', 10081)).toThrow();
   });
 });
 

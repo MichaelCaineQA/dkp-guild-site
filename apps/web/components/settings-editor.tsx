@@ -82,11 +82,13 @@ export function SettingsEditor({
         ? 'Чек-ин'
         : key.startsWith('absence.')
           ? 'Отсутствия'
-          : key.startsWith('auction.')
-            ? 'Аукцион'
-            : key.startsWith('profile.')
-              ? 'Профиль и GS'
-              : 'Общие';
+          : key.startsWith('discord.')
+            ? 'Discord'
+            : key.startsWith('auction.')
+              ? 'Аукцион'
+              : key.startsWith('profile.')
+                ? 'Профиль и GS'
+                : 'Общие';
     groups.set(title, [...(groups.get(title) ?? []), key]);
   }
   return (
