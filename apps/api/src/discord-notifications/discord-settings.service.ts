@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { PrismaService } from '../prisma/prisma.service';
+import { serializable } from '../prisma/serializable';
 import { DiscordChannelValidator } from './discord-channel-validator';
 import { enqueueDiscordNotification } from './discord-outbox';
 
@@ -50,9 +51,6 @@ export class DiscordSettingsService {
     const parsed = updateSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException('Проверьте ID каналов и причину изменения');
     const { channels, absenceAccessConfirmed, reason } = parsed.data;
-    if (channels.absences && !absenceAccessConfirmed) {
-      throw new BadRequestException('Подтвердите проверку доступа к каналу отсутствий');
-    }
     if (
       channels.absences &&
       [channels.announcements, channels.reminders, channels.lots].includes(channels.absences)
@@ -61,51 +59,62 @@ export class DiscordSettingsService {
     }
     const ids = [...new Set(Object.values(channels).filter((id): id is string => id !== null))];
     for (const id of ids) await this.validator.validate(id);
-    await this.db.$transaction(async (tx) => {
-      const old = await tx.setting.findUnique({ where: { key: settingKey } });
-      const previous = storedSchema.safeParse(old?.value);
-      const guildId = process.env.DISCORD_GUILD_ID;
-      if (!guildId || !/^\d+$/.test(guildId)) {
-        if (ids.length) throw new BadRequestException('Discord-сервер не настроен');
-        if (old) {
-          await tx.setting.delete({ where: { key: settingKey } });
-          await tx.auditLog.create({
-            data: {
-              actorMemberId: actor.memberId,
-              actorIsAdmin: actor.isAdmin,
-              action: 'SETTINGS_UPDATE',
-              entityType: 'Setting',
-              entityId: settingKey,
-              comment: `Discord: каналы отключены; ${reason}`,
-            },
-          });
+    await serializable(
+      this.db,
+      async (tx) => {
+        const old = await tx.setting.findUnique({ where: { key: settingKey } });
+        const previous = storedSchema.safeParse(old?.value);
+        const guildId = process.env.DISCORD_GUILD_ID;
+        if (!guildId || !/^\d+$/.test(guildId)) {
+          if (ids.length) throw new BadRequestException('Discord-сервер не настроен');
+          if (old) {
+            await tx.setting.delete({ where: { key: settingKey } });
+            await tx.auditLog.create({
+              data: {
+                actorMemberId: actor.memberId,
+                actorIsAdmin: actor.isAdmin,
+                action: 'SETTINGS_UPDATE',
+                entityType: 'Setting',
+                entityId: settingKey,
+                comment: `Discord: каналы отключены; ${reason}`,
+              },
+            });
+          }
+          return;
         }
-        return;
-      }
-      const oldChannels =
-        previous.success && previous.data.guildId === guildId ? previous.data.channels : empty;
-      if (
-        (!old || (previous.success && previous.data.guildId === guildId)) &&
-        JSON.stringify(oldChannels) === JSON.stringify(channels)
-      )
-        return;
-      const value = { guildId, channels };
-      await tx.setting.upsert({
-        where: { key: settingKey },
-        create: { key: settingKey, value },
-        update: { value },
-      });
-      await tx.auditLog.create({
-        data: {
-          actorMemberId: actor.memberId,
-          actorIsAdmin: actor.isAdmin,
-          action: 'SETTINGS_UPDATE',
-          entityType: 'Setting',
-          entityId: settingKey,
-          comment: `Discord: ${JSON.stringify(oldChannels)} → ${JSON.stringify(channels)}; ${reason}`,
-        },
-      });
-    });
+        const oldChannels =
+          previous.success && previous.data.guildId === guildId ? previous.data.channels : empty;
+        if (
+          channels.absences &&
+          channels.absences !== oldChannels.absences &&
+          !absenceAccessConfirmed
+        ) {
+          throw new BadRequestException('Подтвердите проверку доступа к каналу отсутствий');
+        }
+        if (
+          (!old || (previous.success && previous.data.guildId === guildId)) &&
+          JSON.stringify(oldChannels) === JSON.stringify(channels)
+        )
+          return;
+        const value = { guildId, channels };
+        await tx.setting.upsert({
+          where: { key: settingKey },
+          create: { key: settingKey, value },
+          update: { value },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorMemberId: actor.memberId,
+            actorIsAdmin: actor.isAdmin,
+            action: 'SETTINGS_UPDATE',
+            entityType: 'Setting',
+            entityId: settingKey,
+            comment: `Discord: ${JSON.stringify(oldChannels)} → ${JSON.stringify(channels)}; ${reason}`,
+          },
+        });
+      },
+      true,
+    );
     return this.get();
   }
 
