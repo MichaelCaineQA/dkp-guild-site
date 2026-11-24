@@ -421,14 +421,30 @@ export default function RosterPage() {
                 )}
                 {canManage && (
                   <Table.Td>
-                    <Button
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setTransfer(row);
-                      }}
-                    >
-                      Переместить
-                    </Button>
+                    {/* Строка таблицы не получает фокус — клик по ней работает только мышью.
+                        Кнопка открывает то же окно участника с клавиатуры (#299). На компьютере
+                        кнопки в столбик — столбец остаётся узким и не теснит соседние; на
+                        телефоне они высокие (44 px) и идут в строку, чтобы не тянуть строку. */}
+                    <div className="flex flex-nowrap gap-2 md:flex-col md:items-start md:gap-0.5">
+                      <Button
+                        aria-label={`Изменить участника ${row.nickname}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelected(row);
+                        }}
+                      >
+                        Изменить
+                      </Button>
+                      <Button
+                        aria-label={`Переместить участника ${row.nickname}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setTransfer(row);
+                        }}
+                      >
+                        Переместить
+                      </Button>
+                    </div>
                   </Table.Td>
                 )}
               </Table.Row>
