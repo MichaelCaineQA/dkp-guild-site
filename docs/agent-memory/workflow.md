@@ -114,6 +114,12 @@ Production/staging и резервное копирование описаны �
   висит в `pending` — проверь, не держит ли concurrency-группу
   `deploy-staging` зависший прежний ран (отменить: POST
   `/actions/runs/{id}/cancel`).
+- Шаг «Require successful CI for selected SHA» в Deploy сверяет итог CI по
+  полям ответа (`status`, `conclusion`), без фильтра `status` в API (#308):
+  фильтр изредка не отдаёт самый свежий запуск, и автодеплой падал с
+  «Selected SHA has no successful CI» при зелёном CI, а стейдж оставался на
+  прошлом коммите. Если проверка `deploy` на коммите красная, а CI зелёный —
+  сначала смотреть этот шаг в Deploy run.
 - DNS стенда должен вести на VPS напрямую, без проксирования Cloudflare
   (иначе Let's Encrypt и WebSocket аукциона не работают). На 2026-11-12
   stage.suneclipse.ru резолвится в 188.120.225.204 напрямую.

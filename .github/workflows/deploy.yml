@@ -40,8 +40,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           sha=$(git rev-parse HEAD)
-          count=$(gh run list --workflow ci.yml --commit "$sha" --event push --status success --json headSha --jq 'length')
-          test "$count" -gt 0 || { echo 'Selected SHA has no successful CI'; exit 1; }
+          case "$sha" in *[!0-9a-f]*|'') echo 'Bad sha' >&2; exit 1;; esac
+          # Фильтр status у API запусков изредка не отдаёт самый свежий запуск (#308),
+          # поэтому запуски коммита берутся без него, а итог сверяется по полям ответа.
+          passed=$(gh run list --workflow ci.yml --commit "$sha" --event push \
+            --json headSha,status,conclusion \
+            --jq '.[] | select(.status == "completed" and .conclusion == "success") | .headSha' \
+            | grep -cx "$sha" || true)
+          test "$passed" -gt 0 || { echo 'Selected SHA has no successful CI'; exit 1; }
       - name: Prepare SSH
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
