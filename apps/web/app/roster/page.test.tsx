@@ -86,6 +86,10 @@ describe('RosterPage', () => {
     expect(screen.getByText('все ранги')).toBeDefined();
     expect(screen.getByText('все роли')).toBeDefined();
     expect(screen.queryByText('Добавить члена')).toBeNull();
+    // Без прав управления столбца действий и кнопок нет (PLAN 2.11: недоступное скрывается)
+    expect(screen.queryByRole('columnheader', { name: 'Действия' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Изменить участника/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Переместить участника/ })).toBeNull();
   });
 
   it('Глава видит заявки вместо ручного добавления', async () => {
@@ -132,6 +136,8 @@ describe('RosterPage', () => {
     render(<RosterPage />);
     expect(await screen.findByText('Alpha')).toBeDefined();
     expect(screen.queryByText('Добавить члена')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Изменить участника/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Переместить участника/ })).toBeNull();
   });
 
   it('Админ начисляет выбранному участнику положительную сумму с комментарием', async () => {
@@ -191,6 +197,31 @@ describe('RosterPage', () => {
     expect(within(second).getByText('Beta')).toBeDefined();
     fireEvent(second, new Event('cancel', { bubbles: true, cancelable: true }));
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('окно участника открывается с клавиатуры кнопкой «Изменить»; фокус возвращается на неё', async () => {
+    mockSession(LEADER);
+    mockRoster();
+    render(<RosterPage />);
+    await screen.findByText('Alpha');
+
+    // Строка таблицы фокуса не получает; у кнопок каждой строки имя с ником —
+    // иначе скринридер слышит одинаковые «Изменить» без контекста.
+    expect(screen.getByRole('columnheader', { name: 'Действия' })).toBeDefined();
+    const changeBeta = screen.getByRole('button', { name: 'Изменить участника Beta' });
+    expect(screen.getByRole('button', { name: 'Изменить участника Alpha' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Переместить участника Beta' })).toBeDefined();
+
+    changeBeta.focus();
+    expect(document.activeElement).toBe(changeBeta);
+    fireEvent.click(changeBeta); // Enter/Space на настоящей кнопке — обычный click
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Beta')).toBeDefined();
+    expect(within(dialog).queryByText('Alpha')).toBeNull();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Закрыть' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(changeBeta);
   });
 
   it('поля, заполненные для одного участника, не переходят на другого', async () => {
