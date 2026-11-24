@@ -111,6 +111,64 @@ suite('Discord reminders on PostgreSQL', () => {
     expect(JSON.parse(fetchSpy.mock.calls[0][1].body as string).content).toContain('Рейд');
   });
 
+  it('creates one local reminder when two schedulers scan together', async () => {
+    const other = new DiscordReminderScheduler(db as unknown as PrismaService);
+    await Promise.all([scheduler.scan(time('10:00')), other.scan(time('10:00'))]);
+    expect(
+      await db.discordNotification.count({ where: { guildId: '100', eventIds: { has: eventId } } }),
+    ).toBe(1);
+  });
+
+  it.each(['SENT', 'PENDING'] as const)(
+    'does not let a copied foreign %s reminder block this environment',
+    async (status) => {
+      await db.discordNotification.create({
+        data: {
+          id: `reminder:${eventId}:${time('10:15').getTime()}`,
+          guildId: '999',
+          channelId: '900',
+          content: '',
+          kind: 'EVENT_REMINDER',
+          eventIds: [eventId],
+          status,
+        },
+      });
+      await scheduler.scan(time('10:00'));
+      const local = await db.discordNotification.findMany({
+        where: { guildId: '100', eventIds: { has: eventId } },
+      });
+      expect(local).toHaveLength(1);
+      await delivery.run(time('10:00'));
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy.mock.calls[0][0]).toContain('/channels/400/messages');
+    },
+  );
+
+  it.each(['SENT', 'PENDING'] as const)(
+    'keeps the local legacy %s reminder without making another',
+    async (status) => {
+      await db.discordNotification.create({
+        data: {
+          id: `reminder:${eventId}:${time('10:15').getTime()}`,
+          guildId: '100',
+          channelId: '400',
+          content: '',
+          kind: 'EVENT_REMINDER',
+          eventIds: [eventId],
+          status,
+        },
+      });
+      await scheduler.scan(time('10:00'));
+      expect(
+        await db.discordNotification.count({
+          where: { guildId: '100', eventIds: { has: eventId } },
+        }),
+      ).toBe(1);
+      await delivery.run(time('10:00'));
+      expect(fetchSpy).toHaveBeenCalledTimes(status === 'PENDING' ? 1 : 0);
+    },
+  );
+
   it('cancels the old reminder after a move and schedules the new start', async () => {
     await scheduler.scan(time('10:00'));
     await db.event.update({

@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { SETTING_DEFAULTS } from '@dkp/shared';
 import { readReminderConfig } from './reminder-config';
+import { legacyReminderKey, reminderKey } from './reminder-key';
 
 type ReminderResult =
   | { kind: 'send'; content: string; channelId: string }
@@ -35,7 +36,8 @@ export async function renderEventReminder(
     !event ||
     event.status !== 'PLANNED' ||
     event.startsAt <= now ||
-    item.id !== `reminder:${eventId}:${event.startsAt.getTime()}`
+    (item.id !== legacyReminderKey(eventId, event.startsAt) &&
+      item.id !== reminderKey(item.guildId, eventId, event.startsAt))
   )
     return { kind: 'cancel' };
   const config = await readReminderConfig(tx, item.guildId);
