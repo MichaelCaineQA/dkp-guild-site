@@ -138,6 +138,10 @@ describe('RosterPage', () => {
     expect(screen.queryByText('Добавить члена')).toBeNull();
     expect(screen.queryByRole('button', { name: /^Изменить участника/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Переместить участника/ })).toBeNull();
+    // Ранг Офицера не даёт ручного начисления вне ивента (план 2.2, решение 22).
+    const dialog = await openMember('Alpha');
+    expect(within(dialog).queryByText(/Начислить ДКП/)).toBeNull();
+    expect(within(dialog).queryByLabelText('Сумма ДКП')).toBeNull();
   });
 
   it('Админ начисляет выбранному участнику положительную сумму с комментарием', async () => {
@@ -176,6 +180,42 @@ describe('RosterPage', () => {
     );
   });
 
+  it('Глава начисляет выбранному участнику любую сумму с обязательным комментарием', async () => {
+    mockSession(LEADER);
+    mockRoster();
+    render(<RosterPage />);
+
+    const dialog = await openMember('Alpha');
+    fireEvent.change(within(dialog).getByLabelText('Сумма ДКП'), { target: { value: '1500' } });
+    const grant = () =>
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Начислить ДКП',
+      }) as HTMLButtonElement;
+    // Без причины кнопка недоступна: комментарий обязателен и попадает в аудит.
+    expect(grant().disabled).toBe(true);
+    fireEvent.change(within(dialog).getByLabelText('Комментарий'), {
+      target: { value: 'Перенос баланса с прошлого сайта' },
+    });
+    expect(grant().disabled).toBe(false);
+    fireEvent.click(grant());
+
+    await waitFor(() =>
+      expect(api).toHaveBeenCalledWith(
+        '/dkp/admin-grants',
+        expect.objectContaining({ method: 'POST', body: expect.stringContaining('"amount":1500') }),
+      ),
+    );
+    const call = vi.mocked(api).mock.calls.find(([path]) => path === '/dkp/admin-grants')!;
+    expect(JSON.parse(call[1]!.body as string)).toMatchObject({
+      memberId: 'm1',
+      amount: 1500,
+      comment: 'Перенос баланса с прошлого сайта',
+    });
+    // Успешное начисление закрывает окно и перечитывает состав.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sessionStorage.getItem('dkp-grant:m1')).toBeNull();
+  });
+
   it('клик по строке открывает окно участника поверх списка; «Закрыть» и Escape его закрывают', async () => {
     mockSession(LEADER);
     mockRoster();
@@ -185,10 +225,10 @@ describe('RosterPage', () => {
     const dialog = await openMember('Alpha');
     expect(dialog.getAttribute('open')).not.toBeNull();
     expect(within(dialog).getByText('Alpha')).toBeDefined();
-    // Секции — по правам смотрящего: у Главы нет начисления ДКП (план 2.2).
+    // Секции — по правам смотрящего: у Главы есть и начисление ДКП (план 2.2, решение 22).
     expect(within(dialog).getByText('Блокировка')).toBeDefined();
     expect(within(dialog).getByText('Смена ранга')).toBeDefined();
-    expect(within(dialog).queryByText(/Начислить ДКП/)).toBeNull();
+    expect(within(dialog).getByRole('heading', { name: 'Начислить ДКП: Alpha' })).toBeDefined();
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Закрыть' }));
     expect(screen.queryByRole('dialog')).toBeNull();

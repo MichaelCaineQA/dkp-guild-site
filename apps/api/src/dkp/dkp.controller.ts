@@ -16,10 +16,11 @@ export class DkpController {
     private readonly grants: AdminGrantService,
   ) {}
 
+  /** Ручное начисление вне ивента — Глава и Админ (план 2.2, решение 22). */
   @Post('admin-grants')
-  @RequirePermission('members.view_roster')
+  @RequirePermission('dkp.grant')
   grant(@Body() body: unknown, @Req() req: AuthedRequest) {
-    return this.grants.grant(body, req.session!.user!.isAdmin);
+    return this.grants.grant(body, req.session!.user!);
   }
 
   /** Операции с фильтрами: /dkp/entries?memberId=&eventId=&type=&from=&to= */

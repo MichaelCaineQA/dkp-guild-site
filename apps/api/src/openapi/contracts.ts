@@ -552,9 +552,10 @@ export const contracts: Record<string, Contract> = {
   Dkp_balances: c('Получить балансы участников', list('Balance')),
   Dkp_grant: c('Начислить ДКП участнику', object({ id: str, repeated: { type: 'boolean' } }), {
     body: 'AdminDkpGrant',
-    access: 'Только резервный Админ.',
+    access: 'Глава и Админ, включая резервного админа без Member.',
     errors: [400, 403, 404, 409],
-    description: 'Положительное начисление и аудит создаются атомарно; requestId защищает повтор.',
+    description:
+      'Положительное начисление и аудит создаются атомарно; requestId защищает повтор. Автор — в аудите и в createdById записи журнала.',
   }),
   Dkp_memberBalance: c('Получить баланс участника', 'Balance', { errors: [404] }),
   Audit_list: c('Получить журнал действий', 'AuditPage', {
