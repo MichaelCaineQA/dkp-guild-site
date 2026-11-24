@@ -76,6 +76,41 @@ suite('Discord settings on PostgreSQL', () => {
   it('rejects absence channels without the access checklist', async () => {
     await expect(
       service.update(
+        {
+          channels: { ...channels, absences: '403' },
+          absenceAccessConfirmed: false,
+          reason: 'discord-settings-test',
+        },
+        actor,
+      ),
+    ).rejects.toThrow('Подтвердите');
+  });
+
+  it('requires confirmation when an absence channel is enabled again', async () => {
+    await service.update(
+      {
+        channels: { ...channels, absences: null },
+        absenceAccessConfirmed: false,
+        reason: 'discord-settings-test',
+      },
+      actor,
+    );
+    await expect(
+      service.update(
+        { channels, absenceAccessConfirmed: false, reason: 'discord-settings-test' },
+        actor,
+      ),
+    ).rejects.toThrow('Подтвердите');
+  });
+
+  it('requires confirmation for a channel copied from a different server', async () => {
+    await db.setting.upsert({
+      where: { key: 'discord.channels' },
+      create: { key: 'discord.channels', value: { guildId: '999', channels } },
+      update: { value: { guildId: '999', channels } },
+    });
+    await expect(
+      service.update(
         { channels, absenceAccessConfirmed: false, reason: 'discord-settings-test' },
         actor,
       ),
@@ -89,12 +124,12 @@ suite('Discord settings on PostgreSQL', () => {
     );
     const changed = { ...channels, announcements: '402' };
     await service.update(
-      { channels: changed, absenceAccessConfirmed: true, reason: 'discord-settings-test' },
+      { channels: changed, absenceAccessConfirmed: false, reason: 'discord-settings-test' },
       actor,
     );
     const disabled = { ...changed, announcements: null };
     await service.update(
-      { channels: disabled, absenceAccessConfirmed: true, reason: 'discord-settings-test' },
+      { channels: disabled, absenceAccessConfirmed: false, reason: 'discord-settings-test' },
       actor,
     );
     expect((await service.get()).channels).toEqual(disabled);
