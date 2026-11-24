@@ -54,6 +54,9 @@ export interface EventDetail extends EventRow {
   seriesId: string | null;
 }
 
+/** История чек-ина по одному ивенту либо по всем ивентам серии. */
+type EventHistoryWhere = { eventId?: string; event?: { seriesId: string } };
+
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
 export interface EventsDb {
   kP: { findUnique(args: { where: { id: string } }): Promise<{ id: string; name: string } | null> };
@@ -147,6 +150,10 @@ export interface EventsDb {
       where: { eventId?: string; event?: { seriesId: string } };
     }): Promise<{ count: number }>;
   };
+  /** История чек-ина (issue #302): ивент с ней не удаляется — отмена вместо удаления. */
+  checkInCode: { findFirst(args: { where: EventHistoryWhere }): Promise<{ id: string } | null> };
+  attendance: { findFirst(args: { where: EventHistoryWhere }): Promise<{ id: string } | null> };
+  dkpEntry: { findFirst(args: { where: EventHistoryWhere }): Promise<{ id: string } | null> };
   auditLog: AuditWriter;
   $transaction<T>(work: (tx: EventsDbTx) => Promise<T>): Promise<T>;
   $transaction<T>(
@@ -155,7 +162,10 @@ export interface EventsDb {
   ): Promise<T>;
 }
 
-type EventsDbTx = Pick<EventsDb, 'event' | 'lootDrop' | 'auditLog' | 'kP' | 'pack'>;
+type EventsDbTx = Pick<
+  EventsDb,
+  'event' | 'lootDrop' | 'auditLog' | 'kP' | 'pack' | 'checkInCode' | 'attendance' | 'dkpEntry'
+>;
 
 /** Действующий пользователь сессии — для прав и аудита. */
 export interface EventsActor {
@@ -311,6 +321,8 @@ export class EventsService {
    * Удаление серии целиком — только пока все ивенты PLANNED (issue #8).
    * Лоты аукциона живут независимо от ивента (план 2.4) и не удаляются —
    * серия с лотом отклоняется 409; дропы без лотов уходят каскадом (#109).
+   * Серия с кодами чек-ина, отметками посещения или записями журнала ДКП
+   * тоже не удаляется (#302) — её отменяют.
    */
   async deleteSeries(seriesId: string, actor: EventsActor): Promise<{ deleted: number }> {
     if (!can({ ...actor, rank: actor.rank ?? null }, 'events.manage')) {
@@ -344,6 +356,8 @@ export class EventsService {
           'В серии есть ивенты с лотами аукциона — удалить нельзя: лоты живут независимо от ивента (раздел 2.4)',
         );
       }
+      const history = await this.historyBlocker(tx, { event: { seriesId } }, 'ивенты серии');
+      if (history) throw new ConflictException(history);
       const drops = await tx.lootDrop.deleteMany({ where: { event: { seriesId } } });
       const events = await tx.event.deleteMany({ where: { seriesId, status: 'PLANNED' } });
       await this.audit(
@@ -365,6 +379,8 @@ export class EventsService {
    * Лоты аукциона живут независимо от ивента (план 2.4) и не удаляются —
    * ивент с лотом отклоняется 409; дропы без лотов финансовых данных не
    * несут и удаляются каскадом вместе с ивентом (issue #109).
+   * Ивент с кодами чек-ина, отметками посещения или записями журнала ДКП
+   * не удаляется (#302) — его отменяют.
    */
   async deleteOne(id: string, actor: EventsActor): Promise<{ ok: true }> {
     const event = await this.mustExist(id);
@@ -384,6 +400,8 @@ export class EventsService {
           'Нельзя удалить ивент с лотами аукциона: лоты живут независимо от ивента (раздел 2.4)',
         );
       }
+      const history = await this.historyBlocker(tx, { eventId: id }, 'ивент');
+      if (history) throw new ConflictException(history);
       const drops = await tx.lootDrop.deleteMany({ where: { eventId: id } });
       await tx.event.delete({ where: { id } });
       await this.audit(
@@ -617,6 +635,31 @@ export class EventsService {
     if (endsAt.getTime() <= startsAt.getTime()) {
       throw new ConflictException('Ивент должен заканчиваться позже начала');
     }
+  }
+
+  /**
+   * Причина, по которой ивент (или серию) нельзя удалить из-за истории
+   * чек-ина (issue #302). Коды и отметки посещения ссылаются на ивент без
+   * каскада, а удаление обнулило бы ссылку журнала ДКП на событие (план 2.2:
+   * запись журнала раскрывается до ивента). Вместо удаления ивент отменяют.
+   *
+   * Вызывается только внутри serializable-транзакции: код или отметку могут
+   * записать уже после снимка попытки — тогда DELETE завершится сбоем
+   * сериализации, а повтор увидит новую запись и вернёт тот же 409.
+   * `target` — что отменить вместо удаления («ивент» / «ивенты серии»).
+   */
+  private async historyBlocker(
+    tx: EventsDbTx,
+    where: EventHistoryWhere,
+    target: string,
+  ): Promise<string | null> {
+    if (await tx.checkInCode.findFirst({ where }))
+      return `Чек-ин уже начался — отмените ${target} вместо удаления`;
+    if (await tx.attendance.findFirst({ where }))
+      return `Есть отметки посещения — отмените ${target} вместо удаления`;
+    if (await tx.dkpEntry.findFirst({ where }))
+      return `Есть записи журнала ДКП — отмените ${target} вместо удаления`;
+    return null;
   }
 
   private describeCreated(input: CreateEventApiInput): string {

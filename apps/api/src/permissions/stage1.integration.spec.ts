@@ -29,14 +29,19 @@ const record = jest.fn(async () => ({}));
 const ledger = jest.fn(async () => ({ id: 'dkp1' }));
 const createMember = jest.fn(async () => ({ id: 'member1' }));
 const approve = jest.fn(async () => ({ ok: true }));
+/** История чек-ина ивента (issue #302): по умолчанию её нет. */
+let hasCheckInHistory = false;
+const findHistory = jest.fn(async () => (hasCheckInHistory ? { id: 'history1' } : null));
 const db = {
   member: { findMany: async () => [{ id: 'target', nickname: 'Игрок' }] },
   $transaction: async <T>(work: (tx: unknown) => Promise<T>) => work(db),
   event: { findUnique: async () => event, update, delete: remove },
-  // удаление ивента проверяет дропы (#109): в моке дропов нет
+  // удаление ивента проверяет дропы (#109), коды чек-ина, отметки и журнал (#302)
   lootDrop: { findFirst: async () => null, deleteMany: async () => ({ count: 0 }) },
+  checkInCode: { findFirst: findHistory },
+  attendance: { findFirst: findHistory },
+  dkpEntry: { create: ledger, findFirst: findHistory },
   auditLog: { create: record },
-  dkpEntry: { create: ledger },
   setting: { findMany: async () => [] },
 };
 @Module({
@@ -82,6 +87,7 @@ describe('PLAN 1.1: права через реальные HTTP-маршруты
   });
   beforeEach(() => {
     jest.clearAllMocks();
+    hasCheckInHistory = false;
     actor = {
       userId: 'u1',
       username: 'Офицер',
@@ -151,6 +157,18 @@ describe('PLAN 1.1: права через реальные HTTP-маршруты
     expect((await request('/events/e1', 'DELETE')).status).toBe(200);
     expect(update).toHaveBeenCalledTimes(2);
     expect(remove).toHaveBeenCalledTimes(1);
+  });
+  it('Офицер получает 409, а не 500, когда чек-ин ивента уже начался (#302)', async () => {
+    hasCheckInHistory = true;
+
+    const response = await request('/events/e1', 'DELETE');
+
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as { message: string }).message).toBe(
+      'Чек-ин уже начался — отмените ивент вместо удаления',
+    );
+    expect(remove).not.toHaveBeenCalled();
+    expect(record).not.toHaveBeenCalled();
   });
   it('рядовой РЛ запускает только свой ивент — guard не обрывает проверку назначения', async () => {
     actor.rank = 'MEMBER';
