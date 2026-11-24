@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { readReminderConfig } from './reminder-config';
+import { legacyReminderKey, reminderKey } from './reminder-key';
 
 @Injectable()
 export class DiscordReminderScheduler implements OnModuleInit, OnModuleDestroy {
@@ -35,7 +36,8 @@ export class DiscordReminderScheduler implements OnModuleInit, OnModuleDestroy {
       });
       if (events.length) {
         const records = events.map((event) => ({
-          id: `reminder:${event.id}:${event.startsAt.getTime()}`,
+          id: reminderKey(guildId, event.id, event.startsAt),
+          legacyId: legacyReminderKey(event.id, event.startsAt),
           guildId,
           channelId: config.channelId,
           content: '',
@@ -45,13 +47,25 @@ export class DiscordReminderScheduler implements OnModuleInit, OnModuleDestroy {
         for (let offset = 0; offset < records.length; offset += 500) {
           const batch = records.slice(offset, offset + 500);
           const existing = await this.db.discordNotification.findMany({
-            where: { id: { in: batch.map((record) => record.id) } },
+            where: { guildId, id: { in: batch.flatMap((record) => [record.id, record.legacyId]) } },
             select: { id: true, status: true, lastError: true, availableAt: true },
           });
           const known = new Set(existing.map((row) => row.id));
-          const missing = batch.filter((record) => !known.has(record.id));
+          const missing = batch.filter(
+            (record) => !known.has(record.id) && !known.has(record.legacyId),
+          );
           if (missing.length)
-            await this.db.discordNotification.createMany({ data: missing, skipDuplicates: true });
+            await this.db.discordNotification.createMany({
+              data: missing.map((record) => ({
+                id: record.id,
+                guildId: record.guildId,
+                channelId: record.channelId,
+                content: record.content,
+                kind: record.kind,
+                eventIds: record.eventIds,
+              })),
+              skipDuplicates: true,
+            });
           const wake = existing.filter(
             (row) =>
               row.status === 'PENDING' &&
