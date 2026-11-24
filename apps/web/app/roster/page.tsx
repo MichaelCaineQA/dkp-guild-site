@@ -1,7 +1,7 @@
 'use client';
 import { GearScoreStale } from '../../components/ui/gear-score-stale';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   COMBAT_ROLES,
   COMBAT_ROLE_LABELS,
@@ -26,6 +26,7 @@ import {
   ErrorText,
   Field,
   Input,
+  Modal,
   Muted,
   Notice,
   Page,
@@ -483,7 +484,9 @@ export default function RosterPage() {
       )}
 
       {selected && (
-        <MemberCard
+        <MemberDialog
+          // Форма пересоздаётся на каждого участника: поля и сообщение не переходят на другого.
+          key={selected.id}
           row={selected}
           canAssignLeader={!!user?.isAdmin}
           canBlock={!!canManage && (selected.rank === 'MEMBER' || selected.rank === 'OFFICER')}
@@ -505,8 +508,12 @@ export default function RosterPage() {
   );
 }
 
-/** Карточка члена: начисление ДКП, смена ранга и блокировка (Глава/Админ). */
-function MemberCard({
+/**
+ * Окно члена состава (клик по строке): блокировка, смена ранга и начисление ДКП.
+ * Секции — по правам смотрящего. Открывается поверх списка, а не под ним:
+ * страница показывает 20 строк, и форма под ними оказывалась за краем экрана (#295).
+ */
+function MemberDialog({
   row,
   canAssignLeader,
   canBlock,
@@ -535,6 +542,11 @@ function MemberCard({
     comment: string;
   } | null>(null);
   const grantStorageKey = `dkp-grant:${row.id}`;
+  const messageRef = useRef<HTMLParagraphElement>(null);
+  // Окно может прокручиваться — сообщение об итоге не должно остаться за краем.
+  useEffect(() => {
+    messageRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [message]);
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem(grantStorageKey);
@@ -655,120 +667,132 @@ function MemberCard({
     }
   };
 
+  /** Пока запрос в полёте, окно не закрывается — итог покажется в нём же. */
+  const close = () => {
+    if (!busy) onClose();
+  };
+
   return (
-    <Card className="mt-4">
-      <h2 className="text-xl font-semibold text-primary">{row.nickname}</h2>
-      <p className="mt-1 text-sm text-secondary">
-        Ранг: {RANK_LABELS[row.rank]} · Роль:{' '}
-        {row.combatRole ? COMBAT_ROLE_LABELS[row.combatRole] : '—'}
-      </p>
-      <p>Класс: {formatWeapons(row.weapons ?? [])}</p>
-
-      {canBlock && (
-        <div className="mt-4">
-          <h3 className="mb-2 font-semibold text-primary">Блокировка</h3>
-          <p className="mb-2 text-sm text-secondary">
-            Для покинувших гильдию: вход закроется экраном «врата», активные ставки снимутся, ДКП и
-            история сохранятся. Разблокировка — на вкладке «Заблокированные».
+    <Modal title={row.nickname} onClose={close} wide>
+      <div className="space-y-4">
+        <div>
+          <p className="text-sm text-secondary">
+            Ранг: {RANK_LABELS[row.rank]} · Роль:{' '}
+            {row.combatRole ? COMBAT_ROLE_LABELS[row.combatRole] : '—'}
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              value={blockComment}
-              onChange={(e) => setBlockComment(e.target.value)}
-              placeholder="Причина блокировки (обязательна, попадёт в аудит)"
-              minLength={3}
-              maxLength={500}
-              className="w-80"
-            />
-            <Button
-              variant="danger"
-              onClick={block}
-              disabled={busy || blockComment.trim().length < 3}
-            >
-              Заблокировать
-            </Button>
-          </div>
+          <p>Класс: {formatWeapons(row.weapons ?? [])}</p>
         </div>
-      )}
 
-      {canChangeRank && (
-        <div className="mt-4">
-          <h3 className="mb-2 font-semibold text-primary">Смена ранга</h3>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={newRank} onChange={(e) => setNewRank(e.target.value as Rank)}>
-              {RANKS.filter(
-                (rank) => rank !== 'ADMIN' && (rank !== 'GUILD_LEADER' || canAssignLeader),
-              ).map((rank) => (
-                <option key={rank} value={rank}>
-                  {RANK_LABELS[rank]}
-                </option>
-              ))}
-            </Select>
-            <Input
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Комментарий (обязателен, попадёт в аудит)"
-              minLength={3}
-              maxLength={500}
-              className="w-80"
-            />
-            <Button
-              variant="danger"
-              onClick={changeRank}
-              disabled={busy || comment.length < 3 || newRank === row.rank}
-            >
-              Изменить ранг
-            </Button>
-          </div>
-          {newRank === 'GUILD_LEADER' && <p>При передаче действующий Глава станет Рядовым.</p>}
-        </div>
-      )}
-
-      {canAssignLeader && (
-        <div className="mt-4">
-          <h3 className="mb-2 font-semibold text-primary">Начислить ДКП: {row.nickname}</h3>
-          <fieldset disabled={busy || !!grantAttempt} className="flex flex-wrap gap-2">
-            <Field label="Сумма ДКП">
+        {canBlock && (
+          <div>
+            <h3 className="mb-2 font-semibold text-primary">Блокировка</h3>
+            <p className="mb-2 text-sm text-secondary">
+              Для покинувших гильдию: вход закроется экраном «врата», активные ставки снимутся, ДКП
+              и история сохранятся. Разблокировка — на вкладке «Заблокированные».
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
               <Input
-                type="number"
-                min={1}
-                max={2147483647}
-                step={1}
-                value={grantAmount}
-                onChange={(e) => setGrantAmount(e.target.value)}
-              />
-            </Field>
-            <Field label="Комментарий">
-              <Input
+                value={blockComment}
+                onChange={(e) => setBlockComment(e.target.value)}
+                placeholder="Причина блокировки (обязательна, попадёт в аудит)"
+                minLength={3}
                 maxLength={500}
-                value={grantComment}
-                onChange={(e) => setGrantComment(e.target.value)}
+                className="w-80 grow"
               />
-            </Field>
-          </fieldset>
-          <p>
-            Получатель: {row.nickname}; сумма: {grantAmount || '—'} ДКП.
-          </p>
-          <Button
-            onClick={grant}
-            disabled={
-              busy ||
-              (!grantAttempt &&
-                (!Number.isInteger(Number(grantAmount)) ||
-                  Number(grantAmount) <= 0 ||
-                  Number(grantAmount) > 2147483647 ||
-                  grantComment.trim().length < 3))
-            }
-          >
-            {grantAttempt ? 'Повторить начисление' : 'Начислить ДКП'}
-          </Button>
-        </div>
-      )}
+              <Button
+                variant="danger"
+                onClick={block}
+                disabled={busy || blockComment.trim().length < 3}
+              >
+                Заблокировать
+              </Button>
+            </div>
+          </div>
+        )}
 
-      {message && <p className="mt-3 text-sm text-primary">{message}</p>}
-      <Button className="mt-4" onClick={onClose} disabled={busy || !!grantAttempt}>
-        Закрыть
-      </Button>
-    </Card>
+        {canChangeRank && (
+          <div>
+            <h3 className="mb-2 font-semibold text-primary">Смена ранга</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={newRank} onChange={(e) => setNewRank(e.target.value as Rank)}>
+                {RANKS.filter(
+                  (rank) => rank !== 'ADMIN' && (rank !== 'GUILD_LEADER' || canAssignLeader),
+                ).map((rank) => (
+                  <option key={rank} value={rank}>
+                    {RANK_LABELS[rank]}
+                  </option>
+                ))}
+              </Select>
+              <Input
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Комментарий (обязателен, попадёт в аудит)"
+                minLength={3}
+                maxLength={500}
+                className="w-80 grow"
+              />
+              <Button
+                variant="danger"
+                onClick={changeRank}
+                disabled={busy || comment.length < 3 || newRank === row.rank}
+              >
+                Изменить ранг
+              </Button>
+            </div>
+            {newRank === 'GUILD_LEADER' && <p>При передаче действующий Глава станет Рядовым.</p>}
+          </div>
+        )}
+
+        {canAssignLeader && (
+          <div>
+            <h3 className="mb-2 font-semibold text-primary">Начислить ДКП: {row.nickname}</h3>
+            <fieldset disabled={busy || !!grantAttempt} className="flex flex-wrap gap-2">
+              <Field label="Сумма ДКП">
+                <Input
+                  type="number"
+                  min={1}
+                  max={2147483647}
+                  step={1}
+                  value={grantAmount}
+                  onChange={(e) => setGrantAmount(e.target.value)}
+                />
+              </Field>
+              <Field label="Комментарий">
+                <Input
+                  maxLength={500}
+                  value={grantComment}
+                  onChange={(e) => setGrantComment(e.target.value)}
+                />
+              </Field>
+            </fieldset>
+            <p>
+              Получатель: {row.nickname}; сумма: {grantAmount || '—'} ДКП.
+            </p>
+            <Button
+              onClick={grant}
+              disabled={
+                busy ||
+                (!grantAttempt &&
+                  (!Number.isInteger(Number(grantAmount)) ||
+                    Number(grantAmount) <= 0 ||
+                    Number(grantAmount) > 2147483647 ||
+                    grantComment.trim().length < 3))
+              }
+            >
+              {grantAttempt ? 'Повторить начисление' : 'Начислить ДКП'}
+            </Button>
+          </div>
+        )}
+
+        {message && (
+          <p ref={messageRef} role="status" className="text-sm text-primary">
+            {message}
+          </p>
+        )}
+        <Button onClick={close} disabled={busy}>
+          Закрыть
+        </Button>
+      </div>
+    </Modal>
   );
 }
