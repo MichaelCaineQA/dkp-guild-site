@@ -1,4 +1,5 @@
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type { EventsDb, EventsActor } from './events.service';
 import { EventsService } from './events.service';
 
@@ -27,6 +28,24 @@ interface DropRecord {
   auctionId: string | null;
 }
 
+/** Строка истории ивента (issue #302): код, отметка посещения или запись журнала. */
+interface HistoryRow {
+  id: string;
+  eventId: string;
+}
+
+type EventOrSeriesWhere = { eventId?: string; event?: { seriesId: string } };
+
+/** Отказ удаления — предметный 409 с заданным текстом, а не ошибка БД. */
+async function refusal(work: Promise<unknown>): Promise<ConflictException> {
+  const error: unknown = await work.then(
+    () => undefined,
+    (e: unknown) => e,
+  );
+  expect(error).toBeInstanceOf(ConflictException);
+  return error as ConflictException;
+}
+
 function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
   const events: EventRecord[] = seed.map((e) => ({
     scope: 'GUILD',
@@ -46,7 +65,18 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
     ...e,
   }));
   const drops: DropRecord[] = [];
+  const codes: HistoryRow[] = [];
+  const marks: HistoryRow[] = [];
+  const entries: HistoryRow[] = [];
   const audit: Array<Record<string, string | null>> = [];
+  const inScope = (row: HistoryRow, where: EventOrSeriesWhere) =>
+    (!where.eventId || row.eventId === where.eventId) &&
+    (!where.event?.seriesId ||
+      events.find((e) => e.id === row.eventId)?.seriesId === where.event.seriesId);
+  const findHistory =
+    (rows: HistoryRow[]) =>
+    async ({ where }: { where: EventOrSeriesWhere }) =>
+      rows.find((row) => inScope(row, where)) ?? null;
   const db: EventsDb = {
     kP: {
       findUnique: async ({ where }) =>
@@ -178,6 +208,9 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
         return { count };
       },
     },
+    checkInCode: { findFirst: findHistory(codes) },
+    attendance: { findFirst: findHistory(marks) },
+    dkpEntry: { findFirst: findHistory(entries) },
     auditLog: {
       create: async ({ data }) => {
         audit.push({
@@ -190,7 +223,7 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
       },
     },
   };
-  return { db, events, drops, audit };
+  return { db, events, drops, codes, marks, entries, audit };
 }
 
 const ACTOR: EventsActor = { memberId: 'm-leader', isAdmin: false, rank: 'GUILD_LEADER' };
@@ -481,6 +514,52 @@ describe('EventsService.deleteOne', () => {
     expect(audit[0]).toMatchObject({ action: 'EVENT_DELETE', entityId: 'e-1' });
     expect(audit[0]!.comment).toContain('дропов: 2');
   });
+
+  it.each([
+    ['код чек-ина', 'codes', 'Чек-ин уже начался — отмените ивент вместо удаления'],
+    ['отметка посещения', 'marks', 'Есть отметки посещения — отмените ивент вместо удаления'],
+    ['запись журнала ДКП', 'entries', 'Есть записи журнала ДКП — отмените ивент вместо удаления'],
+  ] as const)('%s не даёт удалить ивент — 409, без аудита (#302)', async (_, table, message) => {
+    const { db, events, audit, ...history } = makeDb([{ id: 'e-1' }]);
+    history[table].push({ id: 'row-1', eventId: 'e-1' });
+
+    expect((await refusal(new EventsService(db).deleteOne('e-1', ACTOR))).message).toBe(message);
+    expect(events).toHaveLength(1);
+    expect(audit).toHaveLength(0);
+  });
+
+  it('код соседнего ивента не мешает удалить свой (#302)', async () => {
+    const { db, events, codes } = makeDb([{ id: 'e-1' }, { id: 'e-2' }]);
+    codes.push({ id: 'c-2', eventId: 'e-2' });
+
+    await expect(new EventsService(db).deleteOne('e-1', ACTOR)).resolves.toEqual({ ok: true });
+    expect(events.map((e) => e.id)).toEqual(['e-2']);
+  });
+
+  it('код, записанный после проверки первой попытки, после повтора даёт 409, а не ошибку БД (#302)', async () => {
+    const { db, events, audit, codes } = makeDb([{ id: 'e-1' }]);
+    const findCode = db.checkInCode.findFirst;
+    let attempt = 0;
+    db.checkInCode.findFirst = async (args) => {
+      attempt += 1;
+      if (attempt === 1) return null; // снимок первой попытки старше кода конкурента
+      codes.push({ id: 'c-1', eventId: 'e-1' }); // повтор видит зафиксированный код
+      return findCode(args);
+    };
+    // как PostgreSQL: DELETE при строке, записанной после снимка, — сбой сериализации
+    db.event.delete = async () => {
+      throw new Prisma.PrismaClientKnownRequestError('serialization failure', {
+        code: 'P2034',
+        clientVersion: 'test',
+      });
+    };
+
+    const error = await refusal(new EventsService(db).deleteOne('e-1', ACTOR));
+    expect(error.message).toBe('Чек-ин уже начался — отмените ивент вместо удаления');
+    expect(attempt).toBe(2);
+    expect(events).toHaveLength(1);
+    expect(audit).toHaveLength(0);
+  });
 });
 
 describe('EventsService.delete с дропами серии (#109)', () => {
@@ -511,6 +590,48 @@ describe('EventsService.delete с дропами серии (#109)', () => {
     expect(drops).toHaveLength(0);
     expect(audit[0]).toMatchObject({ action: 'EVENT_SERIES_DELETE', entityId: 's' });
     expect(audit[0]!.comment).toContain('дропов: 1');
+  });
+});
+
+describe('EventsService.deleteSeries: история чек-ина серии (#302)', () => {
+  it.each([
+    ['код чек-ина', 'codes', 'Чек-ин уже начался — отмените ивенты серии вместо удаления'],
+    [
+      'отметка посещения',
+      'marks',
+      'Есть отметки посещения — отмените ивенты серии вместо удаления',
+    ],
+    [
+      'запись журнала ДКП',
+      'entries',
+      'Есть записи журнала ДКП — отмените ивенты серии вместо удаления',
+    ],
+  ] as const)(
+    '%s у одного из ивентов — 409, серия, дропы и аудит без изменений',
+    async (_, table, message) => {
+      const { db, events, drops, audit, ...history } = makeDb([
+        { id: 'e-1', seriesId: 's' },
+        { id: 'e-2', seriesId: 's' },
+      ]);
+      history[table].push({ id: 'row-1', eventId: 'e-2' });
+      drops.push({ id: 'd-1', eventId: 'e-1', auctionId: null });
+
+      expect((await refusal(new EventsService(db).deleteSeries('s', ACTOR))).message).toBe(message);
+      expect(events).toHaveLength(2);
+      expect(drops).toHaveLength(1);
+      expect(audit).toHaveLength(0);
+    },
+  );
+
+  it('история ивента другой серии не мешает удалить свою', async () => {
+    const { db, events, marks } = makeDb([
+      { id: 'e-1', seriesId: 's' },
+      { id: 'e-9', seriesId: 'other' },
+    ]);
+    marks.push({ id: 'a-9', eventId: 'e-9' });
+
+    await expect(new EventsService(db).deleteSeries('s', ACTOR)).resolves.toEqual({ deleted: 1 });
+    expect(events.map((e) => e.id)).toEqual(['e-9']);
   });
 });
 

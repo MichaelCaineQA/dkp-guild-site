@@ -1,9 +1,12 @@
+import { ConflictException } from '@nestjs/common';
 import { WeekService } from './week.service';
 import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { EventsService, type EventsDb } from './events.service';
 const url = process.env.ONBOARDING_TEST_DATABASE_URL;
 const suite = url ? describe : describe.skip;
+/** Метка тестовых записей журнала (#302): после удаления ивента по нему их не найти. */
+const DKP_MARK = '#302 тестовая запись журнала';
 suite('Создание ивентов: настоящие транзакции PostgreSQL', () => {
   let db: PrismaClient;
   let service: EventsService;
@@ -40,6 +43,9 @@ suite('Создание ивентов: настоящие транзакции 
     await db.auditLog.deleteMany({ where: { actorMemberId: memberId } });
     await db.auction.deleteMany({ where: { lootDrop: { event: { eventTypeId: typeId } } } });
     await db.lootDrop.deleteMany({ where: { event: { eventTypeId: typeId } } });
+    await db.checkInCode.deleteMany({ where: { event: { eventTypeId: typeId } } });
+    await db.attendance.deleteMany({ where: { event: { eventTypeId: typeId } } });
+    await db.dkpEntry.deleteMany({ where: { memberId, comment: { startsWith: DKP_MARK } } });
     await db.event.deleteMany({ where: { eventTypeId: typeId } });
   });
   afterAll(async () => {
@@ -48,9 +54,13 @@ suite('Создание ивентов: настоящие транзакции 
     if (typeId) {
       await db.auction.deleteMany({ where: { lootDrop: { event: { eventTypeId: typeId } } } });
       await db.lootDrop.deleteMany({ where: { event: { eventTypeId: typeId } } });
+      await db.checkInCode.deleteMany({ where: { event: { eventTypeId: typeId } } });
+      await db.attendance.deleteMany({ where: { event: { eventTypeId: typeId } } });
       await db.event.deleteMany({ where: { eventTypeId: typeId } });
       await db.eventType.delete({ where: { id: typeId } });
     }
+    if (memberId)
+      await db.dkpEntry.deleteMany({ where: { memberId, comment: { startsWith: DKP_MARK } } });
     if (itemId) await db.item.deleteMany({ where: { id: itemId } });
     if (memberId) await db.absence.deleteMany({ where: { memberId } });
     if (memberId) await db.member.delete({ where: { id: memberId } });
@@ -134,6 +144,109 @@ suite('Создание ивентов: настоящие транзакции 
 
     expect(await db.event.count({ where: { seriesId } })).toBe(0);
     expect(await db.lootDrop.count({ where: { event: { seriesId } } })).toBe(0);
+  });
+
+  describe('удаление ивента с историей чек-ина (#302)', () => {
+    /** Сгенерированный стартовый код: строка CheckInCode со ссылкой на ивент. */
+    const addStartCode = (eventId: string) =>
+      db.checkInCode.create({
+        data: {
+          eventId,
+          phase: 'START',
+          codeHash: 'hash',
+          salt: 'salt',
+          codeEnc: 'enc',
+          windowOpensAt: new Date(input().startsAt),
+          windowClosesAt: new Date(+new Date(input().startsAt) + 180_000),
+        },
+      });
+    const addDkpEntry = (eventId: string) =>
+      db.dkpEntry.create({
+        data: { memberId, type: 'MANUAL_EARN', amount: 5, eventId, comment: DKP_MARK },
+      });
+    /** Отказ должен быть предметным 409, а не ошибкой внешнего ключа (500). */
+    const expectConflict = async (work: Promise<unknown>, message: RegExp) => {
+      const error: unknown = await work.then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).getStatus()).toBe(409);
+      expect((error as ConflictException).message).toMatch(message);
+    };
+
+    it('без кодов, отметок и записей журнала ивент удаляется как раньше', async () => {
+      const created = await service.create(input(), ACTOR);
+
+      await expect(service.deleteOne(created.id, ACTOR)).resolves.toEqual({ ok: true });
+
+      expect(await db.event.findUnique({ where: { id: created.id } })).toBeNull();
+      expect(
+        await db.auditLog.count({ where: { entityId: created.id, action: 'EVENT_DELETE' } }),
+      ).toBe(1);
+    });
+
+    it('код чек-ина сгенерирован — 409, ивент и код остаются', async () => {
+      const created = await service.create(input(), ACTOR);
+      await addStartCode(created.id);
+
+      await expectConflict(service.deleteOne(created.id, ACTOR), /Чек-ин уже начался/);
+
+      expect(await db.event.findUnique({ where: { id: created.id } })).not.toBeNull();
+      expect(await db.checkInCode.count({ where: { eventId: created.id } })).toBe(1);
+      expect(
+        await db.auditLog.count({ where: { entityId: created.id, action: 'EVENT_DELETE' } }),
+      ).toBe(0);
+    });
+
+    it('ручная отметка посещения — 409, ивент и отметка остаются', async () => {
+      const created = await service.create(input(), ACTOR);
+      await db.attendance.create({
+        data: { eventId: created.id, memberId, status: 'PRESENT' },
+      });
+
+      await expectConflict(service.deleteOne(created.id, ACTOR), /отметк/);
+
+      expect(await db.event.findUnique({ where: { id: created.id } })).not.toBeNull();
+      expect(await db.attendance.count({ where: { eventId: created.id } })).toBe(1);
+    });
+
+    it('запись журнала ДКП — 409, запись сохраняет ссылку на ивент', async () => {
+      const created = await service.create(input(), ACTOR);
+      const entry = await addDkpEntry(created.id);
+
+      await expectConflict(service.deleteOne(created.id, ACTOR), /журнал/);
+
+      expect(await db.event.findUnique({ where: { id: created.id } })).not.toBeNull();
+      expect((await db.dkpEntry.findUniqueOrThrow({ where: { id: entry.id } })).eventId).toBe(
+        created.id,
+      );
+    });
+
+    it('серия с кодом у одного из ивентов — 409, серия остаётся целиком', async () => {
+      const { seriesId } = await service.createSeries(input(), ACTOR);
+      const first = await db.event.findFirstOrThrow({ where: { seriesId } });
+      await addStartCode(first.id);
+
+      await expectConflict(service.deleteSeries(seriesId, ACTOR), /Чек-ин уже начался/);
+
+      expect(await db.event.count({ where: { seriesId } })).toBe(4);
+      expect(await db.checkInCode.count({ where: { event: { seriesId } } })).toBe(1);
+      expect(
+        await db.auditLog.count({ where: { entityId: seriesId, action: 'EVENT_SERIES_DELETE' } }),
+      ).toBe(0);
+    });
+
+    it('серия с записью журнала ДКП — 409, все ивенты остаются', async () => {
+      const { seriesId } = await service.createSeries(input(), ACTOR);
+      const first = await db.event.findFirstOrThrow({ where: { seriesId } });
+      await addDkpEntry(first.id);
+
+      await expectConflict(service.deleteSeries(seriesId, ACTOR), /журнал/);
+
+      expect(await db.event.count({ where: { seriesId } })).toBe(4);
+      expect(await db.dkpEntry.count({ where: { event: { seriesId } } })).toBe(1);
+    });
   });
   it('неделя: активные пересекающиеся отсутствия, отменённые и граница периода в PostgreSQL', async () => {
     await service.create(input(), { memberId, isAdmin: false, rank: 'OFFICER' });
