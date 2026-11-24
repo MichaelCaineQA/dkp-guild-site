@@ -21,6 +21,7 @@ export const PERMISSIONS = [
   'attendance.manual', // ручные отметки посещения
   'absence.see', // отметка «Увидел» на отсутствиях
   'dkp.penalty', // штрафы и корректировки ДКП
+  'dkp.grant', // ручное начисление ДКП вне ивента — Глава/Админ (решение 22)
   'items.manage', // справочник предметов
   'auction.bid', // ставки на аукционе
   'auctions.create', // лот вне ивента («хранилище гильдии») — Глава/Админ
@@ -43,6 +44,7 @@ const MIN_RANK: Record<Permission, Rank> = {
   'attendance.manual': 'GUILD_LEADER',
   'absence.see': 'GUILD_LEADER', // «Увидел»: Глава/Админ; лидеры КП/пачки — этап 3 (issue #38)
   'dkp.penalty': 'GUILD_LEADER',
+  'dkp.grant': 'GUILD_LEADER',
   'items.manage': 'OFFICER',
   'auction.bid': 'MEMBER',
   'auctions.create': 'GUILD_LEADER',

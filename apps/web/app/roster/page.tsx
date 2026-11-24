@@ -191,6 +191,14 @@ export default function RosterPage() {
     [user],
   );
 
+  // Начисление ДКП вне ивента — Глава и Админ (план 2.2, решение 22).
+  const canGrantDkp = useMemo(
+    () =>
+      !!user &&
+      can({ rank: user.rank, isAdmin: user.isAdmin, memberId: user.memberId }, 'dkp.grant'),
+    [user],
+  );
+
   if (sessionLoading) {
     return <Page>Загрузка…</Page>;
   }
@@ -505,6 +513,7 @@ export default function RosterPage() {
           key={selected.id}
           row={selected}
           canAssignLeader={!!user?.isAdmin}
+          canGrantDkp={canGrantDkp}
           canBlock={!!canManage && (selected.rank === 'MEMBER' || selected.rank === 'OFFICER')}
           canChangeRank={
             !!user &&
@@ -532,6 +541,7 @@ export default function RosterPage() {
 function MemberDialog({
   row,
   canAssignLeader,
+  canGrantDkp,
   canBlock,
   canChangeRank,
   onClose,
@@ -539,6 +549,7 @@ function MemberDialog({
 }: {
   row: RosterRow;
   canAssignLeader: boolean;
+  canGrantDkp: boolean;
   canBlock: boolean;
   canChangeRank: boolean;
   onClose: () => void;
@@ -759,7 +770,7 @@ function MemberDialog({
           </div>
         )}
 
-        {canAssignLeader && (
+        {canGrantDkp && (
           <div>
             <h3 className="mb-2 font-semibold text-primary">Начислить ДКП: {row.nickname}</h3>
             <fieldset disabled={busy || !!grantAttempt} className="flex flex-wrap gap-2">
@@ -776,6 +787,9 @@ function MemberDialog({
               <Field label="Комментарий">
                 <Input
                   maxLength={500}
+                  placeholder="Причина начисления (обязательна, попадёт в аудит)"
+                  // Широкое поле причины: узкое обрезало и подсказку, и введённый текст.
+                  className="w-80 grow"
                   value={grantComment}
                   onChange={(e) => setGrantComment(e.target.value)}
                 />

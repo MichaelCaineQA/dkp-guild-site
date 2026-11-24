@@ -6,15 +6,25 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { adminDkpGrantSchema } from '@dkp/shared';
+import { adminDkpGrantSchema, can, type PermissionActor } from '@dkp/shared';
 import { serializable } from '../prisma/serializable';
 
+/** Актор начисления — пользователь сессии: права читаются из него, не из строки члена. */
+export type DkpGrantActor = Pick<PermissionActor, 'rank' | 'memberId' | 'isAdmin'>;
+
+/**
+ * Ручное начисление ДКП вне ивента (план 2.2, решение 22): Глава и Админ,
+ * включая резервного админа без Member. Путь и схема остались «admin-grants» —
+ * до решения 22 начислял только Админ; переименование ломало бы контракт API.
+ */
 @Injectable()
 export class AdminGrantService {
   constructor(private readonly db: PrismaClient) {}
 
-  async grant(body: unknown, isAdmin: boolean) {
-    if (!isAdmin) throw new ForbiddenException('Начисление доступно только Админу');
+  async grant(body: unknown, actor: DkpGrantActor) {
+    // Право проверяется и здесь: защита не зависит от guard'а контроллера.
+    if (!can(actor, 'dkp.grant'))
+      throw new ForbiddenException('Начисление доступно Главе и Админу');
     const parsed = adminDkpGrantSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException('Проверьте получателя, сумму и комментарий');
     const input = parsed.data;
@@ -45,16 +55,19 @@ export class AdminGrantService {
             type: 'MANUAL_EARN',
             amount: input.amount,
             comment: input.comment,
+            // Автор записи — как у начислений в ивенте; у резервного админа Member нет.
+            createdById: actor.memberId ?? null,
           },
         });
+        const author = actor.isAdmin || actor.rank === 'ADMIN' ? 'Админ' : 'Глава';
         await tx.auditLog.create({
           data: {
-            actorMemberId: null,
-            actorIsAdmin: true,
+            actorMemberId: actor.memberId ?? null,
+            actorIsAdmin: !!actor.isAdmin,
             action: 'MANUAL_DKP',
             entityType: 'DkpEntry',
             entityId: entry.id,
-            comment: `Админ начислил ${input.amount} ДКП участнику ${member.nickname}. ${input.comment}`,
+            comment: `${author} начислил ${input.amount} ДКП участнику ${member.nickname}. ${input.comment}`,
           },
         });
         return { id: entry.id, repeated: false };

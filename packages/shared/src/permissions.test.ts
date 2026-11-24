@@ -35,6 +35,7 @@ const EXPECTED: Partial<Record<Permission, Rank[]>> = {
   'attendance.manual': ['GUILD_LEADER', 'ADMIN'],
   'absence.see': ['GUILD_LEADER', 'ADMIN'],
   'dkp.penalty': ['GUILD_LEADER', 'ADMIN'],
+  'dkp.grant': ['GUILD_LEADER', 'ADMIN'],
   'items.manage': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
   'auction.bid': ALL_RANKS,
   'auctions.create': ['GUILD_LEADER', 'ADMIN'],
