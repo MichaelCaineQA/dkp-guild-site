@@ -9,7 +9,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it('сохраняет канал и подтверждение доступа к отсутствиям', async () => {
+it('сохраняет канал отсутствий без подтверждения закрытости (#325)', async () => {
   vi.mocked(api).mockResolvedValue({
     configured: true,
     channels: { announcements: null, reminders: null, absences: null, lots: null },
@@ -18,9 +18,10 @@ it('сохраняет канал и подтверждение доступа �
   fireEvent.change(await screen.findByLabelText('Заявки об отсутствии'), {
     target: { value: '401' },
   });
-  fireEvent.click(screen.getByRole('checkbox'));
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  expect(screen.queryByText(/закрыт/i)).toBeNull();
   fireEvent.change(screen.getByLabelText('Причина изменения'), {
-    target: { value: 'Новый канал' },
+    target: { value: 'Общий канал' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить каналы' }));
   await waitFor(() =>
@@ -28,10 +29,21 @@ it('сохраняет канал и подтверждение доступа �
       '/settings/discord',
       expect.objectContaining({
         method: 'PUT',
-        body: expect.stringContaining('"absenceAccessConfirmed":true'),
+        body: JSON.stringify({
+          channels: { announcements: null, reminders: null, absences: '401', lots: null },
+          reason: 'Общий канал',
+        }),
       }),
     ),
   );
+});
+
+it('подсказывает, что один канал подходит для нескольких типов уведомлений', async () => {
+  vi.mocked(api).mockResolvedValue({ configured: true, channels: emptyChannels });
+  render(<DiscordSettings />);
+  expect(
+    await screen.findByText(/Один канал можно указать для нескольких типов уведомлений\./),
+  ).toBeDefined();
 });
 
 it('показывает ошибку Discord и сохраняет введённый канал', async () => {

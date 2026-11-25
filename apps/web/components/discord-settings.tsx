@@ -25,7 +25,6 @@ export function DiscordSettings() {
   /** Каналы, сохранённые на сервере: проверка доставки идёт по ним, а не по форме (issue #315). */
   const [savedChannels, setSavedChannels] = useState<Channels>(NO_CHANNELS);
   const [reason, setReason] = useState('');
-  const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [testId, setTestId] = useState('');
@@ -65,15 +64,10 @@ export function DiscordSettings() {
       accept(
         await api<Settings>('/settings/discord', {
           method: 'PUT',
-          body: JSON.stringify({
-            channels: settings.channels,
-            absenceAccessConfirmed: confirmed,
-            reason,
-          }),
+          body: JSON.stringify({ channels: settings.channels, reason }),
         }),
       );
       setReason('');
-      setConfirmed(false);
       setMessage('Каналы сохранены');
     } catch (err) {
       setError(errorText(err));
@@ -132,7 +126,8 @@ export function DiscordSettings() {
         {settings && (
           <>
             <Muted>
-              Укажите ID текстовых каналов. Пустое поле отключает уведомления этого типа.
+              Укажите ID текстовых каналов. Пустое поле отключает уведомления этого типа. Один канал
+              можно указать для нескольких типов уведомлений.
             </Muted>
             {(Object.keys(labels) as Kind[]).map((kind) => (
               <div key={kind} className="space-y-2">
@@ -161,13 +156,6 @@ export function DiscordSettings() {
                 <Muted>Проверить можно только сохранённый канал. Сначала сохраните каналы.</Muted>
               </div>
             )}
-            <Field label="Подтверждаю: канал отсутствий закрыт для остальных, доступен офицерам и всем назначенным РЛ">
-              <input
-                type="checkbox"
-                checked={confirmed}
-                onChange={(event) => setConfirmed(event.target.checked)}
-              />
-            </Field>
             <Field label="Причина изменения">
               <Input
                 value={reason}

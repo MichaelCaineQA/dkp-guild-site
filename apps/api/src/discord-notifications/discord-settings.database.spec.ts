@@ -9,12 +9,22 @@ suite('Discord settings on PostgreSQL', () => {
   let db: PrismaClient;
   let service: DiscordSettingsService;
   let fetchSpy: jest.SpyInstance;
+  let discordAnswer: (url: string) => Response | undefined;
   let owned = false;
-  let testId: string | undefined;
+  const testIds: string[] = [];
   const previousToken = process.env.DISCORD_BOT_TOKEN;
   const previousGuild = process.env.DISCORD_GUILD_ID;
   const actor = { memberId: null, isAdmin: true };
   const channels = { announcements: '400', reminders: null, absences: '401', lots: null };
+  /** Один канал для всех четырёх типов уведомлений. */
+  const shared = { announcements: '400', reminders: '400', absences: '400', lots: '400' };
+  const auditWhere = {
+    entityId: 'discord.channels',
+    comment: { contains: 'discord-settings-test' },
+  };
+  const auditCount = () => db.auditLog.count({ where: auditWhere });
+  const channelReads = (id: string) =>
+    fetchSpy.mock.calls.filter(([address]) => String(address).endsWith(`/channels/${id}`));
 
   beforeAll(async () => {
     const parsed = new URL(url!);
@@ -30,10 +40,13 @@ suite('Discord settings on PostgreSQL', () => {
       db as unknown as PrismaService,
       new DiscordChannelValidator(),
     );
+    discordAnswer = () => undefined;
     fetchSpy = jest
       .spyOn(global, 'fetch')
-      .mockImplementation(async (url: string | URL | Request) => {
-        const path = String(url);
+      .mockImplementation(async (address: string | URL | Request) => {
+        const path = String(address);
+        const override = discordAnswer(path);
+        if (override) return override;
         let body: unknown;
         if (path.endsWith('/users/@me')) body = { id: '200' };
         else if (path.endsWith('/guilds/100')) body = { owner_id: '300' };
@@ -46,12 +59,16 @@ suite('Discord settings on PostgreSQL', () => {
       });
   });
 
+  beforeEach(() => {
+    discordAnswer = () => undefined;
+    fetchSpy.mockClear();
+  });
+
   afterAll(async () => {
     fetchSpy?.mockRestore();
-    if (testId) await db?.discordNotification.deleteMany({ where: { id: testId } });
-    await db?.auditLog.deleteMany({
-      where: { entityId: 'discord.channels', comment: { contains: 'discord-settings-test' } },
-    });
+    if (testIds.length)
+      await db?.discordNotification.deleteMany({ where: { id: { in: testIds } } });
+    await db?.auditLog.deleteMany({ where: auditWhere });
     if (owned) await db?.setting.deleteMany({ where: { key: 'discord.channels' } });
     if (previousToken === undefined) delete process.env.DISCORD_BOT_TOKEN;
     else process.env.DISCORD_BOT_TOKEN = previousToken;
@@ -61,85 +78,107 @@ suite('Discord settings on PostgreSQL', () => {
   });
 
   it('saves validated channels and records an audit', async () => {
-    await service.update(
-      { channels, absenceAccessConfirmed: true, reason: 'discord-settings-test' },
-      actor,
-    );
+    await service.update({ channels, reason: 'discord-settings-test' }, actor);
     expect((await service.get()).channels).toEqual(channels);
-    expect(
-      await db.auditLog.count({
-        where: { entityId: 'discord.channels', comment: { contains: 'discord-settings-test' } },
-      }),
-    ).toBe(1);
+    expect(await auditCount()).toBe(1);
   });
 
-  it('rejects absence channels without the access checklist', async () => {
-    await expect(
-      service.update(
-        {
-          channels: { ...channels, absences: '403' },
-          absenceAccessConfirmed: false,
-          reason: 'discord-settings-test',
-        },
-        actor,
-      ),
-    ).rejects.toThrow('Подтвердите');
+  it('saves a channel shared by all notification types', async () => {
+    await service.update({ channels: shared, reason: 'discord-settings-test' }, actor);
+    expect((await service.get()).channels).toEqual(shared);
+    expect(await auditCount()).toBe(2);
+    // Общий ID проверяется в Discord один раз, а не по числу типов.
+    expect(channelReads('400')).toHaveLength(1);
   });
 
-  it('requires confirmation when an absence channel is enabled again', async () => {
-    await service.update(
-      {
-        channels: { ...channels, absences: null },
-        absenceAccessConfirmed: false,
-        reason: 'discord-settings-test',
-      },
-      actor,
-    );
-    await expect(
-      service.update(
-        { channels, absenceAccessConfirmed: false, reason: 'discord-settings-test' },
+  it('ignores the confirmation flag that an older form still sends', async () => {
+    const off = { ...channels, absences: null };
+    await service.update({ channels: off, reason: 'discord-settings-test' }, actor);
+    expect((await service.get()).channels).toEqual(off);
+    for (const absenceAccessConfirmed of [false, true]) {
+      await service.update(
+        { channels, absenceAccessConfirmed, reason: 'discord-settings-test' },
         actor,
-      ),
-    ).rejects.toThrow('Подтвердите');
+      );
+      expect((await service.get()).channels).toEqual(channels);
+    }
+    expect(await auditCount()).toBe(4);
   });
 
-  it('requires confirmation for a channel copied from a different server', async () => {
-    await db.setting.upsert({
-      where: { key: 'discord.channels' },
-      create: { key: 'discord.channels', value: { guildId: '999', channels } },
-      update: { value: { guildId: '999', channels } },
-    });
+  it('rejects an absence channel from another server and saves nothing', async () => {
+    const before = await auditCount();
+    discordAnswer = (path) =>
+      path.endsWith('/channels/403')
+        ? new Response(JSON.stringify({ guild_id: '999', type: 0, permission_overwrites: [] }))
+        : undefined;
     await expect(
       service.update(
-        { channels, absenceAccessConfirmed: false, reason: 'discord-settings-test' },
+        { channels: { ...channels, absences: '403' }, reason: 'discord-settings-test' },
         actor,
       ),
-    ).rejects.toThrow('Подтвердите');
+    ).rejects.toThrow('настроенного Discord-сервера');
+    expect((await service.get()).channels).toEqual(channels);
+    expect(await auditCount()).toBe(before);
+  });
+
+  it('rejects an absence channel the bot cannot write to and saves nothing', async () => {
+    const before = await auditCount();
+    const everyone = { id: '100', permissions: '3072' };
+    // DENY VIEW_CHANNEL (1024) и SEND_MESSAGES (2048) для @everyone.
+    const deny = (1024n | 2048n).toString();
+    discordAnswer = (path) => {
+      if (path.endsWith('/guilds/100/roles')) return new Response(JSON.stringify([everyone]));
+      return path.endsWith('/channels/403')
+        ? new Response(
+            JSON.stringify({
+              guild_id: '100',
+              type: 0,
+              permission_overwrites: [{ id: '100', type: 0, allow: '0', deny }],
+            }),
+          )
+        : undefined;
+    };
+    await expect(
+      service.update(
+        { channels: { ...channels, absences: '403' }, reason: 'discord-settings-test' },
+        actor,
+      ),
+    ).rejects.toThrow('Боту нужны права');
+    expect((await service.get()).channels).toEqual(channels);
+    expect(await auditCount()).toBe(before);
   });
 
   it('changes and disables a channel with an audit record', async () => {
-    await service.update(
-      { channels, absenceAccessConfirmed: true, reason: 'discord-settings-test' },
-      actor,
-    );
+    await service.update({ channels, reason: 'discord-settings-test' }, actor);
     const changed = { ...channels, announcements: '402' };
-    await service.update(
-      { channels: changed, absenceAccessConfirmed: false, reason: 'discord-settings-test' },
-      actor,
+    await service.update({ channels: changed, reason: 'discord-settings-test' }, actor);
+    const announcementsOff = { ...changed, announcements: null };
+    await service.update({ channels: announcementsOff, reason: 'discord-settings-test' }, actor);
+    const absencesOff = { ...announcementsOff, absences: null };
+    await service.update({ channels: absencesOff, reason: 'discord-settings-test' }, actor);
+    const saved = (await service.get()).channels;
+    expect(saved).toEqual(absencesOff);
+    expect(
+      (
+        await db.auditLog.findFirst({
+          where: { ...auditWhere, comment: { contains: ` → ${JSON.stringify(absencesOff)}` } },
+        })
+      )?.comment,
+    ).toBe(
+      `Discord: ${JSON.stringify(announcementsOff)} → ${JSON.stringify(absencesOff)}; discord-settings-test`,
     );
-    const disabled = { ...changed, announcements: null };
-    await service.update(
-      { channels: disabled, absenceAccessConfirmed: false, reason: 'discord-settings-test' },
-      actor,
-    );
-    expect((await service.get()).channels).toEqual(disabled);
+    await service.update({ channels, reason: 'discord-settings-test' }, actor);
+  });
+
+  it('does not write an audit record when the same channels are saved again', async () => {
+    const before = await auditCount();
+    await service.update({ channels, reason: 'discord-settings-test' }, actor);
+    expect((await service.get()).channels).toEqual(channels);
+    expect(await auditCount()).toBe(before);
   });
 
   it('hides channels copied from a different environment', async () => {
-    await service.update(
-      { channels, absenceAccessConfirmed: true, reason: 'discord-settings-test' },
-      actor,
-    );
+    await service.update({ channels, reason: 'discord-settings-test' }, actor);
     process.env.DISCORD_GUILD_ID = '999';
     try {
       expect((await service.get()).channels).toEqual({
@@ -154,12 +193,22 @@ suite('Discord settings on PostgreSQL', () => {
   });
 
   it('queues a neutral message for the saved channel', async () => {
-    await service.update(
-      { channels, absenceAccessConfirmed: true, reason: 'discord-settings-test' },
-      actor,
-    );
+    await service.update({ channels, reason: 'discord-settings-test' }, actor);
     const result = await service.test('announcements');
-    testId = result.id;
+    testIds.push(result.id);
+    expect(
+      await db.discordNotification.findUniqueOrThrow({ where: { id: result.id } }),
+    ).toMatchObject({
+      channelId: '400',
+      content: 'Проверка уведомлений сайта гильдии.',
+      status: 'PENDING',
+    });
+  });
+
+  it('queues the absence test message for the shared channel', async () => {
+    await service.update({ channels: shared, reason: 'discord-settings-test' }, actor);
+    const result = await service.test('absences');
+    testIds.push(result.id);
     expect(
       await db.discordNotification.findUniqueOrThrow({ where: { id: result.id } }),
     ).toMatchObject({
