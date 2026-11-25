@@ -401,6 +401,33 @@
 - Решение: добавлять `API_URL_VALUE: '/api'` в фабрику мока.
 - Повторная проверка: statistics-attendance.test.tsx — зелёный.
 
+## Release падает на «Build and push web image»: SIGILL в arm64-сборке под QEMU
+
+- Источник: релиз v1.2.0, 25.11.2026 (тег на `537fc57`, Release run
+  45594028540). Симптом: job `publish` красный на шаге «Build and push web
+  image», «Package release archive» и «Publish GitHub release» пропущены;
+  job «Validate release» зелёный. В журнале шага (`GET /actions/jobs/<id>/logs`
+  с `-L`, искать `[ELIFECYCLE]`) за несколько строк до ошибки:
+  `qemu: uncaught target signal 4 (Illegal instruction) - core dumped` и
+  `Next.js build worker exited with code: null and signal: SIGILL` в ветке
+  `[linux/arm64 build …] RUN pnpm --filter @dkp/shared build && pnpm --filter @dkp/web build`.
+- Причина: job собирает образы под две платформы, arm64 на раннере GitHub
+  идёт через эмуляцию QEMU, и рабочий процесс `next build` в ней изредка
+  падает по незаконной инструкции. Это не код: в том же запуске ветка amd64
+  и образ API собрались, «Validate release» (тесты, сборка, установщик)
+  зелёная. Почему QEMU выдаёт SIGILL — не выяснялось; релизы v1.0.0 и v1.1.0
+  прошли на том же конвейере с первого раза.
+- Обход: `POST /repos/<owner>/<repo>/actions/runs/<id>/rerun-failed-jobs` —
+  вторая попытка того же запуска, тег не трогается. Повтор занял 15 минут
+  и прошёл. Пока Release не зелёный, Deploy production не запускать.
+- Ждать Release около 24 минут (Validate release — 3,5, publish — около 20).
+  Опрос останавливать только по явному признаку завершения (отдельная строка
+  вроде `RUN_COMPLETED <conclusion>` при `status == completed`): шаблон
+  `completed/` не совпадает с `completed / failure`, и падение можно заметить
+  с опозданием.
+- Повторная проверка: на следующем релизе. Упал так же — повторить задачу;
+  если и повтор падает, это уже не разовый сбой эмуляции.
+
 ## Кэш сборки Docker на VPS растёт с каждым деплоем
 
 - Источник: проверка 24.11.2026 перед закрытием этапа 5, только чтение.
