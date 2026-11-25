@@ -31,7 +31,7 @@
 
 | Раздел | Ключи |
 |---|---|
-| Чек-ин | `checkin.generateBeforeStartSec` — генерация до старта; `checkin.windowSec` — окно выбора; `checkin.attempts` — число попыток; `checkin.startSharePct` / `checkin.endSharePct` — доли платы |
+| Чек-ин | `checkin.windowSec` — окно выбора (идёт от нажатия «Начать ивент» / «Завершить ивент», решение 23); `checkin.attempts` — число попыток; `checkin.startSharePct` / `checkin.endSharePct` — доли платы |
 | Отсутствия | `absence.deadlineBeforeStartSec` — дедлайн подачи до старта |
 | Аукцион | `auction.step` — минимальный шаг; `auction.liveDurationSec` — длительность живой раздачи; `auction.longDurationDays` — длительность длинного лота; `auction.antiSnipeLiveSec` / `auction.antiSnipeLongSec` — анти-снайп; `auction.foreignClassMarkupPct` — наценка чужому классу; `auction.noBidTimeoutSec` — тайм-аут без ставок |
 | Discord | `discord.reminderMinutes` — за сколько минут присылать напоминание; по умолчанию 15 минут, допустимо от 1 до 10080 минут |

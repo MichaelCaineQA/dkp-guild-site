@@ -5,6 +5,7 @@ import { EventsService, type EventsDb } from './events.service';
 import { ParticipationService } from './participation.service';
 import { WeekService } from './week.service';
 import { CheckInService, type CheckInDb } from '../checkin/checkin.service';
+import { attachCheckInLaunch } from '../checkin/checkin.module';
 import { AbsencesService, type AbsencesDb } from '../absences/absences.service';
 import { ConductService, type ConductDb } from '../conduct/conduct.service';
 import { OrgService } from '../org/org.service';
@@ -134,15 +135,13 @@ suite('Состав ивента: перевод после создания в 
       }),
     ).toBeNull();
 
+    // Код открывается кнопкой «Начать ивент» (решение 23), за минуту до планового начала.
+    events = new EventsService(db as unknown as EventsDb, () => new Date(+start - 60000));
+    attachCheckInLaunch(events, 'ab'.repeat(32));
+    await events.changeStatus(id, { status: 'RUNNING' }, admin);
     const checkin = new CheckInService(
       db as unknown as CheckInDb,
-      {
-        generateBeforeStartSec: 180,
-        windowSec: 180,
-        attempts: 1,
-        startSharePct: 50,
-        endSharePct: 50,
-      },
+      { startSharePct: 50, endSharePct: 50 },
       () => new Date(+start - 60000),
       'ab'.repeat(32),
     );

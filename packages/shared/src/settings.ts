@@ -24,12 +24,6 @@ interface SettingMeta {
 const intSetting = (min: number, max: number) => z.number().int().min(min).max(max);
 
 export const CHECKIN_SETTINGS = {
-  'checkin.generateBeforeStartSec': {
-    schema: intSetting(0, 3600),
-    label: 'Генерация стартового кода до начала ивента',
-    unit: 'сек',
-    plan: '2.2',
-  },
   'checkin.windowSec': {
     schema: intSetting(30, 3600),
     label: 'Окно выбора кода',
@@ -162,7 +156,6 @@ export const SETTING_DEFAULTS: Record<SettingKey, number> = Object.fromEntries(
     SETTINGS_REGISTRY[key].schema.parse(
       (
         {
-          'checkin.generateBeforeStartSec': 180,
           'checkin.windowSec': 180,
           'checkin.attempts': 1,
           'checkin.startSharePct': 50,

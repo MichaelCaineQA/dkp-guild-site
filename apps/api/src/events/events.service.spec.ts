@@ -455,6 +455,100 @@ describe('EventsService.changeStatus', () => {
       ConflictException,
     );
   });
+
+  it('«Начать ивент» и «Завершить ивент» открывают окно кода своей фазы той же транзакцией (решение 23)', async () => {
+    const { db, events } = makeDb([{ id: 'e-1' }]);
+    const pressedAt = new Date('2026-03-03T16:45:00Z');
+    const service = new EventsService(db, () => pressedAt);
+    const launches: Array<[string, 'START' | 'END', Date]> = [];
+    service.onEventCodeLaunch = async (tx, eventId, phase, actor, now) => {
+      expect(tx).toBe(db); // транзакция та же, что меняет статус
+      expect(actor).toBe(ACTOR);
+      launches.push([eventId, phase, now]);
+    };
+
+    await service.changeStatus('e-1', { status: 'RUNNING' }, ACTOR);
+    await service.changeStatus('e-1', { status: 'FINISHED' }, ACTOR);
+
+    expect(launches).toEqual([
+      ['e-1', 'START', pressedAt],
+      ['e-1', 'END', pressedAt],
+    ]);
+    expect(events[0]!.status).toBe('FINISHED');
+  });
+
+  it('отмена ивента окно кода не открывает', async () => {
+    const { db } = makeDb([{ id: 'e-1' }]);
+    const service = new EventsService(db);
+    const launch = jest.fn();
+    service.onEventCodeLaunch = launch;
+
+    await service.changeStatus('e-1', { status: 'CANCELLED' }, ACTOR);
+
+    expect(launch).not.toHaveBeenCalled();
+  });
+
+  it('сбой запуска кода откатывает и статус, и запись аудита', async () => {
+    const { db, events, audit } = makeDb([{ id: 'e-1' }]);
+    const service = new EventsService(db);
+    service.onEventCodeLaunch = async () => {
+      throw new Error('launch failure');
+    };
+
+    await expect(service.changeStatus('e-1', { status: 'RUNNING' }, ACTOR)).rejects.toThrow(
+      'launch failure',
+    );
+    expect(events[0]!.status).toBe('PLANNED');
+    expect(audit).toHaveLength(0);
+  });
+
+  it('статус перечитывается в транзакции: ивент уже начали другим нажатием — 409 без кода', async () => {
+    const { db, events, audit } = makeDb([{ id: 'e-1' }]);
+    const service = new EventsService(db);
+    const launch = jest.fn();
+    service.onEventCodeLaunch = launch;
+    // Конкурент начал ивент после первой проверки (404) и до перечитывания.
+    const findUnique = db.event.findUnique;
+    let reads = 0;
+    db.event.findUnique = async (args) => {
+      reads += 1;
+      if (reads === 2) events[0]!.status = 'RUNNING';
+      return findUnique(args);
+    };
+
+    await expect(service.changeStatus('e-1', { status: 'RUNNING' }, ACTOR)).rejects.toThrow(
+      ConflictException,
+    );
+    expect(launch).not.toHaveBeenCalled();
+    expect(audit).toHaveLength(0);
+  });
+
+  it('запустить и завершить может только управляющий ивента, отменить — и Офицер', async () => {
+    const member = { memberId: 'm-other', isAdmin: false, rank: 'MEMBER' as const };
+    const raidLead = { memberId: 'm-rl', isAdmin: false, rank: 'MEMBER' as const };
+    const officer = { memberId: 'm-officer', isAdmin: false, rank: 'OFFICER' as const };
+
+    const stranger = makeDb([{ id: 'e-1' }]);
+    const strangerService = new EventsService(stranger.db);
+    await expect(
+      strangerService.changeStatus('e-1', { status: 'RUNNING' }, member),
+    ).rejects.toThrow(ForbiddenException);
+    expect(stranger.events[0]!.status).toBe('PLANNED');
+
+    const own = makeDb([{ id: 'e-1' }]);
+    const ownService = new EventsService(own.db);
+    await ownService.changeStatus('e-1', { status: 'RUNNING' }, raidLead);
+    await ownService.changeStatus('e-1', { status: 'FINISHED' }, raidLead);
+    expect(own.events[0]!.status).toBe('FINISHED');
+
+    const unassigned = makeDb([{ id: 'e-1' }, { id: 'e-2' }]);
+    const unassignedService = new EventsService(unassigned.db);
+    await expect(
+      unassignedService.changeStatus('e-2', { status: 'RUNNING' }, officer),
+    ).rejects.toThrow(ForbiddenException);
+    await unassignedService.changeStatus('e-2', { status: 'CANCELLED' }, officer);
+    expect(unassigned.events[1]!.status).toBe('CANCELLED');
+  });
 });
 
 describe('EventsService.list', () => {

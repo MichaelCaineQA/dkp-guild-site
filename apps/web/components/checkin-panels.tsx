@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { Modal, Button, Stack, Muted } from './ui';
 
@@ -9,6 +9,11 @@ interface PlayerCheckInView {
   windowState: 'NOT_OPEN_YET' | 'ACTIVE' | 'CLOSED';
   choices: string[];
   status: string;
+}
+
+/** Окно финала закрыто — позже этой фазы ничего не откроется, опрос не нужен. */
+function isSettled(view: { phase: string; windowState: string } | null): boolean {
+  return view !== null && view.phase === 'END' && view.windowState === 'CLOSED';
 }
 
 /**
@@ -25,10 +30,13 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Последний ответ сервера — по нему решаем, продолжать ли опрос. */
+  const latest = useRef<PlayerCheckInView | null>(null);
 
   const load = useCallback(async () => {
     try {
       const data = await api<PlayerCheckInView>(`/events/${eventId}/checkin/me`);
+      latest.current = data;
       setView(data);
       setError(null);
     } catch (err) {
@@ -42,8 +50,10 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
 
   useEffect(() => {
     void load();
-    // Обновляем статус окна раз в 10 сек: окно открывается/закрывается само.
-    const timer = setInterval(() => void load(), 10_000);
+    // Обновляем статус окна раз в 10 сек: окно открывает кнопка управляющего.
+    const timer = setInterval(() => {
+      if (!isSettled(latest.current)) void load();
+    }, 10_000);
     return () => clearInterval(timer);
   }, [load]);
 
@@ -163,34 +173,51 @@ interface RaidLeadCheckInView {
   phase: 'START' | 'END';
   windowState: 'NOT_OPEN_YET' | 'ACTIVE' | 'CLOSED';
   code: string;
-  windowOpensAt: string;
-  windowClosesAt: string;
+  /** null — код этой фазы ещё не запускали. */
+  windowOpensAt: string | null;
+  windowClosesAt: string | null;
 }
 
-/** Блок РЛ в карточке ивента: крупный код и статус окна (план 2.2). */
-export function RaidLeadCodePanel({ eventId }: { eventId: string }) {
+/**
+ * Блок управляющего в карточке ивента и на странице проведения: крупный код
+ * и статус окна (план 2.2). Окно открывают кнопки «Начать ивент» и «Завершить
+ * ивент»; `reloadSignal` перечитывает код сразу после нажатия, не дожидаясь
+ * опроса.
+ */
+export function RaidLeadCodePanel({
+  eventId,
+  reloadSignal = 0,
+}: {
+  eventId: string;
+  reloadSignal?: number;
+}) {
   const [view, setView] = useState<RaidLeadCheckInView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const latest = useRef<RaidLeadCheckInView | null>(null);
 
   const load = useCallback(async () => {
     try {
       const data = await api<RaidLeadCheckInView>(`/events/${eventId}/checkin/code`);
+      latest.current = data;
       setView(data);
       setError(null);
     } catch (err) {
       const status = (err as { status?: number }).status;
-      setError(status === 403 ? 'Код доступен РЛ ивента и офицерам' : 'Код недоступен');
+      setError(status === 403 ? 'Код доступен РЛ ивета и офицерам' : 'Код недоступен');
     }
   }, [eventId]);
 
   useEffect(() => {
     void load();
-    const timer = setInterval(() => void load(), 10_000);
+    // Код виден ограниченное время: следим за окном раз в 10 сек.
+    const timer = setInterval(() => {
+      if (!isSettled(latest.current)) void load();
+    }, 10_000);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [load, reloadSignal]);
 
   if (error) {
-    return null; // не РЛ — блок не показываем
+    return null; // не управляющий — блок не показываем
   }
   if (!view) {
     return null;
@@ -204,19 +231,22 @@ export function RaidLeadCodePanel({ eventId }: { eventId: string }) {
         Код чек-ина ({phaseLabel}) — назовите в голосовом чате
       </p>
       {view.windowState === 'ACTIVE' ? (
-        <p className="text-4xl font-bold tracking-widest tabular-nums">{view.code}</p>
+        <>
+          <p className="text-4xl font-bold tracking-widest tabular-nums">{view.code}</p>
+          {view.windowClosesAt && (
+            <p className="text-xs text-secondary">
+              до {new Date(view.windowClosesAt).toLocaleTimeString('ru-RU')}
+            </p>
+          )}
+        </>
       ) : view.windowState === 'NOT_OPEN_YET' ? (
         <p className="text-sm text-secondary">
-          Окно откроется {new Date(view.windowOpensAt).toLocaleTimeString('ru-RU')} — код появится
-          здесь
+          Окно стартового кода откроется кнопкой «Начать ивент» — код появится здесь
         </p>
-      ) : (
+      ) : view.code ? (
         <p className="text-sm text-secondary">Окно закрылось</p>
-      )}
-      {view.windowState === 'ACTIVE' && (
-        <p className="text-xs text-secondary">
-          до {new Date(view.windowClosesAt).toLocaleTimeString('ru-RU')}
-        </p>
+      ) : (
+        <p className="text-sm text-secondary">Код не запускался</p>
       )}
     </div>
   );

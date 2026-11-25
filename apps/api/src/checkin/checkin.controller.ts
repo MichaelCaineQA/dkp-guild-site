@@ -1,24 +1,17 @@
-import { randomBytes } from 'node:crypto';
 import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
 import { SETTING_DEFAULTS } from '@dkp/shared';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard';
 import { SessionThrottle } from '../auth/session-throttle';
 import { PermissionsGuard, RequirePermission } from '../permissions/permissions.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { CheckInService, type CheckInDb, type CheckInSettings } from './checkin.service';
+import { CHECKIN_ENC_KEY } from './enc-key';
 
 /**
- * Ключ AES для чек-ин кодов: в проде — env CHECKIN_ENC_KEY. Локально без
- * ключа — случайный на время жизни процесса: окна живут 3 минуты, потеря
- * при рестарте внутри окна редка и не страшна (прод задаёт ключ явно).
- */
-const CHECKIN_ENC_KEY = process.env.CHECKIN_ENC_KEY || randomBytes(32).toString('hex');
-
-/**
- * Чек-ин кодами (issue #9): игрок отмечается в карточке ивента, РЛ видит
- * код на странице проведения. Настройки окон читаются из БД на каждый
- * запрос — применяются без деплоя (issue #7).
+ * Чек-ин кодами (issue #9): игрок отмечается в карточке ивента, управляющий
+ * видит код на странице проведения. Окна кодов открывают кнопки «Начать
+ * ивент» и «Завершить ивент» (смена статуса, решение №23); настройки долей
+ * платы читаются из БД на каждый запрос — применяются без деплоя (issue #7).
  */
 @Controller('events/:eventId/checkin')
 @UseGuards(AuthGuard, PermissionsGuard)
@@ -52,7 +45,7 @@ export class CheckInController {
     return service.submit(eventId, user.memberId!, body);
   }
 
-  /** Код — только РЛ ивента и офицерам+ (план 2.2). */
+  /** Код — только управляющим ивента (план 2.2). */
   @Get('code')
   @RequirePermission('members.view_roster')
   async raidLeadView(@Param('eventId') eventId: string, @Req() req: AuthedRequest) {
@@ -65,22 +58,7 @@ export class CheckInController {
     );
   }
 
-  /** Досрочный финальный код (план 2.2 п.5): РЛ закончил раньше плана. */
-  @Post('end-early')
-  @RequirePermission('members.view_roster')
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  async startEndCodeEarly(@Param('eventId') eventId: string, @Req() req: AuthedRequest) {
-    const user = req.session!.user!;
-    const service = await this.makeService();
-    const result = await service.startEndCodeEarly(
-      eventId,
-      { memberId: user.memberId, isAdmin: user.isAdmin },
-      user.rank,
-    );
-    return result;
-  }
-
-  /** Сервис на запрос: свежие настройки окон из Setting + дефолты реестра. */
+  /** Сервис на запрос: свежие доли платы из Setting + дефолты реестра. */
   private async makeService(): Promise<CheckInService> {
     const rows = await this.prisma.setting.findMany();
     const map = new Map<string, number>(rows.map((row) => [row.key, row.value as number]));
@@ -89,9 +67,6 @@ export class CheckInController {
     const pick = (key: string): number =>
       map.get(`checkin.${key}`) ?? defaults[`checkin.${key}`] ?? 0;
     const settings: CheckInSettings = {
-      generateBeforeStartSec: pick('generateBeforeStartSec'),
-      windowSec: pick('windowSec'),
-      attempts: pick('attempts'),
       startSharePct: pick('startSharePct'),
       endSharePct: pick('endSharePct'),
     };

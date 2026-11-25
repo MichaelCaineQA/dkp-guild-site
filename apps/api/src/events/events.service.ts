@@ -29,6 +29,7 @@ import {
 import type { AuditWriter } from '../members/members.service';
 import { serializable } from '../prisma/serializable';
 import type { Prisma } from '@prisma/client';
+import type { CheckInLaunchDb } from '../checkin/launch';
 import { enqueueEventAnnouncement } from '../discord-notifications/event-announcements';
 
 /** Строка списка/календаря. */
@@ -181,7 +182,11 @@ export interface EventsActor {
  */
 @Injectable()
 export class EventsService {
-  constructor(private readonly db: EventsDb) {}
+  constructor(
+    private readonly db: EventsDb,
+    /** Часы — момент нажатия «Начать ивент» / «Завершить ивент», открывающий окно кода. */
+    private readonly clock: () => Date = () => new Date(),
+  ) {}
 
   /** Список за период с фильтрами — календарь и «ближайшие». */
   async list(query: unknown): Promise<EventRow[]> {
@@ -495,7 +500,13 @@ export class EventsService {
     return { id };
   }
 
-  /** Смена статуса: planned → running → finished / cancelled (план 2.1). */
+  /**
+   * Смена статуса: planned → running → finished / cancelled (план 2.1).
+   * «Начать ивент» и «Завершить ивент» (решение №23) той же транзакцией
+   * открывают окно кода — статус и окно не расходятся. Статус перечитывается
+   * внутри транзакции: при одновременных нажатиях двух управляющих второй
+   * получает конфликт сериализации, повторяет и видит 409 — код один.
+   */
   async changeStatus(
     id: string,
     body: unknown,
@@ -504,19 +515,36 @@ export class EventsService {
     const input: ChangeEventStatusInput = changeEventStatusSchema.parse(body);
     const event = await this.mustExist(id);
 
-    const permitted =
-      input.status === 'CANCELLED'
-        ? canManageEvent({ ...actor, rank: actor.rank ?? null }, event)
-        : can({ ...actor, rank: actor.rank ?? null }, 'events.conduct', event);
-    if (!permitted) throw new ForbiddenException('Нет права на изменение статуса ивента');
-
-    const allowed = EVENT_TRANSITIONS[event.status] ?? [];
-    if (!allowed.includes(input.status)) {
-      throw new ConflictException(`Переход ${event.status} → ${input.status} невозможен`);
-    }
-
-    await this.db.event.update({ where: { id }, data: { status: input.status } });
-    await this.audit(actor, 'EVENT_STATUS_CHANGE', id, `Статус ${event.status} → ${input.status}`);
+    await serializable(this.db, async (tx) => {
+      const current = await tx.event.findUnique({
+        where: { id },
+        include: {
+          eventType: { select: { name: true } },
+          raidLead: { select: { nickname: true } },
+        },
+      });
+      if (!current) throw new NotFoundException('Ивент не найден');
+      this.assertStatusChange(current, input.status, actor);
+      await tx.event.update({ where: { id }, data: { status: input.status } });
+      await this.audit(
+        actor,
+        'EVENT_STATUS_CHANGE',
+        id,
+        `Статус ${current.status} → ${input.status}`,
+        tx.auditLog,
+      );
+      const phase =
+        input.status === 'RUNNING' ? 'START' : input.status === 'FINISHED' ? 'END' : null;
+      if (phase && this.onEventCodeLaunch) {
+        await this.onEventCodeLaunch(
+          tx as unknown as CheckInLaunchDb,
+          id,
+          phase,
+          actor,
+          this.clock(),
+        );
+      }
+    });
 
     // Закрытие ивента: отсутствующим по уважительной — авто-отметка
     // EXCUSED_ABSENCE (план 2.3, issue #11). Хук опционален: без него
@@ -535,8 +563,39 @@ export class EventsService {
     return { id, status: input.status };
   }
 
+  /** Право и допустимость перехода — по статусу, перечитанному в транзакции. */
+  private assertStatusChange(
+    event: EventDetail,
+    status: ChangeEventStatusInput['status'],
+    actor: EventsActor,
+  ): void {
+    const permitted =
+      status === 'CANCELLED'
+        ? canManageEvent({ ...actor, rank: actor.rank ?? null }, event)
+        : can({ ...actor, rank: actor.rank ?? null }, 'events.conduct', event);
+    if (!permitted) throw new ForbiddenException('Нет права на изменение статуса ивента');
+
+    const allowed = EVENT_TRANSITIONS[event.status] ?? [];
+    if (!allowed.includes(status)) {
+      throw new ConflictException(`Переход ${event.status} → ${status} невозможен`);
+    }
+  }
+
   /** Хук завершения ивента — ставится модулем отсутствий (issue #11). */
   onEventFinished?: (eventId: string, startsAt: Date, endsAt: Date) => Promise<number>;
+
+  /**
+   * Хук запуска кода — ставит модуль чек-ина (решение №23): «Начать ивент»
+   * открывает окно стартового кода, «Завершить ивент» — финального. Работает
+   * в транзакции смены статуса: без окна и статус не меняется.
+   */
+  onEventCodeLaunch?: (
+    tx: CheckInLaunchDb,
+    eventId: string,
+    phase: 'START' | 'END',
+    actor: EventsActor,
+    now: Date,
+  ) => Promise<void>;
 
   private async toRow(
     event: EventScopeInput & {

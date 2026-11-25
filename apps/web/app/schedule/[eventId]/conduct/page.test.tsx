@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('next/navigation', () => ({ useParams: () => ({ eventId: 'e-1' }) }));
 vi.mock('../../../../lib/api', () => ({ api: vi.fn() }));
@@ -60,12 +60,32 @@ let status: string;
 let failSummary: boolean;
 let failStatus: number | undefined;
 let summaryRepeated: boolean;
+/** Ответ `/checkin/code`: меняется, когда кнопка открывает окно. */
+let codeView: {
+  phase: string;
+  windowState: string;
+  code: string;
+  windowOpensAt: string | null;
+  windowClosesAt: string | null;
+};
+let statusFail: number | undefined;
+let statusBodies: Array<{ status: string }>;
+const NOT_LAUNCHED = {
+  phase: 'START',
+  windowState: 'NOT_OPEN_YET',
+  code: '',
+  windowOpensAt: null,
+  windowClosesAt: null,
+};
 beforeEach(() => {
   vi.resetAllMocks();
   status = 'RUNNING';
   failSummary = false;
   failStatus = undefined;
   summaryRepeated = false;
+  codeView = NOT_LAUNCHED;
+  statusFail = undefined;
+  statusBodies = [];
   session();
   vi.stubGlobal('crypto', { randomUUID: () => '00000000-0000-4000-8000-000000000001' });
   HTMLDialogElement.prototype.showModal = function () {
@@ -76,16 +96,24 @@ beforeEach(() => {
   };
   vi.mocked(api).mockImplementation(async (path, options) => {
     if (path === '/events/e-1') return { ...EVENT, status };
+    if (path === '/events/e-1/status') {
+      if (statusFail) throw { status: statusFail };
+      const body = JSON.parse(options!.body as string) as { status: string };
+      statusBodies.push(body);
+      status = body.status;
+      // Сервер открывает окно кода той же транзакцией, что меняет статус.
+      codeView = {
+        phase: body.status === 'FINISHED' ? 'END' : 'START',
+        windowState: 'ACTIVE',
+        code: body.status === 'FINISHED' ? '777' : '482',
+        windowOpensAt: '2026-03-03T16:45:00Z',
+        windowClosesAt: '2026-03-03T16:48:00Z',
+      };
+      return { id: 'e-1', status };
+    }
     if (path.endsWith('/conduct/checklist')) return CHECKLIST.map((row) => ({ ...row }));
     if (path.startsWith('/absences/for-event')) return [];
-    if (path.endsWith('/checkin/code'))
-      return {
-        phase: 'START',
-        windowState: 'NOT_OPEN_YET',
-        code: '',
-        windowOpensAt: EVENT.startsAt,
-        windowClosesAt: EVENT.startsAt,
-      };
+    if (path.endsWith('/checkin/code')) return { ...codeView };
     if (path.endsWith('/conduct/summary')) {
       if (failSummary) {
         if (failStatus) throw { status: failStatus };
@@ -112,6 +140,88 @@ async function prepareDkp() {
   });
   fireEvent.click(screen.getByRole('button', { name: 'В черновик' }));
 }
+describe('«Начать ивент» и «Завершить ивент» (решение 23)', () => {
+  const statusPosts = () =>
+    vi.mocked(api).mock.calls.filter(([path]) => path === '/events/e-1/status');
+  const confirm = (title: string, label: string) => {
+    const dialog = screen.getByRole('dialog', { name: title });
+    fireEvent.click(within(dialog).getByRole('button', { name: label }));
+  };
+
+  it('запланированный ивент: «Начать ивент» просит подтверждение и открывает окно стартового кода', async () => {
+    status = 'PLANNED';
+    render(<ConductPage />);
+    expect(
+      await screen.findByText(
+        'Окно стартового кода откроется кнопкой «Начать ивент» — код появится здесь',
+      ),
+    ).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Завершить ивент' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Начать ивент' }));
+    expect(screen.getByRole('dialog', { name: 'Начать ивент?' })).toBeDefined();
+    expect(statusPosts()).toHaveLength(0);
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: 'Начать ивент?' })).getByRole('button', {
+        name: 'Отмена',
+      }),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(statusPosts()).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Начать ивент' }));
+    confirm('Начать ивент?', 'Начать');
+
+    expect(statusBodies).toEqual([{ status: 'RUNNING' }]);
+    expect(await screen.findByText('Ивент начат — окно стартового кода открыто')).toBeDefined();
+    expect(await screen.findByText('482')).toBeDefined();
+    expect(screen.getByText(/· Идёт$/)).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Завершить ивент' })).toBeDefined();
+  });
+
+  it('«Завершить ивент» просит подтверждение; после завершения финальный код виден на странице', async () => {
+    render(<ConductPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Завершить ивент' }));
+    expect(statusPosts()).toHaveLength(0);
+    expect(screen.getByRole('dialog', { name: 'Завершить ивент?' })).toBeDefined();
+    confirm('Завершить ивент?', 'Завершить');
+
+    expect(statusBodies).toEqual([{ status: 'FINISHED' }]);
+    expect(await screen.findByText('Ивент завершён — окно финального кода открыто')).toBeDefined();
+    // Финальное окно действует ещё windowSec после завершения — код остаётся на странице.
+    expect(await screen.findByText('777')).toBeDefined();
+    expect(screen.getByText('Код чек-ина (финал) — назовите в голосовом чате')).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Завершить ивент' })).toBeNull();
+  });
+
+  it('действие уже выполнено другим управляющим (409) — пояснение и статус сервера', async () => {
+    status = 'PLANNED';
+    statusFail = 409;
+    render(<ConductPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Начать ивент' }));
+    confirm('Начать ивент?', 'Начать');
+
+    expect(
+      await screen.findByText('Действие уже выполнено — статус ивента изменился.'),
+    ).toBeDefined();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // Статус перечитывается и при сбое: ответ мог потеряться после выполнения.
+    expect(
+      vi.mocked(api).mock.calls.filter(([path]) => path === '/events/e-1').length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole('button', { name: 'Начать ивент' })).toBeDefined();
+  });
+
+  it('рядовой без назначения не видит кнопок запуска и завершения', async () => {
+    session('other', 'MEMBER');
+    render(<ConductPage />);
+    await screen.findByText('Чек-лист участников');
+    expect(screen.queryByRole('button', { name: 'Завершить ивент' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Начать ивент' })).toBeNull();
+    expect(screen.queryByText(/Управление ивентом/)).toBeNull();
+  });
+});
+
 describe('Итоги ивента', () => {
   it('РЛ готовит изменения локально и применяет только общей кнопкой', async () => {
     render(<ConductPage />);

@@ -113,6 +113,9 @@ test(
   { tag: '@mobile' },
   async ({ browser, context: member, page, isMobile }) => {
     const officer = await browser.newContext({ baseURL: 'http://localhost:3090' });
+    // Имя уникально для запуска: завершённый ивент с историей чек-ина нельзя
+    // ни отменить, ни удалить, и следующий прогон не должен открыть чужой.
+    const name = `Проверка чек-ина ${Date.now()}`;
     let eventId: string | undefined;
     try {
       await officer.request.post('/api/auth/test-login', { data: { username: 'test-officer' } });
@@ -120,11 +123,12 @@ test(
       const types = await (await officer.request.get('/api/event-types')).json();
       const created = await officer.request.post('/api/events', {
         data: {
-          name: 'Проверка чек-ина',
+          name,
           eventTypeId: types[0].id,
           mode: 'PVE',
-          startsAt: new Date(Date.now() + 90000).toISOString(),
-          endsAt: new Date(Date.now() + 3600000).toISOString(),
+          // Начало через полтора часа: окно стартового кода открывает только кнопка.
+          startsAt: new Date(Date.now() + 5400000).toISOString(),
+          endsAt: new Date(Date.now() + 9000000).toISOString(),
           raidLeadId: me.memberId,
           dkpReward: 10,
         },
@@ -134,15 +138,27 @@ test(
       await member.request.post('/api/auth/test-login', { data: { username: 'test-member' } });
       await member.request.get('/api/auth/me');
       const before = await (await member.request.get('/api/dashboard/wallet')).json();
+      const notLaunched = await (
+        await officer.request.get(`/api/events/${eventId}/checkin/code`)
+      ).json();
+      expect(notLaunched).toMatchObject({ windowState: 'NOT_OPEN_YET', code: '' });
+      // «Начать ивент» задолго до планового начала открывает окно стартового кода.
+      expect(
+        (
+          await officer.request.post(`/api/events/${eventId}/status`, {
+            data: { status: 'RUNNING' },
+          })
+        ).ok(),
+      ).toBe(true);
       const codeResponse = await officer.request.get(`/api/events/${eventId}/checkin/code`);
       const code = await codeResponse.json();
       expect(codeResponse.ok(), JSON.stringify(code)).toBe(true);
       expect(code.windowState).toBe('ACTIVE');
       await page.goto('/schedule');
-      const event = page.getByRole('button', { name: /Проверка чек-ина/ }).first();
+      const event = page.getByRole('button', { name: new RegExp(name) }).first();
       await event.click();
       if (isMobile) {
-        const eventDialog = page.getByRole('dialog', { name: 'Проверка чек-ина', exact: true });
+        const eventDialog = page.getByRole('dialog', { name, exact: true });
         await expect(eventDialog).toBeInViewport();
         await eventDialog.getByRole('button', { name: 'Закрыть окно' }).tap();
         await expect(event).toBeFocused();
@@ -171,20 +187,19 @@ test(
           })
         ).status(),
       ).toBe(409);
+      // «Завершить ивент» задолго до планового окончания открывает окно финального кода.
       expect(
         (
           await officer.request.post(`/api/events/${eventId}/status`, {
-            data: { status: 'RUNNING' },
+            data: { status: 'FINISHED' },
           })
         ).ok(),
       ).toBe(true);
-      expect((await officer.request.post(`/api/events/${eventId}/checkin/end-early`)).ok()).toBe(
-        true,
-      );
       const finalCode = await (
         await officer.request.get(`/api/events/${eventId}/checkin/code`)
       ).json();
       expect(finalCode.phase).toBe('END');
+      expect(finalCode.windowState).toBe('ACTIVE');
       await expect(page.getByText('Отметиться кодом (финал):')).toBeVisible({ timeout: 15_000 });
       await page.getByRole('button', { name: finalCode.code, exact: true }).click();
       await page

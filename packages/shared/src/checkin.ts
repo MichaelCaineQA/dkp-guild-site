@@ -3,6 +3,8 @@ import { z } from 'zod';
 /**
  * Чек-ин кодами (issue #9, план 2.2, решение гильдии №7): отметка
  * посещения трёхзначным кодом, окно выбора, одна попытка, 50/50 платы.
+ * Окна кодов открывают управляющие кнопками «Начать ивент» и «Завершить
+ * ивент» (решение №23): расписание ивента на них не влияет.
  *
  * Схема хранения (план 2.2 «хранится только хэш»): в БД — хэш-подпись
  * для сверки попыток (salt+sha256) и код, зашифрованный AES-256-GCM
@@ -28,14 +30,6 @@ export const CHECKIN_STATUSES = [
   'MANUAL',
 ] as const;
 export type CheckInStatus = (typeof CHECKIN_STATUSES)[number];
-
-/** Настройки окна чек-ина (из Setting, дефолты — план 2.2 / решение №7). */
-export interface CheckInWindowConfig {
-  /** За сколько до начала генерируется стартовый код, сек. */
-  generateBeforeStartSec: number;
-  /** Длительность окна выбора, сек. */
-  windowSec: number;
-}
 
 /**
  * Статус окна фазы для игрока/РЛ: ещё не открылось / открыто / закрыто.
@@ -90,24 +84,58 @@ export interface CheckInWindowBounds {
 }
 
 /**
- * Границы окна по расписанию ивента (план 2.2):
- * стартовый код — за N сек до начала ивента, окно N сек;
- * финальный — в момент планового окончания, окно N сек.
+ * Окно, которое открывает управляющий кнопкой «Начать ивент» / «Завершить
+ * ивент» (план 2.2, решение №23): от момента нажатия на windowSec.
  */
-export function phaseWindowBounds(
-  phase: CheckInPhase,
-  event: { startsAt: Date; endsAt: Date },
-  config: CheckInWindowConfig,
-): CheckInWindowBounds {
-  if (phase === 'START') {
-    const opens = new Date(event.startsAt.getTime() - config.generateBeforeStartSec * 1000);
-    return {
-      windowOpensAt: opens,
-      windowClosesAt: new Date(opens.getTime() + config.windowSec * 1000),
-    };
-  }
+export function manualWindowBounds(now: Date, windowSec: number): CheckInWindowBounds {
   return {
-    windowOpensAt: event.endsAt,
-    windowClosesAt: new Date(event.endsAt.getTime() + config.windowSec * 1000),
+    windowOpensAt: new Date(now.getTime()),
+    windowClosesAt: new Date(now.getTime() + windowSec * 1000),
   };
+}
+
+/** Коды ивента по фазам; фазы без кода нет среди ключей. */
+export type CheckInCodes = Partial<Record<CheckInPhase, CheckInWindowBounds>>;
+
+/**
+ * Фаза, окно которой открыто прямо сейчас; null — открытых окон нет.
+ * Финал перекрывает старт: завершили раньше времени — игроки, не успевшие
+ * в стартовое окно, отмечаются финальным кодом.
+ */
+export function activeCheckInPhase(now: Date, codes: CheckInCodes): CheckInPhase | null {
+  const end = codes.END;
+  if (end && checkInWindowState(now, end.windowOpensAt, end.windowClosesAt) === 'ACTIVE') {
+    return 'END';
+  }
+  const start = codes.START;
+  if (start && checkInWindowState(now, start.windowOpensAt, start.windowClosesAt) === 'ACTIVE') {
+    return 'START';
+  }
+  return null;
+}
+
+/** Фаза и состояние окна для показа: игроку — что можно ввести, управляющему — какой код называть. */
+export interface CheckInPhaseView {
+  phase: CheckInPhase;
+  windowState: CheckInWindowState;
+  /** Границы сохранённого кода; null — код этой фазы ещё не запускали. */
+  window: CheckInWindowBounds | null;
+}
+
+/**
+ * Какую фазу показывать в текущий момент. Приоритет у финального кода —
+ * он закрывает ивент. Кодов нет: у завершённого ивента окно финала закрыто,
+ * у остальных стартовый код ещё не запускали («Начать ивент» откроет его).
+ */
+export function checkInPhaseView(now: Date, status: string, codes: CheckInCodes): CheckInPhaseView {
+  const view = (phase: CheckInPhase, window: CheckInWindowBounds): CheckInPhaseView => ({
+    phase,
+    windowState: checkInWindowState(now, window.windowOpensAt, window.windowClosesAt),
+    window,
+  });
+  if (codes.END) return view('END', codes.END);
+  if (codes.START) return view('START', codes.START);
+  return status === 'FINISHED'
+    ? { phase: 'END', windowState: 'CLOSED', window: null }
+    : { phase: 'START', windowState: 'NOT_OPEN_YET', window: null };
 }
