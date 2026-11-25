@@ -454,12 +454,13 @@ export const contracts: Record<string, Contract> = {
     body: 'ChangeEventStatus',
     errors: [404, 409],
     description:
-      'PLANNED → RUNNING/CANCELLED; RUNNING → FINISHED/CANCELLED. Запуск/завершение — Глава, Админ или назначенный РЛ; отмена также доступна Офицеру. Финальные статусы неизменяемы.',
+      'PLANNED → RUNNING/CANCELLED; RUNNING → FINISHED/CANCELLED. Запуск/завершение — Глава, Админ или назначенный РЛ; отмена также доступна Офицеру. Финальные статусы неизменяемы. «Начать ивент» (RUNNING) той же транзакцией открывает окно стартового кода, «Завершить ивент» (FINISHED) — финального: окно идёт от момента запроса на checkin.windowSec, расписание ивента на него не влияет. Сам код возвращают GET /checkin/code. Без этих переходов окно кода не открывается.',
   }),
   CheckIn_playerView: c('Получить варианты чек-ин кода', 'PlayerCheckIn', {
     access: 'Участник с привязанным Member.',
     errors: [404, 409, 429],
-    description: '30 запросов в минуту на аккаунт. Варианты доступны в активном окне.',
+    description:
+      '30 запросов в минуту на аккаунт. Варианты доступны в активном окне — его открывает управляющий кнопками «Начать ивент» и «Завершить ивент». Финальное окно действует и при статусе ивента FINISHED; отменённый ивент — 409.',
   }),
   CheckIn_submit: c('Отправить выбранный чек-ин код', 'CheckInResult', {
     access: 'Участник с привязанным Member.',
@@ -470,13 +471,9 @@ export const contracts: Record<string, Contract> = {
   }),
   CheckIn_raidLeadView: c('Получить чек-ин код для РЛ', 'RaidLeadCheckIn', {
     access: rl,
-    errors: [404, 409],
-  }),
-  CheckIn_startEndCodeEarly: c('Открыть финальный код досрочно', 'RaidLeadCheckIn', {
-    access: rl,
-    errors: [404, 409, 429],
+    errors: [404, 403, 409],
     description:
-      'Без тела запроса. 5 запросов в минуту. Код и факт запуска в аудите создаются атомарно, сам код не журналируется.',
+      'Код открытой фазы и границы её окна. Пока фазу не запускали, windowState=NOT_OPEN_YET (у завершённого без кодов — CLOSED), код пустой, границы null. Границы окна возвращаются и после его закрытия; отметиться в закрытое окно нельзя.',
   }),
   Conduct_applySummary: c('Применить подготовленные итоги ивента', 'EventSummaryApplied', {
     access: rl,

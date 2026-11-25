@@ -15,11 +15,13 @@ import { createRequestId } from '../../../../lib/request-id';
 import { api } from '../../../../lib/api';
 import { AbsentMembersPanel } from '../../../../components/absent-members-panel';
 import { RaidLeadCodePanel } from '../../../../components/checkin-panels';
+import { FINISH_EVENT_COPY, START_EVENT_COPY } from '../../../../components/event-actions';
 import { LootPanel } from '../../../../components/loot-panel';
 import { SummaryCorrectionDialog } from '../../../../components/summary-correction-dialog';
 import {
   Button,
   Card,
+  ConfirmDialog,
   ErrorText,
   EventSummaryTable,
   describeSummaryAction,
@@ -56,6 +58,8 @@ export default function ConductPage() {
   const [error, setError] = useState('');
   const [failure, setFailure] = useState('');
   const [message, setMessage] = useState('');
+  /** Ошибка «Начать»/«Завершить» — в странице: панель перечитывается вместе со статусом ивента. */
+  const [statusError, setStatusError] = useState('');
   const [version, setVersion] = useState(0);
   const [actions, setActions] = useState<SummaryAction[]>([]);
   const [editing, setEditing] = useState<{
@@ -151,13 +155,21 @@ export default function ConductPage() {
           eventStartsAt={event.startsAt}
           eventEndsAt={event.endsAt}
         />
-        {canEdit && event.status !== 'FINISHED' && (
+        {/* Код виден управляющему при любом статусе, кроме отмены: финальное окно
+            открывается тем же нажатием, что завершает ивент, и действует ещё windowSec. */}
+        {allowed && event.status !== 'CANCELLED' && (
           <ConductActionsPanel
             key={`codes-${version}`}
             eventId={eventId}
             status={event.status}
+            error={statusError}
             onDone={(msg) => {
+              setStatusError('');
               setMessage(msg);
+              void load();
+            }}
+            onError={(msg) => {
+              setStatusError(msg);
               void load();
             }}
           />
@@ -268,25 +280,49 @@ export default function ConductPage() {
     </Page>
   );
 }
+/**
+ * Кнопки «Начать ивент» и «Завершить ивент» и код чек-ина (план 2.2): окно
+ * кода открывается в момент нажатия — раньше или позже планового времени.
+ */
 function ConductActionsPanel({
   eventId,
   status,
+  error,
   onDone,
+  onError,
 }: {
   eventId: string;
   status: string;
+  error: string;
   onDone: (message: string) => void;
+  onError: (message: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const act = async (path: string, body: unknown, message: string) => {
+  /** Действие, ждущее подтверждения: окно кода открывается один раз, завершённый ивент не вернуть. */
+  const [pending, setPending] = useState<'RUNNING' | 'FINISHED' | null>(null);
+  const copy = pending === 'RUNNING' ? START_EVENT_COPY : FINISH_EVENT_COPY;
+  const changeStatus = async (action: 'RUNNING' | 'FINISHED') => {
     setBusy(true);
-    setError('');
     try {
-      await api(path, { method: 'POST', ...(body ? { body: JSON.stringify(body) } : {}) });
-      onDone(message);
-    } catch {
-      setError('Не удалось выполнить действие. Обновите список и проверьте статус ивента.');
+      await api(`/events/${eventId}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ status: action }),
+      });
+      setPending(null);
+      onDone(
+        action === 'RUNNING'
+          ? 'Ивент начат — окно стартового кода открыто'
+          : 'Ивент завершён — окно финального кода открыто',
+      );
+    } catch (err) {
+      const httpStatus = (err as { status?: number }).status;
+      setPending(null);
+      // Статус перечитывается и при сбое: ответ мог потеряться после выполнения.
+      onError(
+        httpStatus === 409
+          ? 'Действие уже выполнено — статус ивента изменился.'
+          : 'Не удалось выполнить действие. Проверьте соединение и статус ивента.',
+      );
     } finally {
       setBusy(false);
     }
@@ -294,28 +330,40 @@ function ConductActionsPanel({
   return (
     <Card>
       <SectionTitle>Управление ивентом</SectionTitle>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          disabled={busy}
-          onClick={() =>
-            void act(`/events/${eventId}/checkin/end-early`, null, 'Финальный код запущен')
-          }
-        >
-          Досрочно запустить финальный код
-        </Button>
-        {status === 'RUNNING' && (
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void act(`/events/${eventId}/status`, { status: 'FINISHED' }, 'Ивент завершён')
-            }
-          >
+      {status === 'PLANNED' && (
+        <>
+          <p className="mb-3 text-sm text-secondary">
+            Начните ивент, когда рейд соберётся: окно стартового кода откроется в момент нажатия.
+          </p>
+          <Button variant="primary" disabled={busy} onClick={() => setPending('RUNNING')}>
+            Начать ивент
+          </Button>
+        </>
+      )}
+      {status === 'RUNNING' && (
+        <>
+          <p className="mb-3 text-sm text-secondary">
+            Завершите ивент, когда рейд закончится: окно финального кода откроется в момент нажатия.
+            Дроп и лоты фиксируются до завершения.
+          </p>
+          <Button variant="primary" disabled={busy} onClick={() => setPending('FINISHED')}>
             Завершить ивент
           </Button>
-        )}
-      </div>
+        </>
+      )}
       <RaidLeadCodePanel eventId={eventId} />
       {error && <ErrorText>{error}</ErrorText>}
+      {pending && (
+        <ConfirmDialog
+          title={copy.title}
+          confirmLabel={copy.confirmLabel}
+          busy={busy}
+          onConfirm={() => void changeStatus(pending)}
+          onCancel={() => setPending(null)}
+        >
+          <p>{copy.text}</p>
+        </ConfirmDialog>
+      )}
     </Card>
   );
 }

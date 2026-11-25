@@ -13,7 +13,6 @@ describe('SETTINGS_REGISTRY', () => {
   it('все настройки из плана присутствуют', () => {
     expect(Object.keys(SETTINGS_REGISTRY).sort()).toEqual(
       [
-        'checkin.generateBeforeStartSec',
         'checkin.windowSec',
         'checkin.attempts',
         'checkin.startSharePct',
@@ -51,7 +50,6 @@ describe('SETTINGS_REGISTRY', () => {
   });
 
   it('дефолты соответствуют плану (решение 18: наценка 10%, скидка 10%, кулдаун 14 дн)', () => {
-    expect(SETTING_DEFAULTS['checkin.generateBeforeStartSec']).toBe(180);
     expect(SETTING_DEFAULTS['checkin.windowSec']).toBe(180);
     expect(SETTING_DEFAULTS['checkin.attempts']).toBe(1);
     expect(SETTING_DEFAULTS['checkin.startSharePct']).toBe(50);
@@ -102,6 +100,12 @@ describe('parseSettingValue', () => {
   it('попыток ввода кода строго одна (защита от перебора, план 2.2)', () => {
     expect(parseSettingValue('checkin.attempts', 1)).toBe(1);
     expect(() => parseSettingValue('checkin.attempts', 2)).toThrow();
+  });
+
+  it('генерация до старта больше не настройка: окно кода открывает кнопка (решение 23)', () => {
+    expect(() => parseSettingValue('checkin.generateBeforeStartSec', 180)).toThrow(
+      'Неизвестная настройка',
+    );
   });
 });
 

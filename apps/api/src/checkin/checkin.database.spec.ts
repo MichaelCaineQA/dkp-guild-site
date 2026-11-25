@@ -1,25 +1,25 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { CheckInService, type CheckInDb } from './checkin.service';
-import { ConductService, type ConductDb } from '../conduct/conduct.service';
 import { ConflictException } from '@nestjs/common';
+import { CheckInService, type CheckInDb, type CheckInSettings } from './checkin.service';
+import { attachCheckInLaunch } from './checkin.module';
+import { ConductService, type ConductDb } from '../conduct/conduct.service';
+import { EventsService, type EventsActor, type EventsDb } from '../events/events.service';
 const url = process.env.ONBOARDING_TEST_DATABASE_URL;
 const suite = url ? describe : describe.skip;
 suite('Чек-ин: настоящие транзакции PostgreSQL и append-only ДКП', () => {
   let db: PrismaClient;
+  let events: EventsService;
   let checkin: CheckInService;
   let conduct: ConductService;
   let eventId: string;
   let memberId: string;
   let rlId: string;
-  const now = new Date('2027-03-03T16:58:00Z');
-  const settings = {
-    generateBeforeStartSec: 180,
-    windowSec: 180,
-    attempts: 1,
-    startSharePct: 50,
-    endSharePct: 50,
-  };
+  /** Часы сервисов: тесты сдвигают их, чтобы нажать кнопки в нужный момент. */
+  let now: Date;
+  /** За 2 минуты до планового начала 17:00 — внутри прежнего окна по расписанию. */
+  const BEFORE_PLANNED_START = new Date('2027-03-03T16:58:00Z');
+  const shares: CheckInSettings = { startSharePct: 50, endSharePct: 50 };
   const key = '1'.repeat(64);
   beforeAll(async () => {
     const parsed = new URL(url!);
@@ -29,6 +29,7 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
   });
   beforeEach(async () => {
     const suffix = randomUUID().slice(0, 10);
+    now = BEFORE_PLANNED_START;
     memberId = (await db.member.create({ data: { nickname: 'atomic-player-' + suffix } })).id;
     rlId = (await db.member.create({ data: { nickname: 'atomic-rl-' + suffix } })).id;
     const type = await db.eventType.create({ data: { name: 'atomic-' + suffix } });
@@ -45,18 +46,31 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
         },
       })
     ).id;
-    checkin = new CheckInService(db as unknown as CheckInDb, settings, () => now, key);
-    conduct = new ConductService(db as unknown as ConductDb, settings);
+    events = new EventsService(db as unknown as EventsDb, () => now);
+    attachCheckInLaunch(events, key);
+    checkin = new CheckInService(db as unknown as CheckInDb, shares, () => now, key);
+    conduct = new ConductService(db as unknown as ConductDb, shares);
   });
   // Тестовая БД в CI эфемерна. Созданные записи ledger не удаляем/не меняем;
   // связанные фикстуры тоже остаются, чтобы сохранялись FK и история начислений.
   afterAll(async () => {
     await db?.$disconnect();
   });
-  const code = async () =>
-    (await checkin.raidLeadView(eventId, { memberId: rlId, isAdmin: false }, 'MEMBER')).code;
+  const rl = (): EventsActor => ({ memberId: rlId, isAdmin: false, rank: 'MEMBER' });
+  /** Кнопка «Начать ивент». */
+  const start = (service: EventsService = events) =>
+    service.changeStatus(eventId, { status: 'RUNNING' }, rl());
+  /** Кнопка «Завершить ивент». */
+  const finish = (service: EventsService = events) =>
+    service.changeStatus(eventId, { status: 'FINISHED' }, rl());
+  const code = async () => (await checkin.raidLeadView(eventId, rl(), 'MEMBER')).code;
+  const eventStatus = () =>
+    db.event.findUniqueOrThrow({ where: { id: eventId }, select: { status: true } });
   const ledger = () => db.dkpEntry.findMany({ where: { eventId, memberId } });
-  function failDelegate(delegate: 'dkpEntry' | 'auditLog') {
+  const auditCount = (action: string) =>
+    db.auditLog.count({ where: { entityId: eventId, action } });
+  /** Прокси над БД: внутри транзакции заданный метод делегата падает. */
+  function failDelegate(delegate: 'dkpEntry' | 'auditLog' | 'checkInCode', method = 'create') {
     return new Proxy(db, {
       get(target, prop) {
         if (prop === '$transaction')
@@ -70,11 +84,14 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
                   new Proxy(tx, {
                     get(t, k) {
                       if (k === delegate)
-                        return {
-                          create: async () => {
-                            throw new Error('injected failure');
-                          },
-                        };
+                        return new Proxy(t[k], {
+                          get: (model, name) =>
+                            name === method
+                              ? async () => {
+                                  throw new Error('injected failure');
+                                }
+                              : Reflect.get(model, name),
+                        });
                       return Reflect.get(t, k);
                     },
                   }),
@@ -85,16 +102,91 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
       },
     });
   }
-  it('одновременная генерация возвращает один и тот же код и один аудит без кода', async () => {
-    const codes = await Promise.all([code(), code(), code()]);
-    expect(new Set(codes).size).toBe(1);
-    expect(await db.checkInCode.count({ where: { eventId, phase: 'START' } })).toBe(1);
-    const logs = await db.auditLog.findMany({ where: { entityId: eventId } });
-    expect(logs).toHaveLength(1);
-    expect(logs[0].action).toBe('CHECKIN_CODE_GENERATE');
-    expect(logs[0].comment).toBe('Сгенерирован стартовый код');
+  it('без нажатия кода нет даже в прежнем окне по расписанию', async () => {
+    const view = await checkin.raidLeadView(eventId, rl(), 'MEMBER');
+    expect(view).toMatchObject({ phase: 'START', windowState: 'NOT_OPEN_YET', code: '' });
+    expect((await checkin.playerView(eventId, memberId)).choices).toHaveLength(0);
+    expect(await db.checkInCode.count({ where: { eventId } })).toBe(0);
+    await expect(checkin.submit(eventId, memberId, { code: '123' })).rejects.toThrow(
+      ConflictException,
+    );
+  });
+  it('«Начать ивент» до планового начала открывает окно стартового кода от нажатия', async () => {
+    await start();
+
+    expect(await eventStatus()).toEqual({ status: 'RUNNING' });
+    const stored = await db.checkInCode.findUniqueOrThrow({
+      where: { eventId_phase: { eventId, phase: 'START' } },
+    });
+    expect(stored.windowOpensAt).toEqual(now);
+    expect(+stored.windowClosesAt - +stored.windowOpensAt).toBe(180_000);
+    const view = await checkin.raidLeadView(eventId, rl(), 'MEMBER');
+    expect(view).toMatchObject({ phase: 'START', windowState: 'ACTIVE' });
+    expect(view.code).toMatch(/^\d{3}$/);
+    expect((await checkin.playerView(eventId, memberId)).choices).toContain(view.code);
+    expect(await checkin.submit(eventId, memberId, { code: view.code })).toEqual({
+      result: 'PASSED',
+    });
+    expect((await ledger()).map((e) => e.amount)).toEqual([5]);
+    const launch = await db.auditLog.findFirstOrThrow({
+      where: { entityId: eventId, action: 'CHECKIN_CODE_GENERATE' },
+    });
+    expect(launch.actorMemberId).toBe(rlId);
+    expect(launch.comment).not.toContain(view.code);
+  });
+  it('одновременные нажатия двух управляющих дают один код и один запуск в аудите', async () => {
+    const results = await Promise.allSettled([start(), start()]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(
+      results.filter((r) => r.status === 'rejected' && r.reason instanceof ConflictException),
+    ).toHaveLength(1);
+    expect(await db.checkInCode.count({ where: { eventId } })).toBe(1);
+    expect(await auditCount('CHECKIN_CODE_GENERATE')).toBe(1);
+    expect(await auditCount('EVENT_STATUS_CHANGE')).toBe(1);
+    expect(await code()).toMatch(/^\d{3}$/);
+  });
+  it('«Завершить ивент» позже планового окончания открывает финальное окно; код принимается в завершённом ивенте', async () => {
+    await start();
+    await checkin.submit(eventId, memberId, { code: await code() });
+    // Плановое окончание 19:00 прошло, рейд идёт — финальный код откроется нажатием.
+    now = new Date('2027-03-03T19:40:00Z');
+    expect((await checkin.playerView(eventId, memberId)).phase).toBe('START');
+
+    await finish();
+
+    expect(await eventStatus()).toEqual({ status: 'FINISHED' });
+    const view = await checkin.raidLeadView(eventId, rl(), 'MEMBER');
+    expect(view).toMatchObject({ phase: 'END', windowState: 'ACTIVE' });
+    expect(view.windowOpensAt).toEqual(now);
+    expect(await checkin.submit(eventId, memberId, { code: view.code })).toEqual({
+      result: 'PASSED',
+    });
+    expect((await ledger()).map((e) => e.amount)).toEqual([5, 5]);
+  });
+  it('«Завершить ивент» раньше планового окончания открывает то же финальное окно', async () => {
+    await start();
+    now = new Date('2027-03-03T16:59:00Z'); // через минуту после начала
+
+    await finish();
+
+    const view = await checkin.raidLeadView(eventId, rl(), 'MEMBER');
+    expect(view).toMatchObject({ phase: 'END', windowState: 'ACTIVE' });
+    expect((await checkin.playerView(eventId, memberId)).choices).toContain(view.code);
+  });
+  it('финальное окно закрывается через windowSec: поздний код — 409 без траты попытки', async () => {
+    await start();
+    await finish();
+    // Окно финала открыто в 16:58:00.000 на 180 секунд — на следующей миллисекунде оно закрыто.
+    now = new Date('2027-03-03T17:01:00.001Z');
+
+    await expect(checkin.submit(eventId, memberId, { code: await code() })).rejects.toThrow(
+      ConflictException,
+    );
+    expect(await db.attendance.count({ where: { eventId, memberId } })).toBe(0);
+    expect(await ledger()).toHaveLength(0);
   });
   it('две верные попытки дают одну половину платы, вторая получает 409', async () => {
+    await start();
     const value = await code();
     const results = await Promise.allSettled([
       checkin.submit(eventId, memberId, { code: value }),
@@ -105,9 +197,7 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
       results.filter((r) => r.status === 'rejected' && r.reason instanceof ConflictException),
     ).toHaveLength(1);
     expect((await ledger()).map((e) => e.amount)).toEqual([5]);
-    expect(
-      await db.auditLog.count({ where: { entityId: eventId, action: 'CHECKIN_SUBMIT' } }),
-    ).toBe(1);
+    expect(await auditCount('CHECKIN_SUBMIT')).toBe(1);
   });
 
   it('две ручные отметки одной фазы не удваивают выдачу', async () => {
@@ -115,7 +205,7 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
       conduct.manualCheckIn(
         eventId,
         { memberId, phase: 'START', comment: 'Помощь игроку' },
-        { memberId: rlId, isAdmin: false },
+        rl(),
         'MEMBER',
       );
     const results = await Promise.allSettled([update(), update()]);
@@ -126,13 +216,14 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
     expect((await ledger()).map((e) => e.amount)).toEqual([5]);
   });
   it('самоотметка одновременно с ручной отметкой РЛ не удваивает начисление', async () => {
+    await start();
     const value = await code();
     const results = await Promise.allSettled([
       checkin.submit(eventId, memberId, { code: value }),
       conduct.manualCheckIn(
         eventId,
         { memberId, phase: 'START', comment: 'Помощь игроку' },
-        { memberId: rlId, isAdmin: false },
+        rl(),
         'MEMBER',
       ),
     ]);
@@ -144,10 +235,11 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
     expect(['PASSED', 'MANUAL']).toContain(attendance.checkinStart);
   });
   it('ошибка начисления откатывает самоотметку и аудит, попытку можно повторить', async () => {
+    await start();
     const value = await code();
     const broken = new CheckInService(
       failDelegate('dkpEntry') as unknown as CheckInDb,
-      settings,
+      shares,
       () => now,
       key,
     );
@@ -155,19 +247,33 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
       'injected failure',
     );
     expect(await db.attendance.count({ where: { eventId, memberId } })).toBe(0);
-    expect(
-      await db.auditLog.count({ where: { action: 'CHECKIN_SUBMIT', entityId: eventId } }),
-    ).toBe(0);
+    expect(await auditCount('CHECKIN_SUBMIT')).toBe(0);
     await checkin.submit(eventId, memberId, { code: value });
     expect(await ledger()).toHaveLength(1);
   });
+  it('сбой записи кода откатывает и статус: ивент остаётся запланированным, повторное нажатие открывает окно', async () => {
+    const broken = new EventsService(
+      failDelegate('checkInCode', 'upsert') as unknown as EventsDb,
+      () => now,
+    );
+    attachCheckInLaunch(broken, key);
+    await expect(start(broken)).rejects.toThrow('injected failure');
+    expect(await eventStatus()).toEqual({ status: 'PLANNED' });
+    expect(await db.checkInCode.count({ where: { eventId } })).toBe(0);
+    expect(await auditCount('EVENT_STATUS_CHANGE')).toBe(0);
+    expect(await auditCount('CHECKIN_CODE_GENERATE')).toBe(0);
+
+    await start();
+    expect(await eventStatus()).toEqual({ status: 'RUNNING' });
+    expect(await code()).toMatch(/^\d{3}$/);
+  });
   it('сбой аудита откатывает ручные ДКП и отметку посещения', async () => {
-    const broken = new ConductService(failDelegate('auditLog') as unknown as ConductDb, settings);
+    const broken = new ConductService(failDelegate('auditLog') as unknown as ConductDb, shares);
     await expect(
       broken.manualDkp(
         eventId,
         { memberId, type: 'MANUAL_EARN', amount: 7, comment: 'Бонус за помощь' },
-        { memberId: rlId, isAdmin: false },
+        rl(),
         'MEMBER',
       ),
     ).rejects.toThrow('injected failure');
@@ -176,7 +282,7 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
       broken.setAttendance(
         eventId,
         { memberId, status: 'PRESENT', comment: 'Был в рейде' },
-        { memberId: rlId, isAdmin: false },
+        rl(),
         'MEMBER',
       ),
     ).rejects.toThrow('injected failure');
@@ -185,28 +291,12 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
       broken.manualCheckIn(
         eventId,
         { memberId, phase: 'START', comment: 'Помощь игроку' },
-        { memberId: rlId, isAdmin: false },
+        rl(),
         'MEMBER',
       ),
     ).rejects.toThrow('injected failure');
     expect(await ledger()).toHaveLength(0);
     expect(await db.attendance.count({ where: { eventId, memberId } })).toBe(0);
-  });
-  it('досрочный код и его аудит откатываются вместе', async () => {
-    const broken = new CheckInService(
-      failDelegate('auditLog') as unknown as CheckInDb,
-      settings,
-      () => now,
-      key,
-    );
-    await expect(
-      broken.startEndCodeEarly(eventId, { memberId: rlId, isAdmin: false }, 'MEMBER'),
-    ).rejects.toThrow('injected failure');
-    expect(await db.checkInCode.count({ where: { eventId, phase: 'END' } })).toBe(0);
-    await checkin.startEndCodeEarly(eventId, { memberId: rlId, isAdmin: false }, 'MEMBER');
-    expect(
-      await db.auditLog.count({ where: { action: 'CHECKIN_END_EARLY', entityId: eventId } }),
-    ).toBe(1);
   });
 
   // Аудит F01 (#163): нечётная плата не должна начислять больше самой платы.
@@ -234,7 +324,7 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
     await conduct.manualCheckIn(
       oddEventId,
       { memberId, phase: 'START', comment: 'Проверка нечётной платы' },
-      { memberId: rlId, isAdmin: false },
+      rl(),
       'MEMBER',
     );
     const afterStart = await entries();
@@ -242,7 +332,7 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
     await conduct.manualCheckIn(
       oddEventId,
       { memberId, phase: 'END', comment: 'Проверка нечётной платы' },
-      { memberId: rlId, isAdmin: false },
+      rl(),
       'MEMBER',
     );
     const afterEnd = await entries();

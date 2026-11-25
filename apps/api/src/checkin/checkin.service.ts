@@ -7,43 +7,33 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  activeCheckInPhase,
   can,
-  isEventInvitee,
-  type EventScopeInput,
+  checkInPhaseView,
   checkInShareAmount,
-  checkInWindowState,
-  phaseWindowBounds,
+  isEventInvitee,
   submitCheckInSchema,
   type CheckInPhase,
+  type CheckInWindowBounds,
   type CheckInWindowState,
+  type EventScopeInput,
   type SubmitCheckInInput,
 } from '@dkp/shared';
-import {
-  buildCodeChoices,
-  decryptCheckInCode,
-  encryptCheckInCode,
-  isCodeCorrect,
-  newCodeWithHash,
-} from './crypto';
+import { buildCodeChoices, decryptCheckInCode, isCodeCorrect } from './crypto';
 import type { EventsActor } from '../events/events.service';
 
-/** Настройки окна чек-ина (дефолты совпадают с SETTING_DEFAULTS). */
+/** Доли платы за фазы (дефолты совпадают с SETTING_DEFAULTS). */
 export interface CheckInSettings {
-  generateBeforeStartSec: number;
-  windowSec: number;
-  attempts: number;
   startSharePct: number;
   endSharePct: number;
 }
 
-/** Сохранённый код ивент-фазы: хэш, соль, шифротекст, границы окна. */
-interface StoredCode {
+/** Сохранённый код ивент-фазы: хэш, соль, шифротекст и границы окна. */
+interface StoredCode extends CheckInWindowBounds {
   codeHash: string;
   salt: string;
   /** Код, зашифрованный CHECKIN_ENC_KEY (открытым текстом не хранится). */
   codeEnc: string;
-  windowOpensAt: Date;
-  windowClosesAt: Date;
 }
 
 /** Что видит игрок: статус окна + 4 варианта (без указания верного). */
@@ -55,13 +45,14 @@ export interface PlayerCheckInView {
   status: string;
 }
 
-/** Что видит РЛ: сам код (только ему) и границы окна. */
+/** Что видит управляющий: сам код (только ему) и границы окна. */
 export interface RaidLeadCheckInView {
   phase: CheckInPhase;
   windowState: CheckInWindowState;
   code: string;
-  windowOpensAt: Date;
-  windowClosesAt: Date;
+  /** null — код этой фазы ещё не запускали. */
+  windowOpensAt: Date | null;
+  windowClosesAt: Date | null;
 }
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
@@ -83,8 +74,6 @@ export interface CheckInDb {
       | (EventScopeInput & {
           id: string;
           status: string;
-          startsAt: Date;
-          endsAt: Date;
           dkpReward: number;
           raidLeadId: string;
           creatorId?: string | null;
@@ -96,17 +85,6 @@ export interface CheckInDb {
     findUnique(args: {
       where: { eventId_phase: { eventId: string; phase: string } };
     }): Promise<StoredCode | null>;
-    create(args: {
-      data: {
-        eventId: string;
-        phase: string;
-        codeHash: string;
-        salt: string;
-        codeEnc: string;
-        windowOpensAt: Date;
-        windowClosesAt: Date;
-      };
-    }): Promise<unknown>;
   };
   attendance: {
     findUnique(args: {
@@ -147,9 +125,11 @@ export interface CheckInDb {
 export type Clock = () => Date;
 
 /**
- * Чек-ин кодами (issue #9, план 2.2): ленивая генерация кода при запросе,
- * хранение только хэша для сверки + шифротекста для повторного показа РЛ,
- * одна попытка, 50/50 платы в журнал ДКП.
+ * Чек-ин кодами (issue #9, план 2.2): окно кода открывает управляющий кнопкой
+ * «Начать ивент» / «Завершить ивент» (launch.ts, решение №23) — расписание
+ * ивента на окна не влияет. Здесь чтение и сверка попыток: в БД хэш с солью
+ * для проверки и шифротекст для повторного показа управляющему, одна
+ * попытка, 50/50 платы в журнал ДКП.
  */
 @Injectable()
 export class CheckInService {
@@ -157,7 +137,7 @@ export class CheckInService {
     private readonly db: CheckInDb,
     private readonly settings: CheckInSettings,
     private readonly clock: Clock = () => new Date(),
-    /** hex-ключ AES-256 для зашифрованного показа кода РЛ (env CHECKIN_ENC_KEY). */
+    /** hex-ключ AES-256 для зашифрованного показа кода управляющему (env CHECKIN_ENC_KEY). */
     private readonly encKeyHex: string = '',
   ) {}
 
@@ -177,15 +157,6 @@ export class CheckInService {
     body: unknown,
   ): Promise<{ result: 'PASSED' | 'FAILED' }> {
     return this.transact((service) => service.submitInTransaction(eventId, memberId, body));
-  }
-  async startEndCodeEarly(
-    eventId: string,
-    actor: EventsActor,
-    actorRank: string | null,
-  ): Promise<RaidLeadCheckInView> {
-    return this.transact((service) =>
-      service.startEndCodeEarlyInTransaction(eventId, actor, actorRank),
-    );
   }
   private transact<T>(work: (service: CheckInService) => Promise<T>): Promise<T> {
     return serializable(
@@ -208,6 +179,9 @@ export class CheckInService {
    * (верный + 3 обманки). Варианты отдаются только в активном окне
    * и стабильны в его пределах (детерминированы солью кода) — повторные
    * запросы не выдают верный код сменой обманок.
+   *
+   * Завершённый ивент чек-ин не закрывает: финальное окно открывает та же
+   * кнопка, что завершает ивент, и действует ещё windowSec.
    */
   private async playerViewInTransaction(
     eventId: string,
@@ -216,39 +190,32 @@ export class CheckInService {
     if (!memberId) throw new ForbiddenException('Для отметки нужен профиль игрока');
     const event = await this.mustGetEvent(eventId);
     await this.assertInvited(event, memberId);
-    if (event.status === 'CANCELLED' || event.status === 'FINISHED')
-      throw new ConflictException('Чек-ин недоступен');
-    const now = this.clock();
-    const phase = (await this.currentPhase(event, now)) ?? 'START';
+    if (event.status === 'CANCELLED') throw new ConflictException('Чек-ин недоступен');
+    const codes = await this.codesOf(event.id);
+    const view = checkInPhaseView(this.clock(), event.status, codes);
 
     const existing = await this.db.attendance.findUnique({
       where: { eventId_memberId: { eventId, memberId } },
     });
     const status = existing
-      ? phase === 'START'
+      ? view.phase === 'START'
         ? existing.checkinStart
         : existing.checkinEnd
       : 'PENDING';
 
-    const stored = await this.ensureCode(event, phase);
-    const windowState = checkInWindowState(now, stored.windowOpensAt, stored.windowClosesAt);
-    const correctCode = this.reveal(stored);
-
+    const stored = view.windowState === 'ACTIVE' ? codes[view.phase] : undefined;
     return {
-      phase,
-      windowState,
-      choices:
-        windowState === 'ACTIVE' && correctCode !== null
-          ? buildCodeChoices(correctCode, stored.salt)
-          : [],
+      phase: view.phase,
+      windowState: view.windowState,
+      choices: stored ? this.choicesOf(stored) : [],
       status,
     };
   }
 
   /**
-   * Вид РЛ: сам код (только РЛ ивента, Глава или Админ+ — план 2.2).
-   * Ленивая генерация: код создаётся при первом запросе в окне;
-   * повторный показ — расшифровкой codeEnc.
+   * Вид управляющего: сам код (только управляющим ивента — план 2.6) и
+   * границы окна. Код показывается из шифротекста; до запуска фазы границ
+   * ещё нет — окно откроет кнопка «Начать ивент» / «Завершить ивент».
    */
   private async raidLeadViewInTransaction(
     eventId: string,
@@ -256,8 +223,8 @@ export class CheckInService {
     actorRank: string | null,
   ): Promise<RaidLeadCheckInView> {
     const event = await this.mustGetEvent(eventId);
-    if (event.status === 'CANCELLED' || event.status === 'FINISHED') {
-      throw new ConflictException('Ивент отменён или завершён — чек-ин недоступен');
+    if (event.status === 'CANCELLED') {
+      throw new ConflictException('Ивент отменён — чек-ин недоступен');
     }
     const allowed = can(
       { rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId },
@@ -268,28 +235,26 @@ export class CheckInService {
       throw new ForbiddenException('Код видит только РЛ ивента, Глава или Админ');
     }
 
-    const now = this.clock();
-    const phase = (await this.currentPhase(event, now)) ?? 'START';
-    const stored = await this.ensureCode(event, phase);
-    const windowState = checkInWindowState(now, stored.windowOpensAt, stored.windowClosesAt);
+    const codes = await this.codesOf(event.id);
+    const view = checkInPhaseView(this.clock(), event.status, codes);
+    const stored = codes[view.phase];
+    if (!stored) {
+      return {
+        phase: view.phase,
+        windowState: view.windowState,
+        code: '',
+        windowOpensAt: null,
+        windowClosesAt: null,
+      };
+    }
     const code = this.reveal(stored);
     if (code === null) {
-      if (windowState === 'NOT_OPEN_YET') {
-        // До окна: показываем статус, код появится при генерации в окне.
-        return {
-          phase,
-          windowState,
-          code: '',
-          windowOpensAt: stored.windowOpensAt,
-          windowClosesAt: stored.windowClosesAt,
-        };
-      }
-      throw new ConflictException('Код недоступен: окно прошло без генерации');
+      throw new ConflictException('Код недоступен');
     }
 
     return {
-      phase,
-      windowState,
+      phase: view.phase,
+      windowState: view.windowState,
       code,
       windowOpensAt: stored.windowOpensAt,
       windowClosesAt: stored.windowClosesAt,
@@ -312,20 +277,15 @@ export class CheckInService {
     const input: SubmitCheckInInput = parsed.data;
     const event = await this.mustGetEvent(eventId);
     await this.assertInvited(event, memberId);
-    if (event.status === 'CANCELLED' || event.status === 'FINISHED') {
-      throw new ConflictException('Ивент отменён или завершён — чек-ин недоступен');
+    if (event.status === 'CANCELLED') {
+      throw new ConflictException('Ивент отменён — чек-ин недоступен');
     }
-    const now = this.clock();
-    const phase = await this.currentPhase(event, now);
-    if (phase === null) {
+    const codes = await this.codesOf(event.id);
+    const phase = activeCheckInPhase(this.clock(), codes);
+    if (!phase) {
       throw new ConflictException('Чек-ин недоступен: окно не активно');
     }
-
-    const stored = await this.ensureCode(event, phase);
-    const windowState = checkInWindowState(now, stored.windowOpensAt, stored.windowClosesAt);
-    if (windowState !== 'ACTIVE' || stored.codeHash === '') {
-      throw new ConflictException('Окно чек-ина не активно');
-    }
+    const stored = codes[phase]!;
 
     const existing = await this.db.attendance.findUnique({
       where: { eventId_memberId: { eventId, memberId } },
@@ -353,10 +313,7 @@ export class CheckInService {
     });
 
     if (correct) {
-      const amount = checkInShareAmount(event.dkpReward, phase, {
-        startSharePct: this.settings.startSharePct,
-        endSharePct: this.settings.endSharePct,
-      });
+      const amount = checkInShareAmount(event.dkpReward, phase, this.settings);
       // Нулевая доля (напр. плата 1 при 50/50) — отметка засчитывается,
       // но запись журнала на 0 не создаём (аудит F01).
       if (amount > 0) {
@@ -384,7 +341,28 @@ export class CheckInService {
     return { result: status };
   }
 
-  /** Расшифровка кода для показа РЛ; пусто/битое — null. */
+  /** Коды ивента по фазам — только сохранённые; фазы без кода нет среди ключей. */
+  private async codesOf(eventId: string): Promise<Partial<Record<CheckInPhase, StoredCode>>> {
+    const read = (phase: CheckInPhase) =>
+      this.db.checkInCode.findUnique({ where: { eventId_phase: { eventId, phase } } });
+    const [start, end] = await Promise.all([read('START'), read('END')]);
+    return { ...(start ? { START: start } : {}), ...(end ? { END: end } : {}) };
+  }
+
+  /** Варианты для игрока: верный код и 3 обманки; без читаемого кода вариантов нет. */
+  private choicesOf(stored: StoredCode): string[] {
+    const code = this.reveal(stored);
+    return code === null ? [] : buildCodeChoices(code, stored.salt);
+  }
+
+  /** Расшифровка кода для показа управляющему; пусто/битое — null. */
+  private reveal(stored: StoredCode): string | null {
+    if (!stored.codeEnc) {
+      return null;
+    }
+    return decryptCheckInCode(stored.codeEnc, this.encKeyHex);
+  }
+
   private async assertInvited(event: EventScopeInput, memberId: string) {
     const member = await this.db.member.findUnique({
       where: { id: memberId },
@@ -396,187 +374,6 @@ export class CheckInService {
       !isEventInvitee(event, { ...member, kpId: member.pack?.kpId ?? null })
     )
       throw new ForbiddenException('Вы не приглашены на этот ивент');
-  }
-
-  private reveal(stored: StoredCode): string | null {
-    if (!stored.codeEnc) {
-      return null;
-    }
-    return decryptCheckInCode(stored.codeEnc, this.encKeyHex);
-  }
-
-  /**
-   * Текущая фаза по времени: START в [начало−N, конец), END в [конец, конец+N].
-   * Досрочно запущенный END-код (план 2.2 п.5) перекрывает всё, включая
-   * ещё не открывшееся стартовое окно: РЛ закончил раньше плана.
-   */
-  private async currentPhase(
-    event: { id: string; startsAt: Date; endsAt: Date },
-    now: Date,
-  ): Promise<CheckInPhase | null> {
-    const startBounds = phaseWindowBounds('START', event, this.settings);
-    const endBounds = phaseWindowBounds('END', event, this.settings);
-    if (now >= endBounds.windowOpensAt && now <= endBounds.windowClosesAt) {
-      return 'END';
-    }
-    const earlyEnd = await this.db.checkInCode.findUnique({
-      where: { eventId_phase: { eventId: event.id, phase: 'END' } },
-    });
-    if (
-      earlyEnd &&
-      earlyEnd.codeEnc !== '' &&
-      now >= earlyEnd.windowOpensAt &&
-      now <= earlyEnd.windowClosesAt
-    ) {
-      return 'END';
-    }
-    if (now >= startBounds.windowOpensAt && now < event.endsAt) {
-      return 'START';
-    }
-    return null;
-  }
-
-  /**
-   * Досрочный финальный код (план 2.2 п.5): РЛ закончил раньше плана —
-   * кнопка запускает END-окно от текущего момента. Если плановое окно
-   * уже открыто/прошло или код уже сгенерирован — 409 (нет смысла).
-   * Возвращает код один раз — РЛ видит его на странице проведения.
-   */
-  private async startEndCodeEarlyInTransaction(
-    eventId: string,
-    actor: EventsActor,
-    actorRank: string | null,
-  ): Promise<RaidLeadCheckInView> {
-    const event = await this.mustGetEvent(eventId);
-    const allowed = can(
-      { rank: actorRank as never, isAdmin: actor.isAdmin, memberId: actor.memberId },
-      'events.conduct',
-      event,
-    );
-    if (!allowed) {
-      throw new ForbiddenException('Досрочный код — РЛ ивента, Главе или Админу');
-    }
-    if (event.status === 'CANCELLED' || event.status === 'FINISHED') {
-      throw new ConflictException('Ивент отменён или завершён');
-    }
-
-    const existing = await this.db.checkInCode.findUnique({
-      where: { eventId_phase: { eventId: event.id, phase: 'END' } },
-    });
-    if (existing) {
-      const windowState = checkInWindowState(
-        this.clock(),
-        existing.windowOpensAt,
-        existing.windowClosesAt,
-      );
-      if (windowState !== 'CLOSED') {
-        throw new ConflictException('Финальный код уже сгенерирован');
-      }
-      // Прошедшее пустое окно можно пересоздать досрочным? Нет: плановое
-      // окно уже было — «досрочным» его не сделать, это история.
-      throw new ConflictException('Плановое финальное окно уже прошло');
-    }
-
-    const planned = phaseWindowBounds('END', event, this.settings);
-    const now = this.clock();
-    if (now >= planned.windowOpensAt) {
-      throw new ConflictException('Плановое окно уже открылось — используйте обычный код');
-    }
-
-    // Досрочное окно: от сейчас, длительность — та же настройка
-    const bounds = {
-      windowOpensAt: new Date(now.getTime()),
-      windowClosesAt: new Date(now.getTime() + this.settings.windowSec * 1000),
-    };
-    const { code, salt, codeHash } = newCodeWithHash();
-    const stored: StoredCode = {
-      codeHash,
-      salt,
-      codeEnc: encryptCheckInCode(code, this.encKeyHex),
-      ...bounds,
-    };
-    await this.db.checkInCode.create({
-      data: {
-        eventId: event.id,
-        phase: 'END',
-        codeHash,
-        salt,
-        codeEnc: stored.codeEnc,
-        windowOpensAt: bounds.windowOpensAt,
-        windowClosesAt: bounds.windowClosesAt,
-      },
-    });
-    await this.db.auditLog.create({
-      data: {
-        actorMemberId: actor.memberId,
-        actorIsAdmin: actor.isAdmin,
-        action: 'CHECKIN_END_EARLY',
-        entityType: 'Event',
-        entityId: eventId,
-        comment: `Досрочно запущен финальный код (окно до ${bounds.windowClosesAt.toISOString()})`,
-      },
-    });
-    return {
-      phase: 'END',
-      windowState: 'ACTIVE',
-      code,
-      windowOpensAt: bounds.windowOpensAt,
-      windowClosesAt: bounds.windowClosesAt,
-    };
-  }
-
-  /**
-   * Ленивая генерация: код создаётся при первом обращении в его окне
-   * (за N сек до начала / в момент планового окончания — план 2.2).
-   * В БД: хэш с солью (сверка попыток) + AES-шифротекст (повторный
-   * показ РЛ). Вне окна новый код не создаётся; без генерации — пустышка.
-   */
-  private async ensureCode(
-    event: { id: string; startsAt: Date; endsAt: Date },
-    phase: CheckInPhase,
-  ): Promise<StoredCode> {
-    const existing = await this.db.checkInCode.findUnique({
-      where: { eventId_phase: { eventId: event.id, phase } },
-    });
-    if (existing) {
-      return existing;
-    }
-
-    const bounds = phaseWindowBounds(phase, event, this.settings);
-    const now = this.clock();
-    if (now < bounds.windowOpensAt || now > bounds.windowClosesAt) {
-      // Окно ещё не открылось или прошло без генерации — кода нет.
-      return { codeHash: '', salt: '', codeEnc: '', ...bounds };
-    }
-
-    const { code, salt, codeHash } = newCodeWithHash();
-    const stored: StoredCode = {
-      codeHash,
-      salt,
-      codeEnc: encryptCheckInCode(code, this.encKeyHex),
-      ...bounds,
-    };
-    await this.db.checkInCode.create({
-      data: {
-        eventId: event.id,
-        phase,
-        codeHash,
-        salt,
-        codeEnc: stored.codeEnc,
-        windowOpensAt: bounds.windowOpensAt,
-        windowClosesAt: bounds.windowClosesAt,
-      },
-    });
-    await this.db.auditLog.create({
-      data: {
-        actorMemberId: null,
-        action: 'CHECKIN_CODE_GENERATE',
-        entityType: 'Event',
-        entityId: event.id,
-        comment: `Сгенерирован ${phase === 'START' ? 'стартовый' : 'финальный'} код`,
-      },
-    });
-    return stored;
   }
 
   private async mustGetEvent(eventId: string) {

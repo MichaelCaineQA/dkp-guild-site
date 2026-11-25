@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  activeCheckInPhase,
+  checkInPhaseView,
   checkInShareAmount,
   checkInWindowState,
-  phaseWindowBounds,
+  manualWindowBounds,
   submitCheckInSchema,
 } from './checkin';
 
@@ -62,23 +64,99 @@ describe('checkInShareAmount', () => {
   });
 });
 
-describe('phaseWindowBounds', () => {
-  const event = {
-    startsAt: new Date('2026-03-03T17:00:00Z'),
-    endsAt: new Date('2026-03-03T19:00:00Z'),
-  };
-  const config = { generateBeforeStartSec: 180, windowSec: 180 };
+describe('manualWindowBounds', () => {
+  it('окно открывается в момент нажатия и длится настройку (решение №23)', () => {
+    const now = new Date('2026-03-03T16:45:00Z');
+    const bounds = manualWindowBounds(now, 180);
+    expect(bounds.windowOpensAt.getTime()).toBe(now.getTime());
+    expect(bounds.windowClosesAt.getTime()).toBe(new Date('2026-03-03T16:48:00Z').getTime());
+    // Границы — свои объекты: случайно изменив границу, не сдвинуть «сейчас»
+    expect(bounds.windowOpensAt).not.toBe(now);
+  });
+});
 
-  it('стартовый код: окно за 3 мин до начала, на 3 мин (план 2.2)', () => {
-    const bounds = phaseWindowBounds('START', event, config);
-    expect(bounds.windowOpensAt.getTime()).toBe(new Date('2026-03-03T16:57:00Z').getTime());
-    expect(bounds.windowClosesAt.getTime()).toBe(new Date('2026-03-03T17:00:00Z').getTime());
+describe('activeCheckInPhase', () => {
+  const started = manualWindowBounds(new Date('2026-03-03T16:45:00Z'), 180);
+  const finished = manualWindowBounds(new Date('2026-03-03T19:40:00Z'), 180);
+
+  it('код не запускали — открытой фазы нет, что бы ни показывали часы', () => {
+    const now = new Date('2026-03-03T16:58:00Z'); // прежнее стартовое окно по расписанию
+    expect(activeCheckInPhase(now, {})).toBeNull();
   });
 
-  it('финальный код: окно в момент планового окончания', () => {
-    const bounds = phaseWindowBounds('END', event, config);
-    expect(bounds.windowOpensAt.getTime()).toBe(new Date('2026-03-03T19:00:00Z').getTime());
-    expect(bounds.windowClosesAt.getTime()).toBe(new Date('2026-03-03T19:03:00Z').getTime());
+  it('стартовое окно открыто после нажатия — START, до и после — null', () => {
+    expect(activeCheckInPhase(new Date('2026-03-03T16:44:59Z'), { START: started })).toBeNull();
+    expect(activeCheckInPhase(new Date('2026-03-03T16:45:00Z'), { START: started })).toBe('START');
+    expect(activeCheckInPhase(new Date('2026-03-03T16:48:00Z'), { START: started })).toBe('START');
+    expect(activeCheckInPhase(new Date('2026-03-03T16:48:01Z'), { START: started })).toBeNull();
+  });
+
+  it('финальное окно позже планового окончания открывается нажатием — END', () => {
+    expect(
+      activeCheckInPhase(new Date('2026-03-03T19:40:00Z'), { START: started, END: finished }),
+    ).toBe('END');
+    expect(activeCheckInPhase(new Date('2026-03-03T19:43:00Z'), { END: finished })).toBe('END');
+  });
+
+  it('финал перекрывает ещё открытое стартовое окно: завершили сразу после начала', () => {
+    const quickFinish = manualWindowBounds(new Date('2026-03-03T16:46:00Z'), 180);
+    expect(
+      activeCheckInPhase(new Date('2026-03-03T16:46:30Z'), { START: started, END: quickFinish }),
+    ).toBe('END');
+  });
+});
+
+describe('checkInPhaseView', () => {
+  const started = manualWindowBounds(new Date('2026-03-03T16:45:00Z'), 180);
+  const finished = manualWindowBounds(new Date('2026-03-03T19:40:00Z'), 180);
+
+  it('ивент не начинали — стартовая фаза ещё не открыта, без границ', () => {
+    for (const status of ['PLANNED', 'RUNNING']) {
+      expect(checkInPhaseView(new Date('2026-03-03T16:50:00Z'), status, {})).toEqual({
+        phase: 'START',
+        windowState: 'NOT_OPEN_YET',
+        window: null,
+      });
+    }
+  });
+
+  it('после старта показывается стартовый код: открыт, затем закрыт', () => {
+    expect(
+      checkInPhaseView(new Date('2026-03-03T16:46:00Z'), 'RUNNING', { START: started }),
+    ).toEqual({
+      phase: 'START',
+      windowState: 'ACTIVE',
+      window: started,
+    });
+    expect(
+      checkInPhaseView(new Date('2026-03-03T17:30:00Z'), 'RUNNING', { START: started }),
+    ).toMatchObject({
+      phase: 'START',
+      windowState: 'CLOSED',
+    });
+  });
+
+  it('после завершения показывается финальный код, пока ивент уже завершён', () => {
+    expect(
+      checkInPhaseView(new Date('2026-03-03T19:41:00Z'), 'FINISHED', {
+        START: started,
+        END: finished,
+      }),
+    ).toEqual({ phase: 'END', windowState: 'ACTIVE', window: finished });
+    expect(
+      checkInPhaseView(new Date('2026-03-03T20:00:00Z'), 'FINISHED', {
+        START: started,
+        END: finished,
+      }),
+    ).toMatchObject({ phase: 'END', windowState: 'CLOSED' });
+  });
+
+  it('завершённый ивент без кодов — финальная фаза закрыта, вводить нечего', () => {
+    expect(checkInPhaseView(new Date('2026-03-03T20:00:00Z'), 'FINISHED', {})).toEqual({
+      phase: 'END',
+      windowState: 'CLOSED',
+      window: null,
+    });
   });
 });
 

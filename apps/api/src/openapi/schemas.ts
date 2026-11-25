@@ -500,7 +500,12 @@ export const schemas: Record<string, SchemaObject> = {
   CreatedSeries: object({ seriesId: str, created: num }),
   DeletedSeries: object({ deleted: num }),
   PlayerCheckIn: object({ ...window, choices: array(str), status: str }),
-  RaidLeadCheckIn: object({ ...window, code: str, windowOpensAt: date, windowClosesAt: date }),
+  RaidLeadCheckIn: object({
+    ...window,
+    code: str,
+    windowOpensAt: nullable(date),
+    windowClosesAt: nullable(date),
+  }),
   CheckInResult: object({ result: enumeration(['PASSED', 'FAILED']) }),
   EventSummaryApplied: object({
     ok: { type: 'boolean', enum: [true] },

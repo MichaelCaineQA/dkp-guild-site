@@ -1,5 +1,7 @@
 'use client';
 import { useEffect, useRef, type ReactNode } from 'react';
+import { Button } from './controls';
+import { ErrorText, Stack } from './layout';
 export function Modal({
   title,
   onClose,
@@ -47,5 +49,51 @@ export function Modal({
       {heading && <h2 className="mb-4 pr-10 text-xl font-semibold md:pr-8">{title}</h2>}
       {children}
     </dialog>
+  );
+}
+
+/**
+ * Подтверждение действия, которое нельзя отменить: окно с пояснением,
+ * основной кнопкой и «Отменой». Пока действие выполняется, окно не закрывается.
+ */
+export function ConfirmDialog({
+  title,
+  children,
+  confirmLabel,
+  busy = false,
+  error = null,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  children: ReactNode;
+  confirmLabel: string;
+  busy?: boolean;
+  error?: string | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Modal
+      title={title}
+      onClose={() => {
+        if (!busy) onCancel();
+      }}
+    >
+      <Stack>
+        {children}
+        {error && (
+          <div role="alert">
+            <ErrorText>{error}</ErrorText>
+          </div>
+        )}
+        <Button variant="primary" disabled={busy} onClick={onConfirm}>
+          {confirmLabel}
+        </Button>
+        <Button disabled={busy} onClick={onCancel}>
+          Отмена
+        </Button>
+      </Stack>
+    </Modal>
   );
 }
