@@ -670,11 +670,18 @@ export const schemas: Record<string, SchemaObject> = {
     lots: nullable(str),
   }),
   DiscordSettings: object({ channels: ref('DiscordChannels'), configured: { type: 'boolean' } }),
-  DiscordSettingsUpdate: object({
-    channels: ref('DiscordChannels'),
-    absenceAccessConfirmed: { type: 'boolean' },
-    reason: str,
-  }),
+  DiscordSettingsUpdate: object(
+    {
+      channels: ref('DiscordChannels'),
+      absenceAccessConfirmed: {
+        type: 'boolean',
+        description:
+          'Необязательное поле: игнорируется. Канал отсутствий может быть общим, подтверждение закрытости не требуется.',
+      },
+      reason: str,
+    },
+    ['channels', 'reason'],
+  ),
   DiscordTest: object({ id: str }),
   DiscordTestStatus: object({ status: str, lastError: nullable(str) }),
   Settings: object(settings),

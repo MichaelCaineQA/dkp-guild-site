@@ -19,7 +19,11 @@ const channelsSchema = z.object({
 const storedSchema = z.object({ guildId: z.string().regex(/^\d+$/), channels: channelsSchema });
 const updateSchema = z.object({
   channels: channelsSchema,
-  absenceAccessConfirmed: z.boolean(),
+  /**
+   * Больше ни на что не влияет: канал отсутствий может быть общим (#325). Поле
+   * осталось необязательным, чтобы прежняя вкладка страницы могла сохранить каналы.
+   */
+  absenceAccessConfirmed: z.boolean().optional(),
   reason: z.string().trim().min(1).max(500),
 });
 type Channels = z.infer<typeof channelsSchema>;
@@ -50,13 +54,7 @@ export class DiscordSettingsService {
   async update(body: unknown, actor: { memberId: string | null; isAdmin: boolean }) {
     const parsed = updateSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException('Проверьте ID каналов и причину изменения');
-    const { channels, absenceAccessConfirmed, reason } = parsed.data;
-    if (
-      channels.absences &&
-      [channels.announcements, channels.reminders, channels.lots].includes(channels.absences)
-    ) {
-      throw new BadRequestException('Для отсутствий нужен отдельный закрытый канал');
-    }
+    const { channels, reason } = parsed.data;
     const ids = [...new Set(Object.values(channels).filter((id): id is string => id !== null))];
     for (const id of ids) await this.validator.validate(id);
     await serializable(
@@ -84,13 +82,6 @@ export class DiscordSettingsService {
         }
         const oldChannels =
           previous.success && previous.data.guildId === guildId ? previous.data.channels : empty;
-        if (
-          channels.absences &&
-          channels.absences !== oldChannels.absences &&
-          !absenceAccessConfirmed
-        ) {
-          throw new BadRequestException('Подтвердите проверку доступа к каналу отсутствий');
-        }
         if (
           (!old || (previous.success && previous.data.guildId === guildId)) &&
           JSON.stringify(oldChannels) === JSON.stringify(channels)

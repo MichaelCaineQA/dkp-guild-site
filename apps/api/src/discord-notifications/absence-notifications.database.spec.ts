@@ -26,6 +26,17 @@ suite('Absence notifications on PostgreSQL', () => {
   const end = new Date('2030-01-01T19:00:00Z');
   const actor = () => ({ memberId, isAdmin: false, rank: 'MEMBER' as const });
   const input = () => ({ dateFrom: start, dateTo: end, allDay: false, reason: secret });
+  /** Общий канал: те же настройки сохраняет форма, когда отсутствие не требует отдельного канала. */
+  const useSharedChannel = () =>
+    db.setting.update({
+      where: { key: 'discord.channels' },
+      data: {
+        value: {
+          guildId: '100',
+          channels: { announcements: '400', reminders: '400', absences: '400', lots: '400' },
+        },
+      },
+    });
 
   beforeAll(async () => {
     const parsed = new URL(url!);
@@ -162,7 +173,7 @@ suite('Absence notifications on PostgreSQL', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('routes to the current closed channel after a change', async () => {
+  it('routes to the current channel after a change', async () => {
     await absences.create(memberId, input(), actor());
     await db.setting.update({
       where: { key: 'discord.channels' },
@@ -170,6 +181,41 @@ suite('Absence notifications on PostgreSQL', () => {
     });
     await delivery.run();
     expect(fetchSpy.mock.calls[0][0]).toContain('/channels/402/messages');
+  });
+
+  it('delivers an interval application to a channel shared with other notifications', async () => {
+    await useSharedChannel();
+    const created = await absences.create(memberId, input(), actor());
+    const queued = await db.discordNotification.findUniqueOrThrow({
+      where: { id: `absence:${created.id}` },
+    });
+    expect(queued).toMatchObject({ channelId: '400', kind: 'ABSENCE_CREATED', status: 'PENDING' });
+    expect(JSON.stringify(queued)).not.toContain(secret);
+    expect(JSON.stringify(queued)).not.toContain('секретная');
+    await delivery.run();
+    expect(fetchSpy.mock.calls[0][0]).toContain('/channels/400/messages');
+    const payload = JSON.parse(fetchSpy.mock.calls[0][1].body as string);
+    expect(payload.content).toContain('Новая заявка об отсутствии');
+    expect(payload.content).not.toContain('секретная');
+    expect(JSON.stringify(payload)).not.toContain(secret);
+  });
+
+  it('delivers declining a specific event to the shared channel without its reason', async () => {
+    await useSharedChannel();
+    await participation.update(eventId, memberId, { attending: false, reason: secret });
+    const [absence] = await db.absence.findMany({ where: { memberId } });
+    const queued = await db.discordNotification.findUniqueOrThrow({
+      where: { id: `absence:${absence.id}` },
+    });
+    expect(queued).toMatchObject({ channelId: '400', kind: 'ABSENCE_CREATED', status: 'PENDING' });
+    expect(JSON.stringify(queued)).not.toContain(secret);
+    expect(JSON.stringify(queued)).not.toContain('секретная');
+    await delivery.run();
+    expect(fetchSpy.mock.calls[0][0]).toContain('/channels/400/messages');
+    const payload = JSON.parse(fetchSpy.mock.calls[0][1].body as string);
+    expect(payload.content).toContain('Ивент: Рейд');
+    expect(payload.content).not.toContain('секретная');
+    expect(JSON.stringify(payload)).not.toContain(secret);
   });
 
   it('rolls back the notification with the application transaction', async () => {
