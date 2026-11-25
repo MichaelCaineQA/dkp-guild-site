@@ -654,6 +654,73 @@ describe('EventsService.deleteOne', () => {
     expect(events).toHaveLength(1);
     expect(audit).toHaveLength(0);
   });
+
+  it('ивент начали после проверки до транзакции — 409, ивент остаётся без аудита (#312)', async () => {
+    const { db, events, audit } = makeDb([{ id: 'e-1' }]);
+    const findUnique = db.event.findUnique;
+    let reads = 0;
+    db.event.findUnique = async (args) => {
+      const row = await findUnique(args);
+      reads += 1;
+      // параллельный запрос нажал «Начать ивент» сразу после предварительной проверки
+      if (reads === 1) events[0]!.status = 'RUNNING';
+      return row;
+    };
+
+    const error = await refusal(new EventsService(db).deleteOne('e-1', ACTOR));
+    expect(error.message).toBe('Удалить можно только запланированный ивент');
+    expect(events).toHaveLength(1);
+    expect(audit).toHaveLength(0);
+  });
+
+  it('после сбоя сериализации повтор перечитывает статус и отвечает 409, а не удаляет (#312)', async () => {
+    const { db, events, audit } = makeDb([{ id: 'e-1' }]);
+    const findUnique = db.event.findUnique;
+    const remove = db.event.delete;
+    let deletes = 0;
+    db.event.findUnique = async (args) => {
+      // конкурент начал ивент после снимка первой попытки — повтор видит новый статус
+      if (deletes > 0) events[0]!.status = 'RUNNING';
+      return findUnique(args);
+    };
+    db.event.delete = async (args) => {
+      deletes += 1;
+      if (deletes === 1)
+        throw new Prisma.PrismaClientKnownRequestError('serialization failure', {
+          code: 'P2034',
+          clientVersion: 'test',
+        });
+      return remove(args);
+    };
+
+    const error = await refusal(new EventsService(db).deleteOne('e-1', ACTOR));
+    expect(error.message).toBe('Удалить можно только запланированный ивент');
+    expect(deletes).toBe(1);
+    expect(events).toHaveLength(1);
+    expect(audit).toHaveLength(0);
+  });
+
+  it('ивент передали другому РЛ после проверки до транзакции — 403, ивент остаётся (#312)', async () => {
+    const { db, events, audit } = makeDb([{ id: 'e-1', raidLeadId: 'm-rl' }]);
+    const findUnique = db.event.findUnique;
+    let reads = 0;
+    db.event.findUnique = async (args) => {
+      const row = await findUnique(args);
+      reads += 1;
+      if (reads === 1) events[0]!.raidLeadId = 'other';
+      return row;
+    };
+
+    const error: unknown = await new EventsService(db)
+      .deleteOne('e-1', { memberId: 'm-rl', isAdmin: false, rank: 'MEMBER' })
+      .then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect(events).toHaveLength(1);
+    expect(audit).toHaveLength(0);
+  });
 });
 
 describe('EventsService.delete с дропами серии (#109)', () => {
@@ -726,6 +793,81 @@ describe('EventsService.deleteSeries: история чек-ина серии (#
 
     await expect(new EventsService(db).deleteSeries('s', ACTOR)).resolves.toEqual({ deleted: 1 });
     expect(events.map((e) => e.id)).toEqual(['e-9']);
+  });
+});
+
+describe('EventsService.deleteSeries: статус в момент удаления (#312)', () => {
+  const seed = [1, 2, 3, 4].map((n) => ({ id: `e-${n}`, seriesId: 's' }));
+  const message = 'В серии есть незапланированные ивенты — удалить нельзя';
+
+  it('один ивент серии начали после проверки до транзакции — 409, серия и дропы остаются, аудита нет', async () => {
+    const { db, events, drops, audit } = makeDb(seed);
+    drops.push({ id: 'd-1', eventId: 'e-1', auctionId: null });
+    const count = db.event.count;
+    let counted = false;
+    db.event.count = async (args) => {
+      const result = await count(args);
+      if (!counted) {
+        counted = true;
+        events[1]!.status = 'RUNNING'; // параллельный запрос начал ивент после проверки
+      }
+      return result;
+    };
+
+    const error = await refusal(new EventsService(db).deleteSeries('s', ACTOR));
+    expect(error.message).toBe(message);
+    expect(events).toHaveLength(4);
+    expect(drops).toHaveLength(1);
+    expect(audit).toHaveLength(0);
+  });
+
+  it('после сбоя сериализации повтор видит начатый ивент — 409, а не частичное удаление (#312)', async () => {
+    const { db, events, audit } = makeDb(seed);
+    const findMany = db.event.findMany;
+    const remove = db.event.deleteMany;
+    let deletes = 0;
+    db.event.findMany = async (args) => {
+      // конкурент начал ивент после снимка первой попытки — повтор видит новый статус
+      if (deletes > 0) events[1]!.status = 'RUNNING';
+      return findMany(args);
+    };
+    db.event.deleteMany = async (args) => {
+      deletes += 1;
+      if (deletes === 1)
+        throw new Prisma.PrismaClientKnownRequestError('serialization failure', {
+          code: 'P2034',
+          clientVersion: 'test',
+        });
+      return remove(args);
+    };
+
+    const error = await refusal(new EventsService(db).deleteSeries('s', ACTOR));
+    expect(error.message).toBe(message);
+    expect(deletes).toBe(1);
+    expect(events).toHaveLength(4);
+    expect(audit).toHaveLength(0);
+  });
+
+  it('РЛ: ивент серии передали другому после проверки до транзакции — 403, серия остаётся', async () => {
+    const { db, events, audit } = makeDb(seed.map((e) => ({ ...e, raidLeadId: 'm-rl' })));
+    const findMany = db.event.findMany;
+    let reads = 0;
+    db.event.findMany = async (args) => {
+      const rows = await findMany(args);
+      reads += 1;
+      if (reads === 1) events[1]!.raidLeadId = 'other';
+      return rows;
+    };
+
+    const error: unknown = await new EventsService(db)
+      .deleteSeries('s', { memberId: 'm-rl', isAdmin: false, rank: 'MEMBER' })
+      .then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect(events).toHaveLength(4);
+    expect(audit).toHaveLength(0);
   });
 });
 

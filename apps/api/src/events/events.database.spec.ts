@@ -48,6 +48,16 @@ suite('Создание ивентов: настоящие транзакции 
     await db.dkpEntry.deleteMany({ where: { memberId, comment: { startsWith: DKP_MARK } } });
     await db.event.deleteMany({ where: { eventTypeId: typeId } });
   });
+  /** Отказ должен быть предметным 409, а не ошибкой внешнего ключа (500). */
+  const expectConflict = async (work: Promise<unknown>, message: RegExp) => {
+    const error: unknown = await work.then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).getStatus()).toBe(409);
+    expect((error as ConflictException).message).toMatch(message);
+  };
   afterAll(async () => {
     if (!db) return;
     if (memberId) await db.auditLog.deleteMany({ where: { actorMemberId: memberId } });
@@ -164,16 +174,6 @@ suite('Создание ивентов: настоящие транзакции 
       db.dkpEntry.create({
         data: { memberId, type: 'MANUAL_EARN', amount: 5, eventId, comment: DKP_MARK },
       });
-    /** Отказ должен быть предметным 409, а не ошибкой внешнего ключа (500). */
-    const expectConflict = async (work: Promise<unknown>, message: RegExp) => {
-      const error: unknown = await work.then(
-        () => undefined,
-        (e: unknown) => e,
-      );
-      expect(error).toBeInstanceOf(ConflictException);
-      expect((error as ConflictException).getStatus()).toBe(409);
-      expect((error as ConflictException).message).toMatch(message);
-    };
 
     it('без кодов, отметок и записей журнала ивент удаляется как раньше', async () => {
       const created = await service.create(input(), ACTOR);
@@ -246,6 +246,194 @@ suite('Создание ивентов: настоящие транзакции 
 
       expect(await db.event.count({ where: { seriesId } })).toBe(4);
       expect(await db.dkpEntry.count({ where: { event: { seriesId } } })).toBe(1);
+    });
+  });
+
+  describe('статус в момент удаления (#312)', () => {
+    /** Второе соединение — «параллельный запрос» меняет статус мимо сервиса и аудита. */
+    let other: PrismaClient;
+    let original: { findUnique: typeof db.event.findUnique; count: typeof db.event.count };
+    beforeAll(async () => {
+      other = new PrismaClient({ datasourceUrl: url });
+      original = {
+        findUnique: db.event.findUnique.bind(db.event),
+        count: db.event.count.bind(db.event),
+      };
+    });
+    afterEach(() => {
+      db.event.findUnique = original.findUnique;
+      db.event.count = original.count;
+    });
+    afterAll(async () => {
+      await other.$disconnect();
+    });
+    /**
+     * Подмена чтения до транзакции: сразу после первого (предварительного)
+     * вызова конкурент начинает ивент — «параллельный запрос» нажал кнопку.
+     */
+    const startAfter = <T extends 'findUnique' | 'count'>(method: T, eventId: string) => {
+      const read = original[method] as unknown as (args: never) => Promise<unknown>;
+      let switched = false;
+      const wrapped = async (args: never) => {
+        const result = await read(args);
+        if (!switched) {
+          switched = true;
+          await other.event.update({ where: { id: eventId }, data: { status: 'RUNNING' } });
+        }
+        return result;
+      };
+      return wrapped as unknown as (typeof original)[T];
+    };
+
+    it('ивент начали после проверки до транзакции — 409, ивент остаётся идущим', async () => {
+      const created = await service.create(input(), ACTOR);
+      db.event.findUnique = startAfter('findUnique', created.id);
+
+      await expectConflict(service.deleteOne(created.id, ACTOR), /только запланированный/);
+
+      expect(await db.event.findUnique({ where: { id: created.id } })).toMatchObject({
+        status: 'RUNNING',
+      });
+      expect(
+        await db.auditLog.count({ where: { entityId: created.id, action: 'EVENT_DELETE' } }),
+      ).toBe(0);
+    });
+
+    it('один ивент серии начали после проверки до транзакции — 409, серия и дропы остаются', async () => {
+      const { seriesId } = await service.createSeries(input(), ACTOR);
+      const events = await db.event.findMany({ where: { seriesId }, orderBy: { startsAt: 'asc' } });
+      await db.lootDrop.create({ data: { eventId: events[0]!.id, itemId } });
+      db.event.count = startAfter('count', events[1]!.id);
+
+      await expectConflict(service.deleteSeries(seriesId, ACTOR), /незапланированные/);
+
+      expect(await db.event.count({ where: { seriesId } })).toBe(4);
+      expect(await db.lootDrop.count({ where: { event: { seriesId } } })).toBe(1);
+      expect(
+        await db.auditLog.count({ where: { entityId: seriesId, action: 'EVENT_SERIES_DELETE' } }),
+      ).toBe(0);
+    });
+
+    /**
+     * Сервис, чья первая транзакция удаления замирает сразу после чтения ивента
+     * (снимок уже взят) и ждёт `resume`. `deletes()` считает вызовы DELETE.
+     */
+    const pausedDelete = (
+      hold: 'findUnique' | 'findMany',
+      read: () => void,
+      resume: Promise<void>,
+    ) => {
+      let pauses = 0;
+      let deletes = 0;
+      const events = (model: object) =>
+        new Proxy(model, {
+          get(target, prop: string) {
+            const value = (target as Record<string, unknown>)[prop];
+            if (typeof value !== 'function') return value;
+            return async (...args: unknown[]) => {
+              // вызов, а не успех: DELETE первой попытки завершается сбоем сериализации
+              if (prop === 'delete' || prop === 'deleteMany') deletes += 1;
+              const result = await value.apply(target, args);
+              if (prop === hold && pauses === 0) {
+                pauses += 1;
+                read();
+                await resume;
+              }
+              return result;
+            };
+          },
+        });
+      const bind = (source: object, name: string, tx?: object) => {
+        const value = (source as Record<string, unknown>)[name];
+        if (tx && name === 'event') return events(value as object);
+        return typeof value === 'function' ? value.bind(source) : value;
+      };
+      const racing: EventsDb = new Proxy(db as unknown as EventsDb, {
+        get: (target, name: string) => {
+          if (name !== '$transaction') return bind(target as unknown as object, name);
+          return (
+            work: (tx: EventsDb) => Promise<unknown>,
+            options: Parameters<EventsDb['$transaction']>[1],
+          ) =>
+            target.$transaction(
+              (tx) =>
+                work(
+                  new Proxy(tx, {
+                    get: (inner, key: string) => bind(inner, key, inner),
+                  }) as unknown as EventsDb,
+                ),
+              options,
+            );
+        },
+      });
+      return { service: new EventsService(racing), deletes: () => deletes };
+    };
+    /**
+     * Ждёт, пока транзакция удаления дойдёт до паузы после чтения. Её раннее
+     * завершение — ошибка теста, отказ покажет expectConflict ниже.
+     */
+    const untilPaused = (read: Promise<void>, deleting: Promise<unknown>) =>
+      Promise.race([
+        read,
+        deleting.then(
+          () => {
+            throw new Error('Транзакция удаления не перечитывает ивенты');
+          },
+          () => new Promise<never>(() => undefined),
+        ),
+      ]);
+
+    it('ивент начали, пока шла транзакция удаления: сбой сериализации, повтор отвечает 409', async () => {
+      const created = await service.create(input(), ACTOR);
+      let announce!: () => void;
+      const read = new Promise<void>((resolve) => {
+        announce = resolve;
+      });
+      let release!: () => void;
+      const resume = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const racing = pausedDelete('findUnique', announce, resume);
+      const deleting = racing.service.deleteOne(created.id, ACTOR);
+      await untilPaused(read, deleting);
+      await other.event.update({ where: { id: created.id }, data: { status: 'RUNNING' } });
+      release();
+
+      await expectConflict(deleting, /только запланированный/);
+
+      expect(racing.deletes()).toBe(1); // первая попытка дошла до DELETE, повтор — нет
+      expect(await db.event.findUnique({ where: { id: created.id } })).toMatchObject({
+        status: 'RUNNING',
+      });
+      expect(
+        await db.auditLog.count({ where: { entityId: created.id, action: 'EVENT_DELETE' } }),
+      ).toBe(0);
+    });
+
+    it('ивент серии начали, пока шла транзакция удаления: повтор отвечает 409, серия целиком', async () => {
+      const { seriesId } = await service.createSeries(input(), ACTOR);
+      const events = await db.event.findMany({ where: { seriesId }, orderBy: { startsAt: 'asc' } });
+      let announce!: () => void;
+      const read = new Promise<void>((resolve) => {
+        announce = resolve;
+      });
+      let release!: () => void;
+      const resume = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const racing = pausedDelete('findMany', announce, resume);
+      const deleting = racing.service.deleteSeries(seriesId, ACTOR);
+      await untilPaused(read, deleting);
+      await other.event.update({ where: { id: events[1]!.id }, data: { status: 'RUNNING' } });
+      release();
+
+      await expectConflict(deleting, /незапланированные/);
+
+      expect(racing.deletes()).toBe(1);
+      expect(await db.event.count({ where: { seriesId } })).toBe(4);
+      expect(
+        await db.auditLog.count({ where: { entityId: seriesId, action: 'EVENT_SERIES_DELETE' } }),
+      ).toBe(0);
     });
   });
   it('неделя: активные пересекающиеся отсутствия, отменённые и граница периода в PostgreSQL', async () => {

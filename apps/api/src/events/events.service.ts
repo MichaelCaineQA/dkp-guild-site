@@ -328,24 +328,14 @@ export class EventsService {
    * серия с лотом отклоняется 409; дропы без лотов уходят каскадом (#109).
    * Серия с кодами чек-ина, отметками посещения или записями журнала ДКП
    * тоже не удаляется (#302) — её отменяют.
+   *
+   * Право и статусы перечитываются в транзакции (issue #312): после
+   * предварительной проверки ивент могли начать или передать другому РЛ.
+   * Серия не удаляется частично — не-PLANNED ивент даёт 409 до первого DELETE.
    */
   async deleteSeries(seriesId: string, actor: EventsActor): Promise<{ deleted: number }> {
-    if (!can({ ...actor, rank: actor.rank ?? null }, 'events.manage')) {
-      const events = await this.db.event.findMany({
-        where: { seriesId },
-        orderBy: { startsAt: 'asc' },
-        include: {
-          eventType: { select: { name: true } },
-          raidLead: { select: { nickname: true } },
-        },
-      });
-      if (
-        !events.length ||
-        !events.every((event) => canManageEvent({ ...actor, rank: actor.rank ?? null }, event))
-      ) {
-        throw new ForbiddenException('Удалять можно только свою серию ивентов');
-      }
-    }
+    const manager = can({ ...actor, rank: actor.rank ?? null }, 'events.manage');
+    if (!manager) this.assertOwnSeries(await this.seriesEvents(this.db, seriesId), actor);
     const active = await this.db.event.count({
       where: { seriesId, status: { not: 'PLANNED' } },
     });
@@ -353,6 +343,11 @@ export class EventsService {
       throw new ConflictException('В серии есть незапланированные ивенты — удалить нельзя');
     }
     const result = await serializable(this.db, async (tx) => {
+      const current = await this.seriesEvents(tx, seriesId);
+      if (!manager) this.assertOwnSeries(current, actor);
+      if (current.some((event) => event.status !== 'PLANNED')) {
+        throw new ConflictException('В серии есть незапланированные ивенты — удалить нельзя');
+      }
       const withLot = await tx.lootDrop.findFirst({
         where: { event: { seriesId }, NOT: { auction: null } },
       });
@@ -386,6 +381,11 @@ export class EventsService {
    * несут и удаляются каскадом вместе с ивентом (issue #109).
    * Ивент с кодами чек-ина, отметками посещения или записями журнала ДКП
    * не удаляется (#302) — его отменяют.
+   *
+   * Статус и право перечитываются в транзакции (issue #312): ивент могли
+   * начать (или передать другому РЛ) уже после предварительной проверки.
+   * Удаление идущего ивента ломает его окно чек-ина, поэтому проверка —
+   * до первого DELETE.
    */
   async deleteOne(id: string, actor: EventsActor): Promise<{ ok: true }> {
     const event = await this.mustExist(id);
@@ -396,6 +396,19 @@ export class EventsService {
       throw new ConflictException('Удалить можно только запланированный ивент');
     }
     await serializable(this.db, async (tx) => {
+      const current = await tx.event.findUnique({
+        where: { id },
+        include: {
+          eventType: { select: { name: true } },
+          raidLead: { select: { nickname: true } },
+        },
+      });
+      if (!current) throw new NotFoundException('Ивент не найден');
+      if (!canManageEvent({ ...actor, rank: actor.rank ?? null }, current))
+        throw new ForbiddenException('Нет права на удаление ивента');
+      if (current.status !== 'PLANNED') {
+        throw new ConflictException('Удалить можно только запланированный ивент');
+      }
       // перечитываем дропы в транзакции: лот могли создать после проверки статуса
       const withLot = await tx.lootDrop.findFirst({
         where: { eventId: id, NOT: { auction: null } },
@@ -413,7 +426,7 @@ export class EventsService {
         actor,
         'EVENT_DELETE',
         id,
-        `Удалён ивент ${event.startsAt.toISOString()}` +
+        `Удалён ивент ${current.startsAt.toISOString()}` +
           (drops.count > 0 ? `, каскадом удалено дропов: ${drops.count}` : ''),
         tx.auditLog,
       );
@@ -655,6 +668,31 @@ export class EventsService {
       throw new NotFoundException('Ивент не найден');
     }
     return event;
+  }
+
+  /** Ивенты серии одной выборкой — для проверки права и статуса до и внутри транзакции. */
+  private seriesEvents(db: Pick<EventsDbTx, 'event'>, seriesId: string) {
+    return db.event.findMany({
+      where: { seriesId },
+      orderBy: { startsAt: 'asc' },
+      include: {
+        eventType: { select: { name: true } },
+        raidLead: { select: { nickname: true } },
+      },
+    });
+  }
+
+  /** Серия, где нет ни одного ивента или есть чужой, — не «своя» (механизм РЛ, 2.6). */
+  private assertOwnSeries(
+    events: Awaited<ReturnType<EventsDb['event']['findMany']>>,
+    actor: EventsActor,
+  ): void {
+    if (
+      !events.length ||
+      !events.every((event) => canManageEvent({ ...actor, rank: actor.rank ?? null }, event))
+    ) {
+      throw new ForbiddenException('Удалять можно только свою серию ивентов');
+    }
   }
 
   private async validateScope(value: EventScopeInput, tx: EventsDbTx): Promise<EventScopeInput> {
