@@ -165,7 +165,11 @@
   после коммита, как и до #318. Web: `ConfirmDialog` (`ui/modal.tsx`), тексты
   подтверждений — `components/event-actions.ts`; карточка держит статус после
   нажатия сама (`statusOverride`), пока родитель не перечитал ивент, и сразу
-  перечитывает код (`key={codesVersion}`). После `FINISHED` дроп и лоты на
+  перечитывает код (`key={codesVersion}`). На `/schedule` страница при каждом
+  `onChanged` ставит `pending` и убирает карточку — та перемонтируется, и её
+  локальное состояние (сообщение, `statusOverride`) теряется: рассчитывать
+  можно только на новый `event` от родителя. Дашборд и окна статистики
+  карточку не пересоздают. После `FINISHED` дроп и лоты на
   ивент не фиксируются (план 2.6) — подтверждение завершения об этом говорит.
 - `apps/web` — Next.js, App Router, TypeScript strict.
 - `apps/api` — NestJS; Prisma-схема: `apps/api/prisma/schema.prisma`.
