@@ -13,20 +13,32 @@ const labels: Record<Kind, string> = {
   absences: 'Заявки об отсутствии',
   lots: 'Итоги лотов',
 };
+const NO_CHANNELS: Channels = {
+  announcements: null,
+  reminders: null,
+  absences: null,
+  lots: null,
+};
 
 export function DiscordSettings() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  /** Каналы, сохранённые на сервере: проверка доставки идёт по ним, а не по форме (issue #315). */
+  const [savedChannels, setSavedChannels] = useState<Channels>(NO_CHANNELS);
   const [reason, setReason] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [testId, setTestId] = useState('');
   const [busy, setBusy] = useState(false);
+  const accept = (result: Settings) => {
+    setSettings(result);
+    setSavedChannels(result.channels);
+  };
   useEffect(() => {
     let active = true;
     api<Settings>('/settings/discord')
       .then((result) => {
-        if (active) setSettings(result);
+        if (active) accept(result);
       })
       .catch(() => {
         if (active) setError('Не удалось загрузить настройки Discord');
@@ -39,21 +51,27 @@ export function DiscordSettings() {
     const body = (err as { body?: { message?: unknown } }).body;
     return typeof body?.message === 'string' ? body.message : 'Не удалось выполнить действие';
   };
+  /** Значение в поле отличается от сохранённого — проверка достанет не тот канал. */
+  const unsaved = (kind: Kind) => (settings?.channels[kind] ?? null) !== savedChannels[kind];
+  const hasUnsaved = (Object.keys(labels) as Kind[]).some(
+    (kind) => unsaved(kind) && Boolean(settings?.channels[kind]),
+  );
   const save = async () => {
     if (!settings) return;
     setBusy(true);
     setError('');
     setMessage('');
     try {
-      const result = await api<Settings>('/settings/discord', {
-        method: 'PUT',
-        body: JSON.stringify({
-          channels: settings.channels,
-          absenceAccessConfirmed: confirmed,
-          reason,
+      accept(
+        await api<Settings>('/settings/discord', {
+          method: 'PUT',
+          body: JSON.stringify({
+            channels: settings.channels,
+            absenceAccessConfirmed: confirmed,
+            reason,
+          }),
         }),
-      });
-      setSettings(result);
+      );
       setReason('');
       setConfirmed(false);
       setMessage('Каналы сохранены');
@@ -74,7 +92,10 @@ export function DiscordSettings() {
       setTestId(result.id);
       setMessage('Проверка поставлена в очередь. Проверьте статус.');
     } catch (err) {
-      setError(errorText(err));
+      const text = errorText(err);
+      setError(
+        text === 'Канал не настроен' && hasUnsaved ? `${text}. Сначала сохраните каналы` : text,
+      );
     } finally {
       setBusy(false);
     }
@@ -127,11 +148,19 @@ export function DiscordSettings() {
                     }
                   />
                 </Field>
-                <Button disabled={busy || !settings.channels[kind]} onClick={() => void test(kind)}>
+                <Button
+                  disabled={busy || !savedChannels[kind] || unsaved(kind)}
+                  onClick={() => void test(kind)}
+                >
                   Проверить сохранённый канал
                 </Button>
               </div>
             ))}
+            {hasUnsaved && (
+              <div>
+                <Muted>Проверить можно только сохранённый канал. Сначала сохраните каналы.</Muted>
+              </div>
+            )}
             <Field label="Подтверждаю: канал отсутствий закрыт для остальных, доступен офицерам и всем назначенным РЛ">
               <input
                 type="checkbox"
