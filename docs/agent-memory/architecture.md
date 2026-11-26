@@ -384,12 +384,14 @@
   публикуются). База — встроенная MariaDB: `UPTIME_KUMA_DB_TYPE` обязателен,
   иначе при первом старте Kuma 2 ждёт мастер выбора базы и не отвечает на
   события. Edge (`docker-compose.edge.yml`) присоединяется к сети
-  `dkp-monitoring_default`; блок сайта в `Caddyfile.edge` добавляется после
-  выбора поддомена владельцем. Настройка — код, а не клики в панели:
+  `dkp-monitoring_default`; панель опубликована блоком `status.suneclipse.ru`
+  → `uptime-kuma:3001` в `Caddyfile.edge` (вход — пароль администратора Kuma;
+  WebSocket панели Kuma пускает только с origin панели, чужой даёт 400).
+  Настройка — код, а не клики в панели:
   `scripts/monitoring/kuma-setup.mjs` (без зависимостей, Socket.IO поверх
   встроенного WebSocket Node 22+) идемпотентно создаёт администратора,
-  уведомления (`DKP: Discord`, `DKP: почта` — вебхук или SMTP из окружения)
-  и мониторы с фиксированными именами `Прод: …` / `Стенд: …`: API (`json-query`,
+  уведомления (`DKP: Discord`, `DKP: почта`, `DKP: бот в личку`) и мониторы с
+  фиксированными именами `Прод: …` / `Стенд: …`: API (`json-query`,
   JSONata `status & " " & db` == `ok up`; срок TLS-сертификата — предупреждения
   за 21/14/7 дней), страница входа (`http`, ловит отказ web-контейнера: без
   API она всё равно отвечает 200), WebSocket (`websocket-upgrade` по
@@ -402,15 +404,42 @@
   `apply [--dry-run|--verbose]`, `status [--watch N]`, `test-notification`.
   `kuma-setup.sh` запускает его на сервере образом самой Kuma (Node на
   хосте не нужен), переменные читает из `.env.monitoring`
-  (`MONITORING_ENV_FILE`). Мониторы стенда выключены по умолчанию
-  (`KUMA_STAGING_HOST`, оповещения у них — `KUMA_STAGING_NOTIFICATIONS=1`),
-  канал — `KUMA_DISCORD_WEBHOOK_URL` / `KUMA_SMTP_*`; без канала Kuma
-  фиксирует аварии молча. Данные Kuma в резервные копии не входят:
-  восстановление после потери VPS — повторная установка (README,
-  «Мониторинг доступности»). Проверки без сервера: юнит-тесты с накопителем
-  (`kuma-setup.test.mjs`) и задача `Uptime Kuma provisioning` в
-  `infrastructure.yml` — настоящая Kuma во временном проекте
-  (`smoke-kuma.sh`, адреса мониторов `.invalid`). Ловушки — в known-issues.md.
+  (`MONITORING_ENV_FILE`). Мониторы стенда выключены по решению владельца
+  («не включай»; `KUMA_STAGING_HOST`, для опыта их включают временно вместе
+  с `KUMA_STAGING_NOTIFICATIONS=1`). Каналы — `KUMA_DISCORD_WEBHOOK_URL`,
+  `KUMA_SMTP_*` и «бот в личку»; без канала Kuma фиксирует аварии молча.
+  Данные Kuma в резервные копии не входят: восстановление после потери VPS —
+  повторная установка (README, «Мониторинг доступности»). Ловушки — в
+  known-issues.md.
+  Оповещения ботом в личку Discord (решение владельца 26.11.2026): вебхуки
+  Discord пишут только в каналы, поэтому уведомление Kuma «DKP: бот в
+  личку» — это `webhook` на ретранслятор `scripts/monitoring/alert-relay.mjs`
+  (сервис `alert-relay` того же проекта, профиль `alerts`, включается
+  `COMPOSE_PROFILES=alerts`), а он открывает личку и пишет от имени бота
+  сайта (`ALERT_BOT_TOKEN` — тот же токен, что у приложения; хранится в двух
+  файлах на VPS). Ретранслятор намеренно не часть API: оповещение «API не
+  отвечает» не должно зависеть от самого API. Секрет — `Authorization:
+  Bearer` (`ALERT_RELAY_TOKEN`; его смена обновляет уведомление при
+  `apply`); 200 — только если доставлено всем (`ALERT_DISCORD_USER_IDS`),
+  иначе 502. Повторы на сеть, 429 (`retry_after`) и 5xx; личка открывается
+  один раз; оповещения уходят по одному с паузой 1,2 с. Тексты различают
+  аварию, восстановление (с длительностью простоя), срок сертификата (у Kuma
+  это сообщение без `heartbeat`) и проверку канала. Сценарий не рассчитан на
+  двухфакторную защиту панели.
+  Внешний пробник (решение владельца): workflow `uptime-probe.yml` каждые
+  15 минут (`7-59/15 * * * *`) и вручную запускает
+  `scripts/monitoring/external-probe.mjs` — измерение Globalping `http` к
+  `suneclipse.ru/api/health` с зондами в РФ и Латвии; сайт доступен, только
+  если из каждой страны зонд получил 200 с `status ok` и `db up`. Авария —
+  неудача всех попыток подряд (по умолчанию три, пауза 20 с), то есть
+  неудача запуска workflow и письмо GitHub; отказ самой Globalping отличим
+  по тексту причины. API Globalping без токента.
+  Проверки без сервера: юнит-тесты с накопителем (`kuma-setup.test.mjs`,
+  `alert-relay.test.mjs`, `external-probe.test.mjs`) и задача
+  `Uptime Kuma provisioning` в `infrastructure.yml` — настоящая Kuma во
+  временном проекте (`smoke-kuma.sh`: адреса мониторов `.invalid`, затем
+  ретранслятор включается с заглушкой `fake-discord.mjs` и сверяется, что
+  пробное сообщение из Kuma дошло в «личку»).
 - Production web использует same-origin `/api`: Caddy убирает префикс,
   dev — прокси Next.js на :3001. Локальный Docker Compose сохраняет явный
   `NEXT_PUBLIC_API_URL`. Discord необязателен: `/auth/providers` возвращает
