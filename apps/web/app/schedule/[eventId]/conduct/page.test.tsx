@@ -148,7 +148,8 @@ describe('«Начать ивент» и «Завершить ивент» (ре
     fireEvent.click(within(dialog).getByRole('button', { name: label }));
   };
 
-  it('запланированный ивент: «Начать ивент» просит подтверждение и открывает окно стартового кода', async () => {
+  it('Офицер без назначения РЛ подтверждает начало ивента и видит стартовый код', async () => {
+    session('other', 'OFFICER');
     status = 'PLANNED';
     render(<ConductPage />);
     expect(
@@ -223,7 +224,8 @@ describe('«Начать ивент» и «Завершить ивент» (ре
 });
 
 describe('Итоги ивента', () => {
-  it('РЛ готовит изменения локально и применяет только общей кнопкой', async () => {
+  it('Офицер без назначения РЛ готовит изменения локально и применяет их общей кнопкой', async () => {
+    session('other', 'OFFICER');
     render(<ConductPage />);
     await prepareDkp();
     expect(vi.mocked(api).mock.calls.some(([, o]) => o?.method === 'POST')).toBe(false);
@@ -253,8 +255,8 @@ describe('Итоги ивента', () => {
     expect(requests).toHaveLength(2);
     expect(requests[0]![1]!.body).toBe(requests[1]![1]!.body);
   });
-  it.each(['MEMBER', 'OFFICER'] as const)('%s без назначения видит только чтение', async (rank) => {
-    session('other', rank);
+  it('рядовой без назначения РЛ видит только чтение', async () => {
+    session('other', 'MEMBER');
     render(<ConductPage />);
     await screen.findByText('Чек-лист участников');
     expect(screen.queryByRole('button', { name: 'ДКП: Второй' })).toBeNull();

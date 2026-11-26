@@ -31,10 +31,10 @@ const EXPECTED: Partial<Record<Permission, Rank[]>> = {
   'settings.manage': ['GUILD_LEADER', 'ADMIN'],
   'rules.edit': ['GUILD_LEADER', 'ADMIN'],
   'events.manage': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
-  'events.conduct': ['GUILD_LEADER', 'ADMIN'],
-  'attendance.manual': ['GUILD_LEADER', 'ADMIN'],
+  'events.conduct': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
+  'attendance.manual': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
   'absence.see': ['GUILD_LEADER', 'ADMIN'],
-  'dkp.penalty': ['GUILD_LEADER', 'ADMIN'],
+  'dkp.penalty': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
   'dkp.grant': ['GUILD_LEADER', 'ADMIN'],
   'items.manage': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
   'auction.bid': ALL_RANKS,
@@ -124,15 +124,12 @@ describe('rankAtLeast / permissionsOf', () => {
 });
 
 describe('права существующего ивента и финальные состояния', () => {
-  it('Офицер управляет расписанием, но ведёт только свой ивент', () => {
+  it('Офицер проводит ивент, созданный и назначенный другим игрокам', () => {
     const officer = actor({ rank: 'OFFICER' });
-    expect(canManageEvent(officer, { raidLeadId: 'other' })).toBe(true);
-    expect(can(officer, 'events.conduct', { raidLeadId: 'other' })).toBe(false);
-    expect(can(officer, 'events.conduct', { raidLeadId: 'm-self' })).toBe(true);
-    expect(can(officer, 'dkp.penalty', { raidLeadId: 'other' })).toBe(false);
-    expect(can(officer, 'dkp.penalty', { raidLeadId: 'm-self' })).toBe(true);
-    expect(can(officer, 'events.conduct', { raidLeadId: 'other', creatorId: 'm-self' })).toBe(true);
-    expect(can(officer, 'events.conduct', { raidLeadId: 'other', creatorId: null })).toBe(false);
+    const event = { raidLeadId: 'm-rl', creatorId: 'm-author' };
+    expect(can(officer, 'events.conduct', event)).toBe(true);
+  });
+  it('автор с рангом Рядовой проводит ивент только по назначению РЛ', () => {
     expect(
       can(actor({ rank: 'MEMBER' }), 'events.conduct', {
         raidLeadId: 'other',

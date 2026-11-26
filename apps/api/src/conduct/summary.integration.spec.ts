@@ -80,7 +80,7 @@ describe('Пакет итогов через HTTP', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(value),
     });
-  it('аноним 401, непривязанный 403, Офицер без назначения 403', async () => {
+  it('аноним получает 401, непривязанный аккаунт и рядовой без назначения — 403', async () => {
     actor = undefined;
     expect((await post()).status).toBe(401);
     actor = {
@@ -93,7 +93,7 @@ describe('Пакет итогов через HTTP', () => {
     };
     expect((await post()).status).toBe(403);
     actor.memberId = 'other';
-    actor.rank = 'OFFICER';
+    actor.rank = 'MEMBER';
     expect((await post()).status).toBe(403);
     expect(ledger).not.toHaveBeenCalled();
   });
@@ -104,23 +104,18 @@ describe('Пакет итогов через HTTP', () => {
     expect((await post()).status).toBe(409);
     expect(ledger).toHaveBeenCalledTimes(1);
   });
-  it('чек-лист и итоги доступны только автору-Офицеру или назначенному РЛ', async () => {
+  it('Офицер без назначения РЛ открывает чек-лист и подводит итоги чужого ивента', async () => {
     actor = {
       userId: 'u',
-      username: 'Автор',
-      memberId: 'author',
+      username: 'Офицер',
+      memberId: 'other',
       rank: 'OFFICER',
       isAdmin: false,
       blocked: false,
     };
     expect((await fetch(url + '/events/e/conduct/checklist')).status).toBe(200);
     expect((await post()).status).toBe(201);
-    actor.rank = 'MEMBER';
-    expect((await fetch(url + '/events/e/conduct/checklist')).status).toBe(403);
-    expect((await post()).status).toBe(403);
-    actor.memberId = 'other';
-    actor.rank = 'OFFICER';
-    expect((await fetch(url + '/events/e/conduct/checklist')).status).toBe(403);
+    expect(ledger).toHaveBeenCalledTimes(1);
   });
   it('невалидный пакет не записывается, чужого участника подставить нельзя', async () => {
     expect(

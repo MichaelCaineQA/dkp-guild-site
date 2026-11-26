@@ -27,7 +27,7 @@ suite('Ручное управление лотами: настоящие тра
   /** Глава/Админ и РЛ — реальные члены с рангами; пользователь-админ отдельно. */
   const LEADER = { memberId: '', isAdmin: false, rank: 'GUILD_LEADER' };
   const RAID_LEAD = { memberId: '', isAdmin: false, rank: 'MEMBER' };
-  const OUTSIDER = { memberId: '', isAdmin: false, rank: 'OFFICER' };
+  const OUTSIDER = { memberId: '', isAdmin: false, rank: 'MEMBER' };
 
   beforeAll(async () => {
     const parsed = new URL(url!);
@@ -148,7 +148,7 @@ suite('Ручное управление лотами: настоящие тра
     await db.$disconnect();
   });
 
-  it('продление: РЛ ивента сдвигает окончание, посторонний офицер — 403', async () => {
+  it('продление: РЛ ивента сдвигает окончание, рядовой без назначения РЛ получает 403', async () => {
     const lot = await makeLot();
     const before = lot.endsAt!;
     await expect(

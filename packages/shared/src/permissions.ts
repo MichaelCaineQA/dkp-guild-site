@@ -40,10 +40,10 @@ const MIN_RANK: Record<Permission, Rank> = {
   'settings.manage': 'GUILD_LEADER',
   'rules.edit': 'GUILD_LEADER',
   'events.manage': 'OFFICER',
-  'events.conduct': 'GUILD_LEADER',
-  'attendance.manual': 'GUILD_LEADER',
+  'events.conduct': 'OFFICER',
+  'attendance.manual': 'OFFICER',
   'absence.see': 'GUILD_LEADER', // «Увидел»: Глава/Админ; лидеры КП/пачки — этап 3 (issue #38)
-  'dkp.penalty': 'GUILD_LEADER',
+  'dkp.penalty': 'OFFICER',
   'dkp.grant': 'GUILD_LEADER',
   'items.manage': 'OFFICER',
   'auction.bid': 'MEMBER',
@@ -101,13 +101,6 @@ export function can(
 ): boolean {
   if (actor.isAdmin) return true;
   if (actor.rank === null) return false;
-  if (
-    actor.rank === 'OFFICER' &&
-    actor.memberId &&
-    target?.creatorId === actor.memberId &&
-    RAID_LEAD_ACTIONS.has(action)
-  )
-    return true;
   // Права «РЛ ивента» действуют на ивентах, где актор назначен рейд-лидом.
   if (
     target?.raidLeadId !== undefined &&

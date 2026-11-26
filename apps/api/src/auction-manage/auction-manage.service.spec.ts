@@ -194,19 +194,20 @@ describe('AuctionManageService: продление (issue #96, план 6, п. 8
     expect(String(audit[0]!.comment)).toContain('нужны ещё минуты');
   });
 
-  it('Глава и создатель-офицер тоже продлевают; посторонний офицер — 403', async () => {
+  it('Офицер без назначения РЛ продлевает лот чужого ивента', async () => {
     await expect(
       service(makeDb({}).db).extend('a-1', { extendSec: 60, comment: 'причина' }, LEADER),
     ).resolves.toBeDefined();
     await expect(
       service(makeDb({}).db).extend('a-1', { extendSec: 60, comment: 'причина' }, CREATOR_OFFICER),
     ).resolves.toBeDefined();
-    const stranger = makeDb({});
+    const { db, audit } = makeDb({});
     await expect(
-      service(stranger.db).extend('a-1', { extendSec: 60, comment: 'причина' }, OFFICER),
-    ).rejects.toThrow(ForbiddenException);
-    expect(stranger.auctions[0]!.endsAt).toEqual(LOT.endsAt);
-    expect(stranger.audit).toHaveLength(0);
+      service(db).extend('a-1', { extendSec: 60, comment: 'причина' }, OFFICER),
+    ).resolves.toMatchObject({
+      lot: { endsAt: new Date(LOT.endsAt!.getTime() + 60_000).toISOString() },
+    });
+    expect(audit[0]).toMatchObject({ action: 'AUCTION_EXTEND', actorMemberId: OFFICER.memberId });
   });
 
   it('без причины — 400 до записи; несуществующий лот — 404', async () => {
@@ -259,7 +260,7 @@ describe('AuctionManageService: отмена (issue #96, план 6, п. 8)', ()
     expect(String(audit[0]!.comment)).toContain('предмет ошибся дропом');
   });
 
-  it('Рядовой и посторонний офицер лот не отменяют — 403 без изменений', async () => {
+  it('Рядовой без назначения РЛ не отменяет лот — 403 без изменений', async () => {
     const member = { memberId: 'm-1', isAdmin: false, rank: 'MEMBER' };
     const { db, auctions, audit } = makeDb({});
     await expect(service(db).cancel('a-1', { comment: 'причина' }, member)).rejects.toThrow(

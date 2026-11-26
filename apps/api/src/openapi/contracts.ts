@@ -18,7 +18,8 @@ const list = (name: string) => array(ref(name));
 const member = 'Член гильдии или администратор.';
 const officer = 'Офицер, глава или администратор.';
 const leader = 'Глава или администратор.';
-const rl = 'Назначенный РЛ этого ивента, Глава или Админ.';
+const eventManagers = 'Глава, Админ, любой Офицер или назначенный РЛ этого ивента.';
+const lotManagers = `${eventManagers} Для лота вне ивента — Глава или Админ.`;
 const c = (
   summary: string,
   response: string | SchemaObject,
@@ -454,7 +455,7 @@ export const contracts: Record<string, Contract> = {
     body: 'ChangeEventStatus',
     errors: [404, 409],
     description:
-      'PLANNED → RUNNING/CANCELLED; RUNNING → FINISHED/CANCELLED. Запуск/завершение — Глава, Админ или назначенный РЛ; отмена также доступна Офицеру. Финальные статусы неизменяемы. «Начать ивент» (RUNNING) той же транзакцией открывает окно стартового кода, «Завершить ивент» (FINISHED) — финального: окно идёт от момента запроса на checkin.windowSec, расписание ивента на него не влияет. Сам код возвращают GET /checkin/code. Без этих переходов окно кода не открывается.',
+      'PLANNED → RUNNING/CANCELLED; RUNNING → FINISHED/CANCELLED. Финальные статусы неизменяемы. «Начать ивент» (RUNNING) той же транзакцией открывает окно стартового кода, «Завершить ивент» (FINISHED) — финального: окно идёт от момента запроса на checkin.windowSec, расписание ивента на него не влияет. Сам код возвращают GET /checkin/code. Без этих переходов окно кода не открывается.',
   }),
   CheckIn_playerView: c('Получить варианты чек-ин кода', 'PlayerCheckIn', {
     access: 'Участник с привязанным Member.',
@@ -469,39 +470,40 @@ export const contracts: Record<string, Contract> = {
     description:
       'Одна попытка на фазу. Проверка, отметка, начисление и аудит атомарны; одновременные попытки не удваивают ДКП. Лимит: 10 запросов в минуту на аккаунт, отдельно от просмотра вариантов и ставок.',
   }),
-  CheckIn_raidLeadView: c('Получить чек-ин код для РЛ', 'RaidLeadCheckIn', {
-    access: rl,
+  CheckIn_raidLeadView: c('Получить чек-ин код для управляющего ивентом', 'RaidLeadCheckIn', {
+    access: eventManagers,
     errors: [404, 403, 409],
     description:
       'Код открытой фазы и границы её окна. Пока фазу не запускали, windowState=NOT_OPEN_YET (у завершённого без кодов — CLOSED), код пустой, границы null. Границы окна возвращаются и после его закрытия; отметиться в закрытое окно нельзя.',
   }),
   Conduct_applySummary: c('Применить подготовленные итоги ивента', 'EventSummaryApplied', {
-    access: rl,
+    access: eventManagers,
     body: 'ApplyEventSummary',
     errors: [400, 404, 409],
     description:
       'CHECKIN, EXCUSE, DKP и ATTENDANCE применяются одной serializable-транзакцией с аудитом. EXCUSE оформляет отсутствие на конкретный ивент с обязательной причиной, в том числе после завершения. Плата за ручной код берётся из Setting. Существующие ledger-записи не меняются. Отменённый ивент доступен только для чтения, включая повторное получение ранее выданной квитанции. requestId — UUID; точный повтор тем же автором возвращает repeated=true без повторных начислений. При неизвестном результате повторять тот же requestId и payload; изменение payload/автора/ивента под тем же ID даёт 409. Не более 1000 действий за запрос (технический предел). Участники проверяются по текущему составу GUILD/KP/PACK.',
   }),
   Conduct_checklist: c('Получить чек-лист посещения', list('ChecklistRow'), {
+    access: eventManagers,
     errors: [404],
     description:
       'Текущий состав согласно GUILD/KP/PACK, без GS. automaticStatus вычисляется по PASSED/MANUAL кодам и оформленным отсутствиям; attendanceStatus учитывает ранее сохранённый ручной статус, statusIsManual отличает его от автоматического. Уважительная без кодов не приносит очков. dkpEarned — сумма существующих записей ledger, а не расчёт по статусу.',
   }),
   Conduct_setAttendance: c('Отметить посещение вручную', 'Ok', {
-    access: rl,
+    access: eventManagers,
     body: 'SetAttendance',
     description: 'Отметка и аудит записываются одной транзакцией.',
     errors: [404, 409],
   }),
   Conduct_manualCheckIn: c('Подтвердить чек-ин вручную', 'Ok', {
-    access: rl,
+    access: eventManagers,
     body: 'ManualCheckIn',
     description:
       'Отметка, доля ДКП из Setting и аудит атомарны. Повтор уже принятой фазы даёт 409, включая гонку с самостоятельным чек-ином.',
     errors: [404, 409],
   }),
   Conduct_manualDkp: c('Добавить ручное начисление или корректировку ДКП', 'Id', {
-    access: rl,
+    access: eventManagers,
     body: 'ManualDkp',
     errors: [404, 409],
     description:
@@ -663,26 +665,26 @@ export const contracts: Record<string, Contract> = {
       'Предмет, использованный хотя бы в одном лоте, не удаляется (409) — история лотов сохраняется.',
   }),
   Loot_list: c('Получить дроп и лоты ивента', list('LootDrop'), {
-    access: rl,
+    access: eventManagers,
     errors: [403, 404],
     description:
       'Просмотр управляющим ивента на любом статусе, включая отменённый (план 2.6). Связанные лоты продолжают торги независимо от статуса ивента.',
   }),
   Loot_defaults: c('Получить начальные значения лота по предмету', 'LotDefaults', {
-    access: rl,
+    access: eventManagers,
     errors: [404],
     description:
       'Стартовая цена — рекомендованная цена справочника (иначе 0), остальные значения — из настроек аукциона (план 6, п. 1).',
   }),
   Loot_createDrop: c('Зафиксировать дроп на ивенте', 'LootDrop', {
-    access: rl,
+    access: eventManagers,
     body: 'CreateDrop',
     errors: [400, 403, 404, 409],
     description:
       'Фиксация выпавшего предмета из справочника с привязкой к ивенту; пишется в аудит. Доступно на запланированном или идущем ивенте (2.6).',
   }),
   Loot_createLot: c('Создать открытый лот по дропу', 'AuctionLot', {
-    access: rl,
+    access: eventManagers,
     body: 'CreateLot',
     errors: [400, 403, 404, 409],
     description:
@@ -700,14 +702,14 @@ export const contracts: Record<string, Contract> = {
       'Первая ставка — не ниже стартовой цены, следующие — не ниже текущей плюс шаг; принимаются только на действующий лот в пределах серверного времени. Полная стоимость с наценкой (округление вверх) вместе с замороженными суммами по другим лотам не может превышать баланс журнала ДКП. Живая раздача запускает торговый таймер от первой ставки; ставка в окне анти-снайпа (включая точную границу) прибавляет продление к окончанию. Проверки атомарны (serializable), отклонённая ставка не оставляет побочных эффектов; принятая пишется в аудит. Лимит: 20 запросов в минуту на аккаунт по всем лотам.',
   }),
   AuctionManage_extend: c('Продлить лот', 'LotManageResult', {
-    access: rl,
+    access: lotManagers,
     body: 'ExtendLot',
     errors: [400, 403, 404, 409],
     description:
       'Продление действующего лота с запущенным таймером: время прибавляется к текущему окончанию. Живая раздача до первой ставки (409) и истекающий лот (409 — закрывается обработчиком) не продлеваются. Причина обязательна и пишется в аудит с автором (план 6, п. 8, 2.9).',
   }),
   AuctionManage_cancel: c('Отменить лот', 'LotManageResult', {
-    access: rl,
+    access: lotManagers,
     body: 'CancelLot',
     errors: [400, 403, 404, 409],
     description:

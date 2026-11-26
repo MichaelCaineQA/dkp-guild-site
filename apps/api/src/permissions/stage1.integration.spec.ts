@@ -38,7 +38,7 @@ const db = {
   event: { findUnique: async () => event, update, delete: remove },
   // удаление ивента проверяет дропы (#109), коды чек-ина, отметки и журнал (#302)
   lootDrop: { findFirst: async () => null, deleteMany: async () => ({ count: 0 }) },
-  checkInCode: { findFirst: findHistory },
+  checkInCode: { findFirst: findHistory, findUnique: async () => null },
   attendance: { findFirst: findHistory },
   dkpEntry: { create: ledger, findFirst: findHistory },
   auditLog: { create: record },
@@ -142,13 +142,23 @@ describe('PLAN 1.1: права через реальные HTTP-маршруты
     expect((await request('/auth/link-requests/r1/approve')).status).toBe(201);
     expect(approve).toHaveBeenCalledWith('r1', null);
   });
-  it('Офицер без назначения РЛ не видит код, не запускает ивент и не меняет ДКП', async () => {
+  it('Рядовой без назначения РЛ не видит код, не запускает ивент и не меняет ДКП', async () => {
+    actor.rank = 'MEMBER';
     expect((await request('/events/e1/checkin/code', 'GET')).status).toBe(403);
     expect((await request('/events/e1/status', 'POST', { status: 'RUNNING' })).status).toBe(403);
     expect((await request('/events/e1/conduct/dkp', 'POST', dkp)).status).toBe(403);
     expect(update).not.toHaveBeenCalled();
     expect(ledger).not.toHaveBeenCalled();
     expect(record).not.toHaveBeenCalled();
+  });
+  it('Офицер без назначения РЛ читает состояние чек-ина, начинает и завершает ивент', async () => {
+    expect((await request('/events/e1/checkin/code', 'GET')).status).toBe(200);
+    const start = await request('/events/e1/status', 'POST', { status: 'RUNNING' });
+    expect(start.status).toBe(201);
+    expect(await start.json()).toMatchObject({ status: 'RUNNING' });
+    const finish = await request('/events/e1/status', 'POST', { status: 'FINISHED' });
+    expect(finish.status).toBe(201);
+    expect(await finish.json()).toMatchObject({ status: 'FINISHED' });
   });
   it('Офицер сохраняет отмену и удаление запланированных ивентов', async () => {
     expect((await request('/events/e1', 'PATCH', { place: 'Место сбора' })).status).toBe(200);

@@ -102,7 +102,7 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
   if (result?.phase === view.phase && result.status === 'FAILED') {
     return (
       <p className="text-sm text-danger">
-        ❌ Неверный код: попытка потрачена, дальше — только ручная отметка РЛ
+        ❌ Неверный код. Попросите управляющего ивентом отметить участие вручную.
       </p>
     );
   }
@@ -155,7 +155,7 @@ export function CheckInPanel({ eventId }: { eventId: string }) {
           }}
         >
           <Stack>
-            <Muted>Попытка одна: ошибётесь — отметит только РЛ вручную</Muted>
+            <Muted>Попытка одна. После ошибки участие отмечают вручную.</Muted>
             <Button type="button" disabled={busy} onClick={confirm}>
               Подтвердить
             </Button>
