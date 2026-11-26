@@ -21,6 +21,9 @@
  * Своими сценарий считает только мониторы и уведомления с перечисленных ниже
  * имён: приводит их к описанию и удаляет ненужные; остальное в Kuma не трогает.
  * Секреты читаются из окружения и не выводятся. Образец — .env.monitoring.example.
+ *
+ * Каналы: вебхук Discord, почта SMTP и «бот в личку» — вебхук Kuma уходит
+ * ретранслятору alert-relay.mjs, который пишет в Discord от имени бота сайта.
  */
 
 import { pathToFileURL } from 'node:url';
@@ -41,7 +44,11 @@ export const POLICY = Object.freeze({
   timeout: 10,
 });
 
-const NOTIFICATIONS = Object.freeze({ discord: 'DKP: Discord', smtp: 'DKP: почта' });
+const NOTIFICATIONS = Object.freeze({
+  discord: 'DKP: Discord',
+  smtp: 'DKP: почта',
+  relay: 'DKP: бот в личку',
+});
 
 const OWNED_NOTIFICATION_NAMES = Object.freeze(Object.values(NOTIFICATIONS));
 
@@ -147,6 +154,10 @@ export function readConfig(env) {
     stagingHost: value('KUMA_STAGING_HOST'),
     stagingNotifications: value('KUMA_STAGING_NOTIFICATIONS') === '1',
     discordWebhookUrl: value('KUMA_DISCORD_WEBHOOK_URL'),
+    // Ретранслятор оповещений (alert-relay в docker-compose.monitoring.yml):
+    // без секрета канал «бот в личку» не создаётся.
+    alertRelayToken: value('ALERT_RELAY_TOKEN'),
+    alertRelayUrl: value('ALERT_RELAY_URL') || 'http://alert-relay:8080/alert',
     smtp: {
       host: value('KUMA_SMTP_HOST'),
       port: value('KUMA_SMTP_PORT') || '587',
@@ -173,6 +184,9 @@ export function readConfig(env) {
   }
   if (config.discordWebhookUrl && !/^https:\/\/\S+$/.test(config.discordWebhookUrl)) {
     throw new Error('KUMA_DISCORD_WEBHOOK_URL: ожидается https-адрес вебхука');
+  }
+  if (config.alertRelayToken && !/^https?:\/\/\S+$/.test(config.alertRelayUrl)) {
+    throw new Error('ALERT_RELAY_URL: ожидается адрес ретранслятора');
   }
   if (!/^\d{1,5}$/.test(config.smtp.port)) {
     throw new Error('KUMA_SMTP_PORT: ожидается номер порта');
@@ -272,6 +286,21 @@ export function buildNotifications(config) {
       smtpPassword: password,
       smtpFrom: from || username,
       smtpTo: to,
+    });
+  }
+  if (config.alertRelayToken) {
+    // Вебхук Kuma { heartbeat, monitor, msg } уходит ретранслятору, тот пишет
+    // в личку Discord от имени бота. Секрет — в заголовке, поэтому его смена
+    // обновляет уведомление при следующем apply.
+    list.push({
+      name: NOTIFICATIONS.relay,
+      type: 'webhook',
+      webhookURL: config.alertRelayUrl,
+      webhookContentType: 'json',
+      httpMethod: 'post',
+      webhookAdditionalHeaders: JSON.stringify({
+        Authorization: `Bearer ${config.alertRelayToken}`,
+      }),
     });
   }
   return list;
@@ -819,7 +848,12 @@ export function formatReport(report) {
 
 function redact(text, config) {
   let result = String(text);
-  for (const secret of [config.password, config.discordWebhookUrl, config.smtp.password]) {
+  for (const secret of [
+    config.password,
+    config.discordWebhookUrl,
+    config.alertRelayToken,
+    config.smtp.password,
+  ]) {
     if (secret && secret.length >= 6) result = result.split(secret).join('***');
   }
   return result;

@@ -502,7 +502,8 @@ Uptime Kuma работает на том же VPS отдельным Compose-п�
 `dkp-monitoring` (`docker-compose.monitoring.yml`): проверяет сайт каждые
 60 секунд и отправляет оповещение при аварии и отдельное — при
 восстановлении. Порты наружу не публикуются: панель доступна только через
-edge-прокси, база и история проверок лежат в томе
+edge-прокси на `https://status.suneclipse.ru` (вход — пароль администратора
+Kuma), база и история проверок лежат в томе
 `dkp-monitoring_uptime-kuma-data`. Проект не занимает блокировку деплоя и
 не мешает резервным копиям.
 
@@ -526,20 +527,15 @@ sh scripts/monitoring/kuma-setup.sh apply
 Compose задаёт встроенную MariaDB, поэтому мастер выбора базы в браузере не
 появляется.
 
-**Публикация панели.** В `Caddyfile.edge` в `/opt/dkp-edge` добавьте блок с
-согласованным поддоменом (A-запись → IP сервера, без проксирования
-Cloudflare) и выполните там `docker compose -f docker-compose.edge.yml up -d
---wait`: контейнер прокси пересоздаётся, оба сайта закрыты несколько секунд.
-Проект мониторинга должен быть запущен раньше — edge подключается к его сети
-`dkp-monitoring_default`.
-
-```
-<поддомен> {
-    reverse_proxy uptime-kuma:3001
-}
-```
-
-Вход в панель — учётная запись из `.env.monitoring`.
+**Панель.** Блок `status.suneclipse.ru` уже есть в `Caddyfile.edge`, а
+`docker-compose.edge.yml` подключает прокси к сети `dkp-monitoring_default`.
+Чтобы применить, скопируйте оба файла в `/opt/dkp-edge` и выполните там
+`docker compose -f docker-compose.edge.yml up -d --wait`: контейнер прокси
+пересоздаётся, оба сайта закрыты несколько секунд. Проект мониторинга должен
+быть запущен раньше — иначе edge не найдёт сеть. Сертификат для поддомена
+Caddy получает сам; DNS должен указывать на сервер напрямую, без
+проксирования Cloudflare. Вход в панель — учётная запись из
+`.env.monitoring`.
 
 **Мониторы production.** Общий порог — константа `POLICY` сценария.
 
@@ -563,10 +559,21 @@ Cloudflare) и выполните там `docker compose -f docker-compose.edge.
 Мониторы стенда включает `KUMA_STAGING_HOST`; по умолчанию они не шлют
 оповещений, `KUMA_STAGING_NOTIFICATIONS=1` разрешает.
 
-**Оповещения** — Discord-вебхук канала сервера гильдии или почта (SMTP), в
-`.env.monitoring`; без канала панель работает молча. Доставку проверяют
-`kuma-setup.sh test-notification` (или кнопкой Test в панели), а саму тревогу
-— тестовым сбоем на стенде, не на production:
+**Оповещения.** Основной канал — личное сообщение от бота сайта в Discord.
+Вебхуки Discord пишут только в каналы, поэтому Kuma шлёт вебхук
+ретранслятору `alert-relay` в том же Compose-проекте, а он пишет от имени
+бота получателям из `ALERT_DISCORD_USER_IDS`. Ретранслятор живёт отдельно
+от API сайта намеренно: оповещение «API не отвечает» не должно зависеть от
+самого API. Канал включается профилем `alerts` в `.env.monitoring`
+(`COMPOSE_PROFILES=alerts`, секрет `ALERT_RELAY_TOKEN`, токен бота
+`ALERT_BOT_TOKEN` — тот же, что у приложения). Дополнительно можно задать
+вебхук канала Discord или почту (SMTP); без канала панель работает молча.
+
+Доставку проверяют `kuma-setup.sh test-notification` (или кнопкой Test в
+панели), а саму тревогу — тестовым сбоем на стенде, не на production.
+Мониторы стенда по умолчанию выключены; на время опыта задайте
+`KUMA_STAGING_HOST=stage.suneclipse.ru` и `KUMA_STAGING_NOTIFICATIONS=1`,
+выполните `apply`, а после проверки верните пустой `KUMA_STAGING_HOST`:
 
 ```sh
 docker stop dkp-guild-site-api-1      # и параллельно: sh scripts/monitoring/kuma-setup.sh status --watch 300
@@ -596,20 +603,21 @@ Kuma на этом же сервере не заметит — для этого
 контейнеры и тома. Отдельная задача `Uptime Kuma provisioning` поднимает
 настоящую Kuma во временном проекте и прогоняет сценарий настройки (план,
 два применения, смена окружения, статус) с адресами мониторов в `.invalid` —
-без обращения к настоящему сайту. Локальный эквивалент (из корня checkout,
-нужны Docker, curl, Node.js 22+ и Python 3; порты 18080/18443 должны быть
-свободны):
+без обращения к настоящему сайту; затем включает ретранслятор оповещений
+с заглушкой Discord и проверяет, что пробное сообщение дошло в «личку».
+Локальный эквивалент (из корня checkout, нужны Docker, curl, Node.js 22+
+и Python 3; порты 18080/18443 должны быть свободны):
 
 ```sh
 docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color
 docker compose --env-file .env.production.example -f docker-compose.prod.yml config --quiet
-docker compose -f docker-compose.monitoring.yml config --quiet
+docker compose --profile alerts -f docker-compose.monitoring.yml config --quiet
 sh -n scripts/deploy-prod.sh
 sh -n scripts/backup-prod.sh
 sh -n scripts/smoke-prod.sh
 sh -n scripts/monitoring/kuma-setup.sh
 sh -n scripts/monitoring/smoke-kuma.sh
-node --test scripts/monitoring/kuma-setup.test.mjs
+node --test scripts/monitoring/*.test.mjs
 python3 -m unittest discover -s scripts -p 'test_*.py' -v
 sh scripts/smoke-prod.sh
 sh scripts/monitoring/smoke-kuma.sh

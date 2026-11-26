@@ -20,3 +20,8 @@ suneclipse.ru {
 api.suneclipse.ru {
     reverse_proxy production-api:3001
 }
+# Панель мониторинга (Uptime Kuma, проект dkp-monitoring): вход — пароль
+# администратора Kuma. WebSocket панели проходит тем же reverse_proxy.
+status.suneclipse.ru {
+    reverse_proxy uptime-kuma:3001
+}
