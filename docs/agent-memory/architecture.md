@@ -378,6 +378,39 @@
     `scripts/release/package.sh`; тесты — `installer/test_dkp.py` (10,
     Linux-only, см. known-issues). Реальную приёмку на чистой VM нужно
     провести отдельно (issue #75).
+- Мониторинг доступности (#305, этап 7 PLAN §10): Uptime Kuma 2.5.12 —
+  отдельный Compose-проект `dkp-monitoring`
+  (`docker-compose.monitoring.yml`, том с базой и историей, порты наружу не
+  публикуются). База — встроенная MariaDB: `UPTIME_KUMA_DB_TYPE` обязателен,
+  иначе при первом старте Kuma 2 ждёт мастер выбора базы и не отвечает на
+  события. Edge (`docker-compose.edge.yml`) присоединяется к сети
+  `dkp-monitoring_default`; блок сайта в `Caddyfile.edge` добавляется после
+  выбора поддомена владельцем. Настройка — код, а не клики в панели:
+  `scripts/monitoring/kuma-setup.mjs` (без зависимостей, Socket.IO поверх
+  встроенного WebSocket Node 22+) идемпотентно создаёт администратора,
+  уведомления (`DKP: Discord`, `DKP: почта` — вебхук или SMTP из окружения)
+  и мониторы с фиксированными именами `Прод: …` / `Стенд: …`: API (`json-query`,
+  JSONata `status & " " & db` == `ok up`; срок TLS-сертификата — предупреждения
+  за 21/14/7 дней), страница входа (`http`, ловит отказ web-контейнера: без
+  API она всё равно отвечает 200), WebSocket (`websocket-upgrade` по
+  `/api/socket.io`, код закрытия 1000). Общий порог — `POLICY` сценария:
+  проверка раз в 60 с, повторы через 60 с, тревога на четвёртой подряд
+  неудачной проверке (через 3 минуты после первой), повтор при затяжной
+  аварии через 120 проверок, таймаут 10 с; простой API при штатном деплое
+  до порога не доходит. Сценарий считает своими только эти имена: приводит
+  их к окружению и удаляет лишние, остальное в Kuma не трогает. Режимы:
+  `apply [--dry-run|--verbose]`, `status [--watch N]`, `test-notification`.
+  `kuma-setup.sh` запускает его на сервере образом самой Kuma (Node на
+  хосте не нужен), переменные читает из `.env.monitoring`
+  (`MONITORING_ENV_FILE`). Мониторы стенда выключены по умолчанию
+  (`KUMA_STAGING_HOST`, оповещения у них — `KUMA_STAGING_NOTIFICATIONS=1`),
+  канал — `KUMA_DISCORD_WEBHOOK_URL` / `KUMA_SMTP_*`; без канала Kuma
+  фиксирует аварии молча. Данные Kuma в резервные копии не входят:
+  восстановление после потери VPS — повторная установка (README,
+  «Мониторинг доступности»). Проверки без сервера: юнит-тесты с накопителем
+  (`kuma-setup.test.mjs`) и задача `Uptime Kuma provisioning` в
+  `infrastructure.yml` — настоящая Kuma во временном проекте
+  (`smoke-kuma.sh`, адреса мониторов `.invalid`). Ловушки — в known-issues.md.
 - Production web использует same-origin `/api`: Caddy убирает префикс,
   dev — прокси Next.js на :3001. Локальный Docker Compose сохраняет явный
   `NEXT_PUBLIC_API_URL`. Discord необязателен: `/auth/providers` возвращает
