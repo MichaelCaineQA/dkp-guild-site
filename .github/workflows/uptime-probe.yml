@@ -1,0 +1,31 @@
+name: Uptime probe
+
+# Внешний пробник доступности (PLAN.md §8 и этап 7, #305): мониторинг на самом
+# VPS не заметит отказа сервера или блокировки адреса на пути от пользователей.
+# Каждые 15 минут /api/health проверяется с зондов Globalping в РФ и Латвии.
+# Авария — неудача запуска: GitHub присылает письмо о неудавшемся запланированном
+# запуске. Аварией считается только неудача всех попыток подряд.
+on:
+  schedule:
+    - cron: '7-59/15 * * * *' # в :07, :22, :37 и :52 — не на «круглых» минутах, когда очередь длиннее
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Site availability from Russia and Latvia
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe https://suneclipse.ru/api/health with Globalping
+        run: node scripts/monitoring/external-probe.mjs
