@@ -1,0 +1,22 @@
+# Uptime Kuma — мониторинг доступности (PLAN.md §8 и этап 7, #305).
+# Отдельный проект: база Kuma с мониторами лежит в своём томе, порты наружу
+# не публикуются. Панель доступна только через edge Caddy, который
+# подключается к сети dkp-monitoring_default (docker-compose.edge.yml).
+name: dkp-monitoring
+services:
+  uptime-kuma:
+    # Версия фиксирована: обновление — сознательная смена тега (README).
+    image: louislam/uptime-kuma:2.5.12
+    restart: unless-stopped
+    environment:
+      # Первый запуск без мастера выбора базы в браузере (/setup-database):
+      # встроенная MariaDB — то же, что мастер предлагает по умолчанию.
+      UPTIME_KUMA_DB_TYPE: embedded-mariadb
+      UPTIME_KUMA_ENABLE_EMBEDDED_MARIADB: '1'
+      # Время в оповещениях и панели — одно и то же, а не зона браузера
+      # того, кто первым открыл панель после запуска.
+      TZ: ${TZ:-Europe/Moscow}
+    volumes:
+      - uptime-kuma-data:/app/data
+volumes:
+  uptime-kuma-data:

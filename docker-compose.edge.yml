@@ -11,7 +11,7 @@ services:
       - ./Caddyfile.edge:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
-    networks: [staging, production]
+    networks: [staging, production, monitoring]
 networks:
   staging:
     external: true
@@ -19,6 +19,11 @@ networks:
   production:
     external: true
     name: dkp-production_default
+  # Uptime Kuma (docker-compose.monitoring.yml): панель публикуется только здесь.
+  # Проект мониторинга должен быть запущен до edge, иначе сеть не найдена.
+  monitoring:
+    external: true
+    name: dkp-monitoring_default
 volumes:
   caddy-data:
   caddy-config:
