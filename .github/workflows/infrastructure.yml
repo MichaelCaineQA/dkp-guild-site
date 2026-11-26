@@ -28,6 +28,7 @@ jobs:
           docker compose --env-file .env.production.example -f docker-compose.prod.yml config --quiet
           docker compose -f docker-compose.edge.yml config --quiet
           docker compose -f docker-compose.monitoring.yml config --quiet
+          docker compose --profile alerts -f docker-compose.monitoring.yml config --quiet
           docker run --rm -v "$PWD/Caddyfile.edge:/etc/caddy/Caddyfile:ro" caddy:2-alpine caddy adapt --config /etc/caddy/Caddyfile --validate
           sh -n scripts/deploy-prod.sh
           sh -n scripts/backup-prod.sh
@@ -50,7 +51,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Unit-test the setup script
-        run: node --test scripts/monitoring/kuma-setup.test.mjs
+      - name: Unit-test the setup script and the alert relay
+        run: node --test scripts/monitoring/*.test.mjs
       - name: Provision a real Uptime Kuma with the setup script
         run: sh scripts/monitoring/smoke-kuma.sh

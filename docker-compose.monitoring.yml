@@ -18,5 +18,33 @@ services:
       TZ: ${TZ:-Europe/Moscow}
     volumes:
       - uptime-kuma-data:/app/data
+  # Оповещения ботом в личку Discord (#305): Kuma шлёт вебхук сюда, а
+  # ретранслятор пишет от имени бота сайта. Отдельно от API сайта, чтобы
+  # оповещение «API не отвечает» не зависело от самого API. Включается профилем
+  # alerts (COMPOSE_PROFILES=alerts в .env.monitoring) вместе с его переменными.
+  alert-relay:
+    profiles: [alerts]
+    image: node:22-alpine
+    restart: unless-stopped
+    user: node
+    command: [node, /relay/alert-relay.mjs]
+    environment:
+      PORT: '8080'
+      ALERT_RELAY_TOKEN: ${ALERT_RELAY_TOKEN:-}
+      ALERT_BOT_TOKEN: ${ALERT_BOT_TOKEN:-}
+      ALERT_DISCORD_USER_IDS: ${ALERT_DISCORD_USER_IDS:-}
+      DISCORD_API_BASE: ${DISCORD_API_BASE:-https://discord.com/api/v10}
+    volumes:
+      - ./scripts/monitoring/alert-relay.mjs:/relay/alert-relay.mjs:ro
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 volumes:
   uptime-kuma-data:

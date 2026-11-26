@@ -26,6 +26,7 @@ import {
 
 const PASSWORD = 'test-password-123';
 const WEBHOOK = 'https://discord.com/api/webhooks/1/secret-token';
+const RELAY_TOKEN = 'relay-secret-token-0123456789';
 const PRODUCTION = [
   'Прод: API — здоровье',
   'Прод: сайт — страница входа',
@@ -233,11 +234,14 @@ test('readConfig: значения по умолчанию и проверка �
   assert.equal(config.stagingNotifications, false);
   assert.equal(config.smtp.port, '587');
   assert.equal(config.smtp.secure, false);
+  assert.equal(config.alertRelayToken, '');
+  assert.equal(config.alertRelayUrl, 'http://alert-relay:8080/alert');
   assert.throws(() => readConfig({}), /KUMA_PASSWORD/);
   const bad = [
     [{ KUMA_PRODUCTION_HOST: 'https://x.ru/' }, /KUMA_PRODUCTION_HOST/],
     [{ KUMA_STAGING_HOST: 'stage.ru:443' }, /KUMA_STAGING_HOST/],
     [{ KUMA_DISCORD_WEBHOOK_URL: 'http://x.test' }, /KUMA_DISCORD_WEBHOOK_URL/],
+    [{ ALERT_RELAY_TOKEN: 'secret', ALERT_RELAY_URL: 'alert-relay:8080' }, /ALERT_RELAY_URL/],
     [{ KUMA_SMTP_PORT: 'smtp' }, /KUMA_SMTP_PORT/],
     [{ KUMA_URL: 'uptime-kuma' }, /KUMA_URL/],
   ];
@@ -308,6 +312,29 @@ test('buildNotifications: пусто без канала, Discord и почта 
       },
     ],
   );
+});
+
+test('buildNotifications: «бот в личку» — вебхук Kuma на ретранслятор, секрет в заголовке', () => {
+  const base = readConfig(ENV);
+  assert.deepEqual(buildNotifications({ ...base, alertRelayToken: '' }), []);
+  const [relay] = buildNotifications({ ...base, alertRelayToken: RELAY_TOKEN });
+  assert.deepEqual(relay, {
+    name: 'DKP: бот в личку',
+    type: 'webhook',
+    webhookURL: 'http://alert-relay:8080/alert',
+    webhookContentType: 'json',
+    httpMethod: 'post',
+    webhookAdditionalHeaders: JSON.stringify({ Authorization: `Bearer ${RELAY_TOKEN}` }),
+  });
+  const [custom] = buildNotifications({
+    ...base,
+    alertRelayToken: RELAY_TOKEN,
+    alertRelayUrl: 'http://relay:9000/alert',
+  });
+  assert.equal(custom.webhookURL, 'http://relay:9000/alert');
+  // Смена секрета меняет сохранённое уведомление — apply обновит его.
+  const [rotated] = buildNotifications({ ...base, alertRelayToken: 'new-relay-secret-token' });
+  assert.notEqual(rotated.webhookAdditionalHeaders, relay.webhookAdditionalHeaders);
 });
 
 test('monitorPayload: общий порог, привязка уведомления и все поля формы', () => {
@@ -714,12 +741,12 @@ test('connect: готовность — событие info, иначе перв
   }
 });
 
-test('--verbose: след обмена без аргументов — пароль и вебхук не печатаются', async () => {
+test('--verbose: след обмена без аргументов — пароль, вебхук и секрет ретранслятора не печатаются', async () => {
   const kuma = new FakeKuma({ needSetup: true });
   const output = collect();
   const code = await main(
     ['apply', '--verbose'],
-    { ...ENV, KUMA_DISCORD_WEBHOOK_URL: WEBHOOK },
+    { ...ENV, KUMA_DISCORD_WEBHOOK_URL: WEBHOOK, ALERT_RELAY_TOKEN: RELAY_TOKEN },
     {
       ...output,
       WebSocketImpl: kuma.socketClass(),
@@ -735,4 +762,5 @@ test('--verbose: след обмена без аргументов — паро�
   assert.ok(text.includes('← event info'));
   assert.ok(!text.includes(PASSWORD));
   assert.ok(!text.includes('secret-token'));
+  assert.ok(!text.includes(RELAY_TOKEN));
 });
