@@ -231,7 +231,7 @@ function AbsenceForm({
         </Select>
       </Field>
       <form
-        className="flex flex-col gap-2 sm:flex-row sm:items-end"
+        className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end"
         onSubmit={(e) => {
           e.preventDefault();
           const start = new Date(`${dateFrom}T${mode === 'day' ? '00:00' : timeFrom}`);
@@ -252,7 +252,7 @@ function AbsenceForm({
         }}
       >
         {candidates.length > 0 && (
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex min-w-0 flex-col gap-1 text-sm">
             <span className="text-secondary">Игрок</span>
             <Select value={memberId} onChange={(e) => setMemberId(e.target.value)}>
               <option value="">Я</option>
@@ -299,20 +299,22 @@ function AbsenceForm({
             />
           </label>
         )}
-        <label className="flex flex-1 flex-col gap-1 text-sm">
-          <span className="text-secondary">Причина (видна вам и руководству)</span>
-          <Input
-            value={reason}
-            required
-            minLength={3}
-            maxLength={500}
-            placeholder="Например: работа, отпуск"
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </label>
-        <Button variant="primary" type="submit" disabled={busy || !dateFrom || reason.length < 3}>
-          Подать
-        </Button>
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-1 sm:basis-72 sm:flex-row sm:items-end">
+          <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
+            <span className="text-secondary">Причина (видна вам и руководству)</span>
+            <Input
+              value={reason}
+              required
+              minLength={3}
+              maxLength={500}
+              placeholder="Например: работа, отпуск"
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </label>
+          <Button variant="primary" type="submit" disabled={busy || !dateFrom || reason.length < 3}>
+            Подать
+          </Button>
+        </div>
       </form>
       {periodError && <ErrorText>{periodError}</ErrorText>}
     </Card>
