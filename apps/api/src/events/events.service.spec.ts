@@ -523,7 +523,7 @@ describe('EventsService.changeStatus', () => {
     expect(audit).toHaveLength(0);
   });
 
-  it('запустить и завершить может только управляющий ивента, отменить — и Офицер', async () => {
+  it('Офицер и назначенный РЛ начинают и завершают ивент, рядовой без назначения получает 403', async () => {
     const member = { memberId: 'm-other', isAdmin: false, rank: 'MEMBER' as const };
     const raidLead = { memberId: 'm-rl', isAdmin: false, rank: 'MEMBER' as const };
     const officer = { memberId: 'm-officer', isAdmin: false, rank: 'OFFICER' as const };
@@ -541,13 +541,11 @@ describe('EventsService.changeStatus', () => {
     await ownService.changeStatus('e-1', { status: 'FINISHED' }, raidLead);
     expect(own.events[0]!.status).toBe('FINISHED');
 
-    const unassigned = makeDb([{ id: 'e-1' }, { id: 'e-2' }]);
+    const unassigned = makeDb([{ id: 'e-1', creatorId: 'm-author' }]);
     const unassignedService = new EventsService(unassigned.db);
-    await expect(
-      unassignedService.changeStatus('e-2', { status: 'RUNNING' }, officer),
-    ).rejects.toThrow(ForbiddenException);
-    await unassignedService.changeStatus('e-2', { status: 'CANCELLED' }, officer);
-    expect(unassigned.events[1]!.status).toBe('CANCELLED');
+    await unassignedService.changeStatus('e-1', { status: 'RUNNING' }, officer);
+    await unassignedService.changeStatus('e-1', { status: 'FINISHED' }, officer);
+    expect(unassigned.events[0]!.status).toBe('FINISHED');
   });
 });
 

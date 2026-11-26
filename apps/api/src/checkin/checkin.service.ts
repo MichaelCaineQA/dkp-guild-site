@@ -232,7 +232,7 @@ export class CheckInService {
       event,
     );
     if (!allowed) {
-      throw new ForbiddenException('Код видит только РЛ ивента, Глава или Админ');
+      throw new ForbiddenException('Код видят только управляющие ивента');
     }
 
     const codes = await this.codesOf(event.id);
@@ -264,7 +264,7 @@ export class CheckInService {
   /**
    * Попытка игрока: окно активно, попытка первая. Верный код → PASSED +
    * DkpEntry CHECKIN_EARN на долю фазы (50/50, решение №7). Неверный →
-   * FAILED, повтор блокируется (дальше только ручная отметка РЛ).
+   * FAILED, повтор блокируется (дальше только ручная отметка управляющим).
    */
   private async submitInTransaction(
     eventId: string,

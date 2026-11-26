@@ -48,7 +48,7 @@ export function encryptCheckInCode(code: string, keyHex: string): string {
   return `v1:${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`;
 }
 
-/** Расшифровка кода (только для показа РЛ). Битое значение — null. */
+/** Расшифровка кода для показа управляющим ивента. Битое значение — null. */
 export function decryptCheckInCode(sealed: string, keyHex: string): string | null {
   try {
     const [version, ivHex, tagHex, dataHex] = sealed.split(':');

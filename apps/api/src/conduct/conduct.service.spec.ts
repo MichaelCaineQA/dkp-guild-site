@@ -310,7 +310,7 @@ describe('ConductService.checklist', () => {
 });
 
 describe('Доступ к чек-листу', () => {
-  it('разрешает автору-Офицеру и РЛ, запрещает чужому Офицеру и пониженному автору', async () => {
+  it('разрешает чек-лист всем Офицерам и назначенному РЛ, запрещает пониженному автору', async () => {
     const { db } = makeDb();
     db.event.findUnique = async () => ({ ...EVENT, creatorId: 'm-author' });
     const service = new ConductService(db, SETTINGS);
@@ -320,7 +320,7 @@ describe('Доступ к чек-листу', () => {
     await expect(service.checklistForActor('e-1', RL, 'MEMBER')).resolves.toHaveLength(3);
     await expect(
       service.checklistForActor('e-1', { memberId: 'other', isAdmin: false }, 'OFFICER'),
-    ).rejects.toThrow(ForbiddenException);
+    ).resolves.toHaveLength(3);
     await expect(
       service.checklistForActor('e-1', { memberId: 'm-author', isAdmin: false }, 'MEMBER'),
     ).rejects.toThrow(ForbiddenException);
@@ -435,16 +435,15 @@ describe('Пакет итогов', () => {
     expect(audit).toHaveLength(0);
     expect(attendance.get('m-1')!.checkinStart).toBe('PASSED');
   });
-  it('Рядовой и Офицер без назначения не применяют пакет', async () => {
+  it('Рядовой без назначения РЛ не применяет пакет', async () => {
     const { db, dkp } = makeDb();
     const body = {
       requestId,
       actions: [{ kind: 'DKP', memberId: 'm-1', amount: 5, comment: 'Бонус' }],
     };
-    for (const rank of ['MEMBER', 'OFFICER'])
-      await expect(
-        new ConductService(db, SETTINGS).applySummary('e-1', body, MEMBER, rank),
-      ).rejects.toThrow(ForbiddenException);
+    await expect(
+      new ConductService(db, SETTINGS).applySummary('e-1', body, MEMBER, 'MEMBER'),
+    ).rejects.toThrow(ForbiddenException);
     expect(dkp).toHaveLength(0);
   });
   it('завершённый ивент допускает корректировки, отменённый — нет; состав обязателен', async () => {

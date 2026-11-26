@@ -277,7 +277,7 @@ describe('CheckInService.raidLeadView', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('Глава видит код (events.conduct)', async () => {
+  it.each(['GUILD_LEADER', 'OFFICER'] as const)('%s видит код ивента другого РЛ', async (rank) => {
     const state = makeDb();
     await press(state, 'START', at('2026-03-03T16:45:00Z'));
     const service = new CheckInService(
@@ -287,7 +287,7 @@ describe('CheckInService.raidLeadView', () => {
       ENC_KEY,
     );
 
-    const view = await service.raidLeadView('e-1', ACTOR, 'GUILD_LEADER');
+    const view = await service.raidLeadView('e-1', ACTOR, rank);
     expect(view.code).toMatch(/^\d{3}$/);
   });
 

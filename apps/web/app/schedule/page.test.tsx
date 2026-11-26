@@ -131,7 +131,7 @@ describe('SchedulePage', () => {
     expect(screen.queryByRole('button', { name: 'Создать серию' })).toBeNull();
   });
 
-  it('офицер управляет расписанием, но не видит коды и кнопки проведения', async () => {
+  it('офицер без назначения РЛ видит управление и чек-ин в карточке ивента', async () => {
     mockSession({
       userId: 'u2',
       username: 'test-officer',
@@ -147,12 +147,11 @@ describe('SchedulePage', () => {
     await screen.findByText('10/12 · пойдут / приглашены');
     await screen.findByText(/РЛ: РЛ · 10 ДКП/);
     expect(screen.getByRole('button', { name: 'Создать ивент' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Создать ивент' })).toBeDefined();
     const mentions = screen.getAllByText('Гильдбосс');
     mentions[mentions.length - 1]!.click();
     expect(await screen.findByText('Фазы игрового времени на длительность ивента:')).toBeDefined();
-    expect(screen.queryByText('Начать ивент')).toBeNull();
-    expect(api).not.toHaveBeenCalledWith('/events/e-1/checkin/code');
+    expect(screen.getByRole('button', { name: 'Начать ивент' })).toBeDefined();
+    expect(api).toHaveBeenCalledWith('/events/e-1/checkin/code');
     expect(screen.getByText('Отменить')).toBeDefined();
     // Плата показана с пометкой фиксации (решение 1)
     expect(screen.getByText('10 (фиксирована при создании)')).toBeDefined();
