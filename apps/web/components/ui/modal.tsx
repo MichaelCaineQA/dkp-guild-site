@@ -36,7 +36,7 @@ export function Modal({
         e.stopPropagation();
         onClose();
       }}
-      className={`m-auto max-h-[90dvh] w-[calc(100%-1rem)] ${wide ? 'max-w-xl' : 'max-w-sm'} overflow-y-auto overscroll-contain rounded-xl border border-line bg-surface p-4 text-primary backdrop:bg-black/60 md:w-[calc(100%-2rem)] md:p-6`}
+      className={`m-auto max-h-[90dvh] w-[calc(100%-1rem)] ${wide ? 'max-w-xl' : 'max-w-sm'} overflow-y-auto overscroll-contain rounded-xl border border-line-subtle bg-surface-elevated p-4 text-primary shadow-glow-purple backdrop:bg-black/70 md:w-[calc(100%-2rem)] md:p-6`}
     >
       <button
         type="button"

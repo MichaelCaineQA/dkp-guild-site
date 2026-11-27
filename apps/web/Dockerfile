@@ -33,6 +33,7 @@ WORKDIR /app
 # Standalone-выход повторяет структуру монорепо: server.js в apps/web
 COPY --from=build /repo/apps/web/.next/standalone ./
 COPY --from=build /repo/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build /repo/apps/web/public ./apps/web/public
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --retries=12 \
   CMD wget -qO- http://127.0.0.1:3000/ || exit 1

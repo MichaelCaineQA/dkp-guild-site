@@ -105,7 +105,9 @@ export function EventCard({
 
   const content = (
     <>
-      <div className="flex items-start justify-between gap-2 pr-8">
+      <div
+        className={`flex items-start justify-between gap-2 ${presentation === 'dialog' ? 'pr-8' : ''}`}
+      >
         <div>
           <h2 className="text-xl font-semibold">
             {event.name || event.eventTypeName}{' '}
@@ -123,6 +125,16 @@ export function EventCard({
             — {endsAt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}{' '}
           </p>
         </div>
+        {presentation === 'panel' && (
+          <button
+            type="button"
+            aria-label="Закрыть карточку"
+            onClick={onClose}
+            className="shrink-0 rounded-lg px-2.5 py-1 text-lg leading-none text-secondary transition-colors hover:bg-surface-hover hover:text-primary"
+          >
+            ×
+          </button>
+        )}
       </div>
 
       {segments.length > 0 && (
@@ -197,7 +209,7 @@ export function EventCard({
       <EventRoster key={`roster:${event.id}:${rosterVersion}`} eventId={event.id} />
 
       {canConduct && (status === 'PLANNED' || status === 'RUNNING') && (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3 border-t border-line/60 pt-5">
           {status === 'PLANNED' ? (
             <Button variant="primary" disabled={busy} onClick={() => setPending('RUNNING')}>
               Начать ивент
@@ -209,7 +221,7 @@ export function EventCard({
           )}
           <a
             href={`/schedule/${event.id}/conduct`}
-            className="rounded-lg border border-line bg-surface px-4 py-1.5 text-sm font-medium hover:bg-surface-muted"
+            className="inline-flex min-h-11 items-center rounded-xl border border-line bg-surface-elevated px-5 py-2.5 text-sm font-semibold text-primary transition-colors hover:border-line-accent hover:bg-surface-hover md:min-h-0"
           >
             Страница проведения
           </a>
@@ -240,13 +252,13 @@ export function EventCard({
         />
       )}
       {canManage && isEventEditable(status) && (
-        <Button disabled={busy} onClick={() => void changeStatus('CANCELLED')}>
+        <Button variant="danger" disabled={busy} onClick={() => void changeStatus('CANCELLED')}>
           Отменить
         </Button>
       )}
       {!canConduct && !canManage && (
         <p className="mt-3 text-xs text-secondary">
-          Проведение ивента доступно Главе, Админу и назначенному РЛ.
+          Проведение ивента доступно Главе, Админу, Офицеру и назначенному РЛ.
         </p>
       )}
       {message && <p className="mt-2 text-sm">{message}</p>}

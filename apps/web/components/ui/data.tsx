@@ -18,15 +18,15 @@ export function Badge({
   tone?: 'neutral' | 'accent' | 'success' | 'danger' | 'warning';
 }) {
   const tones = {
-    neutral: 'bg-surface-muted text-secondary',
-    accent: 'bg-accent-soft text-accent',
-    success: 'bg-success-soft text-success',
-    danger: 'bg-danger-soft text-danger',
-    warning: 'bg-warning-soft text-warning',
+    neutral: 'border-line bg-surface-muted text-secondary',
+    accent: 'border-accent/25 bg-accent-soft text-accent',
+    success: 'border-success/25 bg-success-soft text-success',
+    danger: 'border-danger/25 bg-danger-soft text-danger',
+    warning: 'border-warning/25 bg-warning-soft text-warning',
   };
   return (
     <span
-      className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]} ${className}`}
+      className={`inline-block whitespace-nowrap rounded-md border px-2.5 py-0.5 text-xs font-semibold leading-tight tracking-wide ${tones[tone]} ${className}`}
       {...props}
     />
   );
