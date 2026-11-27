@@ -1,6 +1,6 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { CheckInService, type CheckInDb, type CheckInSettings } from './checkin.service';
 import { attachCheckInLaunch } from './checkin.module';
 import { ConductService, type ConductDb } from '../conduct/conduct.service';
@@ -67,6 +67,11 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
   const eventStatus = () =>
     db.event.findUniqueOrThrow({ where: { id: eventId }, select: { status: true } });
   const ledger = () => db.dkpEntry.findMany({ where: { eventId, memberId } });
+  const bonuses = () =>
+    db.dkpEntry.findMany({
+      where: { eventId, type: 'RAID_LEAD_BONUS' },
+      select: { memberId: true, amount: true },
+    });
   const auditCount = (action: string) =>
     db.auditLog.count({ where: { entityId: eventId, action } });
   /** Прокси над БД: внутри транзакции заданный метод делегата падает. */
@@ -172,6 +177,53 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
     const view = await checkin.raidLeadView(eventId, rl(), 'MEMBER');
     expect(view).toMatchObject({ phase: 'END', windowState: 'ACTIVE' });
     expect((await checkin.playerView(eventId, memberId)).choices).toContain(view.code);
+  });
+  it('при завершении начисляет бонус только текущему РЛ, даже если прежний РЛ тоже отметился', async () => {
+    await db.event.update({ where: { id: eventId }, data: { dkpReward: 50 } });
+    await start();
+    const startCode = await code();
+    await checkin.submit(eventId, rlId, { code: startCode });
+    await checkin.submit(eventId, memberId, { code: startCode });
+    const officer: EventsActor = { memberId: rlId, isAdmin: false, rank: 'OFFICER' };
+    await events.update(eventId, { raidLeadId: memberId }, officer, 'OFFICER');
+    const newLead: EventsActor = { memberId, isAdmin: false, rank: 'MEMBER' };
+
+    await expect(finish()).rejects.toThrow(ForbiddenException);
+    await events.changeStatus(eventId, { status: 'FINISHED' }, newLead);
+    await expect(events.update(eventId, { raidLeadId: rlId }, officer, 'OFFICER')).rejects.toThrow(
+      ConflictException,
+    );
+
+    expect(await bonuses()).toEqual([{ memberId, amount: 3 }]);
+  });
+  it('после финального кода доплачивает разницу до 10% полной платы', async () => {
+    await db.event.update({ where: { id: eventId }, data: { dkpReward: 50 } });
+    await start();
+    await checkin.submit(eventId, rlId, { code: await code() });
+    await finish();
+    const endCode = await code();
+
+    await checkin.submit(eventId, rlId, { code: endCode });
+    await expect(checkin.submit(eventId, rlId, { code: endCode })).rejects.toThrow(
+      ConflictException,
+    );
+
+    expect((await bonuses()).map((entry) => entry.amount).sort()).toEqual([2, 3]);
+  });
+  it('поздняя ручная отметка начисляет бонус РЛ, который до этого не отметился', async () => {
+    await db.event.update({ where: { id: eventId }, data: { dkpReward: 50 } });
+    await start();
+    await finish();
+    expect(await bonuses()).toEqual([]);
+
+    await conduct.manualCheckIn(
+      eventId,
+      { memberId: rlId, phase: 'END', comment: 'Был на финале' },
+      rl(),
+      'MEMBER',
+    );
+
+    expect(await bonuses()).toEqual([{ memberId: rlId, amount: 3 }]);
   });
   it('финальное окно закрывается через windowSec: поздний код — 409 без траты попытки', async () => {
     await start();

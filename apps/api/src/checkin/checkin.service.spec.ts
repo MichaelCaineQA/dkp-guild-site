@@ -99,6 +99,8 @@ function makeDb() {
       },
     },
     dkpEntry: {
+      findMany: async ({ where }) =>
+        dkp.filter((entry) => entry.eventId === where.eventId && entry.memberId === where.memberId),
       create: async ({ data }) => {
         dkp.push(data);
         return { id: `d-${dkp.length}` };

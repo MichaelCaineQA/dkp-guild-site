@@ -46,6 +46,7 @@ export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
  */
 export const DKP_ENTRY_TYPES = [
   'CHECKIN_EARN',
+  'RAID_LEAD_BONUS',
   'MANUAL_EARN',
   'AUCTION_SPEND',
   'ADJUSTMENT',

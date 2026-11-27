@@ -36,3 +36,4 @@ export * from './dkp-statistics';
 export * from './loot-statistics';
 export * from './csv';
 export * from './statistics-csv';
+export * from './raid-lead-bonus';

@@ -4,7 +4,9 @@ import { EventCard } from './event-card';
 import { api } from '../lib/api';
 
 vi.mock('../lib/api', () => ({ api: vi.fn() }));
-vi.mock('./session-context', () => ({ useSession: () => ({ user: { memberId: 'm' } }) }));
+vi.mock('./session-context', () => ({
+  useSession: () => ({ user: { memberId: 'm', rank: 'OFFICER' } }),
+}));
 vi.mock('./absent-members-panel', () => ({ AbsentMembersPanel: () => null }));
 vi.mock('./event-roster', () => ({ EventRoster: () => null }));
 vi.mock('./event-participation', () => ({ EventParticipation: () => null }));
@@ -72,6 +74,12 @@ beforeEach(() => {
       };
       return { id: 'e', status };
     }
+    if (path === '/members')
+      return [
+        { id: 'm-rl', nickname: 'РЛ' },
+        { id: 'm-new', nickname: 'Новый РЛ' },
+      ];
+    if (path === '/events/e' && options?.method === 'PATCH') return { id: 'e' };
     if (path === '/events/e/checkin/code') {
       codeRequests += 1;
       return { ...code };
@@ -103,6 +111,43 @@ function renderCard(overrides: { status?: string; canManage?: boolean } = {}) {
 const statusPosts = () => vi.mocked(api).mock.calls.filter(([path]) => path === '/events/e/status');
 
 describe('EventCard: «Начать ивент» и «Завершить ивент»', () => {
+  it('офицер может переназначить РЛ в запланированном ивенте через PATCH и карточка обновляется', async () => {
+    const { onChanged } = renderCard({ canManage: true });
+    fireEvent.click(await screen.findByRole('button', { name: 'Сменить рейд-лида' }));
+    fireEvent.change(await screen.findByLabelText('Рейд-лид'), { target: { value: 'm-new' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить рейд-лида' }));
+
+    await waitFor(() =>
+      expect(api).toHaveBeenCalledWith('/events/e', {
+        method: 'PATCH',
+        body: JSON.stringify({ raidLeadId: 'm-new' }),
+      }),
+    );
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it('ошибка API при смене РЛ остаётся видимой в диалоге', async () => {
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === '/members') return [{ id: 'm-new', nickname: 'Новый РЛ' }] as never;
+      if (path === '/events/e/checkin/me')
+        return {
+          phase: 'START',
+          windowState: 'NOT_OPEN_YET',
+          choices: [],
+          status: 'PENDING',
+        } as never;
+      if (path === '/events/e/checkin/code') return { ...NOT_LAUNCHED } as never;
+      throw new Error(`failed ${path}`);
+    });
+    renderCard({ canManage: true });
+    fireEvent.click(await screen.findByRole('button', { name: 'Сменить рейд-лида' }));
+    fireEvent.change(await screen.findByLabelText('Рейд-лид'), { target: { value: 'm-new' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить рейд-лида' }));
+    expect(
+      await screen.findByText('Не удалось изменить рейд-лида. Проверьте права и статус ивента.'),
+    ).toBeTruthy();
+  });
+
   it('до запуска говорит, что окно откроется кнопкой, и не придумывает время по расписанию', async () => {
     renderCard();
     expect(

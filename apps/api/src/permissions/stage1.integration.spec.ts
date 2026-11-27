@@ -40,7 +40,7 @@ const db = {
   lootDrop: { findFirst: async () => null, deleteMany: async () => ({ count: 0 }) },
   checkInCode: { findFirst: findHistory, findUnique: async () => null },
   attendance: { findFirst: findHistory },
-  dkpEntry: { create: ledger, findFirst: findHistory },
+  dkpEntry: { create: ledger, findFirst: findHistory, findMany: async () => [] },
   auditLog: { create: record },
   setting: { findMany: async () => [] },
 };

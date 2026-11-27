@@ -40,7 +40,7 @@ export type DkpMovement = z.infer<typeof dkpMovementSchema>;
  * adjustments — чистая сумма со знаком.
  */
 export const dkpTotalsSchema = z.object({
-  /** CHECKIN_EARN + MANUAL_EARN. */
+  /** CHECKIN_EARN + RAID_LEAD_BONUS + MANUAL_EARN. */
   earned: z.number().int(),
   /** AUCTION_SPEND — фактические списания журнала. */
   spent: z.number().int(),
@@ -113,7 +113,8 @@ export function aggregateDkpTotals(
   let spent = 0;
   let adjustments = 0;
   for (const entry of entries) {
-    if (entry.type === 'CHECKIN_EARN' || entry.type === 'MANUAL_EARN') earned += entry.amount;
+    if (['CHECKIN_EARN', 'RAID_LEAD_BONUS', 'MANUAL_EARN'].includes(entry.type))
+      earned += entry.amount;
     else if (entry.type === 'AUCTION_SPEND') spent += entry.amount;
     else adjustments += entry.amount;
   }
