@@ -37,6 +37,8 @@ ENV
 sh scripts/deploy-prod.sh
 curl --insecure --fail --retry 15 --retry-connrefused --retry-delay 2 https://localhost:18443/api/health
 curl --insecure --fail --retry 15 --retry-connrefused --retry-delay 2 --output /dev/null https://localhost:18443/
+curl --insecure --fail --output "$smoke_dir/bg-castle.jpg" https://localhost:18443/art/bg-castle.jpg
+cmp apps/web/public/art/bg-castle.jpg "$smoke_dir/bg-castle.jpg"
 test -s "$BACKUP_DIR"/*/database.dump
 test -s "$BACKUP_DIR"/*/screenshots.tar.gz
 printf '\nProduction HTTPS smoke passed\n'
