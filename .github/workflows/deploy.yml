@@ -1,53 +1,42 @@
 name: Deploy
+run-name: 'Staging preview for PR #339'
 on:
-  # Автодеплой только SHA успешно завершившегося CI на main.
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       environment:
-        description: Окружение GitHub с секретами сервера
+        description: Staging preview environment
         type: choice
-        options: [staging, production]
+        options: [staging]
         required: true
-      release_tag:
-        description: 'Тег релиза production (например v1.0.0); для staging оставьте пустым'
-        type: string
-        required: false
 permissions:
   contents: read
   actions: read
+  pull-requests: read
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    if: inputs.environment == 'staging'
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || 'staging' }}
-    concurrency: deploy-${{ inputs.environment || 'staging' }}
+    environment: staging
+    concurrency: deploy-staging
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - name: Select production release tag from main
-        if: inputs.environment == 'production'
-        env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
-        run: sh scripts/select-production-tag.sh
-      - name: Require successful CI for selected SHA
+          fetch-depth: 2
+      - name: Validate PR and its successful CI
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha=$(git rev-parse HEAD)
-          case "$sha" in *[!0-9a-f]*|'') echo 'Bad sha' >&2; exit 1;; esac
-          # Фильтр status у API запусков изредка не отдаёт самый свежий запуск (#308),
-          # поэтому запуски коммита берутся без него, а итог сверяется по полям ответа.
-          passed=$(gh run list --workflow ci.yml --commit "$sha" --event push \
-            --json headSha,status,conclusion \
-            --jq '.[] | select(.status == "completed" and .conclusion == "success") | .headSha' \
-            | grep -cx "$sha" || true)
-          test "$passed" -gt 0 || { echo 'Selected SHA has no successful CI'; exit 1; }
+          set -euo pipefail
+          sha=$(git rev-parse HEAD^)
+          gh api "repos/$GITHUB_REPOSITORY/pulls/339" \
+            | jq -e --arg sha "$sha" --arg repo "$GITHUB_REPOSITORY" \
+              '.state == "open" and .head.sha == $sha and .head.repo.full_name == $repo and .head.ref == "features/design" and .base.ref == "main"' >/dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$sha&event=pull_request" \
+            | jq -e --arg sha "$sha" \
+              'any(.workflow_runs[]; .event == "pull_request" and .head_sha == $sha and .status == "completed" and .conclusion == "success" and any(.pull_requests[]; .number == 339))' >/dev/null
+          git fetch --no-tags origin refs/pull/339/merge
+          git diff --quiet "$sha" FETCH_HEAD
+          git checkout --detach "$sha"
       - name: Prepare SSH
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -84,5 +73,63 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - name: Browser smoke on deployed SHA
         env:
-          E2E_BASE_URL: ${{ inputs.environment == 'production' && 'https://suneclipse.ru' || 'https://stage.suneclipse.ru' }}
+          E2E_BASE_URL: https://stage.suneclipse.ru
         run: E2E_EXPECTED_SHA=$(git rev-parse --short=12 HEAD) pnpm test:e2e
+      - name: Capture design preview
+        env:
+          DESIGN_BASE_URL: https://stage.suneclipse.ru
+        run: |
+          node <<'NODE'
+          const { chromium } = require('@playwright/test');
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs/promises');
+
+          (async () => {
+            await fs.mkdir('design-screenshots', { recursive: true });
+            const browser = await chromium.launch();
+            try {
+              for (const [theme, width, height] of [['dark', 1440, 1000], ['light', 1440, 1000], ['dark', 375, 812]]) {
+                const page = await browser.newPage({ colorScheme: theme, viewport: { width, height } });
+                await page.addInitScript((mode) => localStorage.setItem('theme', mode), theme);
+                // Preview the signed-in shell with fixture data. No server session or data is created.
+                const fixtures = {
+                  '/api/auth/me': { user: { userId: 'preview', username: 'Игрок', memberId: null, rank: null, isAdmin: true, blocked: false } },
+                  '/api/meta/guild': { name: 'Sun Eclipse', hasCrest: false },
+                  '/api/settings/game-time': { gameTimeAnchor: '2026-01-01T00:00:00Z', gameTimeDayMinutes: 90, gameTimeNightMinutes: 30 },
+                };
+                await page.route('**/api/**', (route) => {
+                  const payload = fixtures[new URL(route.request().url()).pathname];
+                  return payload ? route.fulfill({ json: payload }) : route.abort();
+                });
+                const response = await page.goto(process.env.DESIGN_BASE_URL + '/design');
+                assert.equal(response.status(), 200);
+                await page.getByRole('heading', { name: 'Витрина дизайна', exact: true }).waitFor();
+                const background = await page.evaluate(() => getComputedStyle(document.body).backgroundImage);
+                const image = theme === 'dark' ? 'bg-castle.jpg' : 'bg-light.jpg';
+                assert.ok(background.includes(image), background);
+                assert.equal((await page.request.get(process.env.DESIGN_BASE_URL + '/art/' + image)).status(), 200);
+                const dimensions = await page.evaluate(() => ({
+                  viewport: document.documentElement.clientWidth,
+                  content: document.documentElement.scrollWidth,
+                  palette: getComputedStyle(document.querySelector('.bg-page')).backgroundColor,
+                }));
+                assert.ok(dimensions.content <= dimensions.viewport, JSON.stringify(dimensions));
+                assert.equal(dimensions.palette, theme === 'dark' ? 'rgb(9, 13, 26)' : 'rgb(238, 241, 248)');
+                await page.screenshot({ path: 'design-screenshots/' + theme + '-' + width + '.png', fullPage: true });
+                console.log(theme, width, dimensions);
+                await page.close();
+              }
+            } finally {
+              await browser.close();
+            }
+          })().catch((error) => {
+            console.error(error);
+            process.exitCode = 1;
+          });
+          NODE
+      - name: Upload design screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-pr-339
+          path: design-screenshots/
+          if-no-files-found: error
