@@ -210,7 +210,11 @@ function makeDb(seed: Array<Partial<EventRecord> & { id: string }> = []) {
     },
     checkInCode: { findFirst: findHistory(codes) },
     attendance: { findFirst: findHistory(marks) },
-    dkpEntry: { findFirst: findHistory(entries) },
+    dkpEntry: {
+      findFirst: findHistory(entries),
+      findMany: async () => [],
+      create: async () => ({ id: 'd-1' }),
+    },
     auditLog: {
       create: async ({ data }) => {
         audit.push({

@@ -1,8 +1,9 @@
 'use client';
 import { useSession } from './session-context';
 import { EventParticipation } from './event-participation';
-import { useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import {
+  can,
   isEventEditable,
   splitIntoPhaseSegments,
   type EventMode,
@@ -15,7 +16,7 @@ import { FINISH_EVENT_COPY, START_EVENT_COPY } from './event-actions';
 import { AbsentMembersPanel } from './absent-members-panel';
 import { EventRoster } from './event-roster';
 import { EditEventScopeDialog } from './edit-event-scope-dialog';
-import { Badge, Button, Card, ConfirmDialog, Modal } from './ui';
+import { Badge, Button, Card, ConfirmDialog, ErrorText, Field, Modal, Select } from './ui';
 const MODE_LABELS: Record<EventMode, string> = { PVE: 'PvE', PVP: 'PvP' };
 const STATUS_LABELS: Record<string, string> = {
   PLANNED: 'Запланирован',
@@ -44,8 +45,14 @@ export function EventCard({
   onChanged: () => void;
 }) {
   const { user } = useSession();
+  const canReassignRaidLead = !!user && can(user, 'events.manage');
   const [busy, setBusy] = useState(false);
   const [editingScope, setEditingScope] = useState(false);
+  const [editingRaidLead, setEditingRaidLead] = useState(false);
+  const [members, setMembers] = useState<Array<{ id: string; nickname: string }> | null>(null);
+  const [raidLeadId, setRaidLeadId] = useState(event.raidLeadId);
+  const [raidLeadError, setRaidLeadError] = useState('');
+  const [savingRaidLead, setSavingRaidLead] = useState(false);
   const [rosterVersion, setRosterVersion] = useState(0);
   /** Счётчик перезапуска блока кода: после «Начать»/«Завершить» код читается сразу. */
   const [codesVersion, setCodesVersion] = useState(0);
@@ -61,6 +68,41 @@ export function EventCard({
   const status =
     statusOverride && statusOverride.from === event.status ? statusOverride.to : event.status;
   const copy = pending === 'RUNNING' ? START_EVENT_COPY : FINISH_EVENT_COPY;
+
+  useEffect(() => {
+    if (!editingRaidLead || members !== null) return;
+    let active = true;
+    api<Array<{ id: string; nickname: string }>>('/members')
+      .then((result) => {
+        if (active) setMembers(result);
+      })
+      .catch(() => {
+        if (active) setRaidLeadError('Не удалось загрузить список участников');
+      });
+    return () => {
+      active = false;
+    };
+  }, [editingRaidLead, members]);
+
+  const saveRaidLead = async (e: FormEvent) => {
+    e.preventDefault();
+    if (savingRaidLead || !raidLeadId || raidLeadId === event.raidLeadId) return;
+    setSavingRaidLead(true);
+    setRaidLeadError('');
+    try {
+      await api(`/events/${event.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ raidLeadId }),
+      });
+      setEditingRaidLead(false);
+      setMembers(null);
+      onChanged();
+    } catch {
+      setRaidLeadError('Не удалось изменить рейд-лида. Проверьте права и статус ивента.');
+    } finally {
+      setSavingRaidLead(false);
+    }
+  };
 
   const changeStatus = async (action: StatusAction) => {
     setBusy(true);
@@ -166,7 +208,22 @@ export function EventCard({
         <dt className="text-secondary">Плата ДКП</dt>
         <dd>{event.dkpReward} (фиксирована при создании)</dd>
         <dt className="text-secondary">Рейд-лид</dt>
-        <dd>{event.raidLeadName}</dd>
+        <dd>
+          {event.raidLeadName}{' '}
+          {canReassignRaidLead && (status === 'PLANNED' || status === 'RUNNING') && (
+            <Button
+              className="ml-1 px-2 py-1 text-xs"
+              aria-label="Сменить рейд-лида"
+              onClick={() => {
+                setRaidLeadId(event.raidLeadId);
+                setRaidLeadError('');
+                setEditingRaidLead(true);
+              }}
+            >
+              Изменить
+            </Button>
+          )}
+        </dd>
         {event.place && (
           <>
             <dt className="text-secondary">Место сбора</dt>
@@ -250,6 +307,43 @@ export function EventCard({
             onClose();
           }}
         />
+      )}
+      {editingRaidLead && (
+        <Modal title="Изменить рейд-лида" onClose={() => setEditingRaidLead(false)}>
+          <form onSubmit={saveRaidLead}>
+            <div className="space-y-4">
+              <Field label="Рейд-лид:">
+                <Select
+                  aria-label="Рейд-лид"
+                  value={raidLeadId}
+                  onChange={(e) => setRaidLeadId(e.target.value)}
+                  disabled={!members || savingRaidLead}
+                >
+                  <option value="">Выберите участника</option>
+                  {members?.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.nickname}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              {raidLeadError && (
+                <div role="alert">
+                  <ErrorText>{raidLeadError}</ErrorText>
+                </div>
+              )}
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={
+                  !members || savingRaidLead || !raidLeadId || raidLeadId === event.raidLeadId
+                }
+              >
+                Сохранить рейд-лида
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
       {canManage && isEventEditable(status) && (
         <Button variant="danger" disabled={busy} onClick={() => void changeStatus('CANCELLED')}>

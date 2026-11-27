@@ -21,6 +21,7 @@ import {
 } from '@dkp/shared';
 import { buildCodeChoices, decryptCheckInCode, isCodeCorrect } from './crypto';
 import type { EventsActor } from '../events/events.service';
+import { awardRaidLeadBonus, type RaidLeadBonusLedger } from '../dkp/raid-lead-bonus';
 
 /** Доли платы за фазы (дефолты совпадают с SETTING_DEFAULTS). */
 export interface CheckInSettings {
@@ -76,6 +77,7 @@ export interface CheckInDb {
           status: string;
           dkpReward: number;
           raidLeadId: string;
+          raidLeadBonusEnabled?: boolean;
           creatorId?: string | null;
         })
       | null
@@ -96,7 +98,7 @@ export interface CheckInDb {
       update: { checkinStart?: string; checkinEnd?: string };
     }): Promise<unknown>;
   };
-  dkpEntry: {
+  dkpEntry: Pick<RaidLeadBonusLedger, 'findMany'> & {
     create(args: {
       data: {
         memberId: string;
@@ -326,6 +328,9 @@ export class CheckInService {
             comment: `Чек-ин ${phase === 'START' ? 'старт' : 'финал'}: код верный`,
           },
         });
+        if (event.raidLeadBonusEnabled && event.raidLeadId === memberId) {
+          await awardRaidLeadBonus(this.db.dkpEntry, eventId, memberId);
+        }
       }
     }
 

@@ -24,6 +24,7 @@ import {
   type SetAttendanceInput,
 } from '@dkp/shared';
 import type { EventsActor } from '../events/events.service';
+import { awardRaidLeadBonus } from '../dkp/raid-lead-bonus';
 
 /** Минимальный интерфейс БД — для юнит-тестов без Prisma. */
 export interface ConductDb {
@@ -81,6 +82,7 @@ export interface ConductDb {
       endsAt: Date;
       dkpReward: number;
       raidLeadId: string;
+      raidLeadBonusEnabled?: boolean;
       creatorId?: string | null;
       scope?: 'GUILD' | 'KP' | 'PACK';
       packId?: string | null;
@@ -456,6 +458,9 @@ export class ConductService {
           comment: `Ручной чек-ин (${input.phase === 'START' ? 'старт' : 'финал'}). ${input.comment}`,
         },
       });
+      if (event.raidLeadBonusEnabled && event.raidLeadId === input.memberId) {
+        await awardRaidLeadBonus(this.db.dkpEntry, eventId, input.memberId);
+      }
     }
     await this.audit(
       actor,

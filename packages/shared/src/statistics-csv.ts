@@ -33,6 +33,7 @@ const CHECKIN_CSV: Record<string, string> = {
 };
 const DKP_TYPE_CSV: Record<string, string> = {
   CHECKIN_EARN: 'Чек-ин',
+  RAID_LEAD_BONUS: 'За ведение рейда',
   MANUAL_EARN: 'Ручное начисление',
   AUCTION_SPEND: 'Покупка на аукционе',
   ADJUSTMENT: 'Корректировка',

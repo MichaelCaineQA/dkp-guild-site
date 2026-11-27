@@ -31,6 +31,7 @@ import { serializable } from '../prisma/serializable';
 import type { Prisma } from '@prisma/client';
 import type { CheckInLaunchDb } from '../checkin/launch';
 import { enqueueEventAnnouncement } from '../discord-notifications/event-announcements';
+import { awardRaidLeadBonus, type RaidLeadBonusLedger } from '../dkp/raid-lead-bonus';
 
 /** Строка списка/календаря. */
 export interface EventRow extends EventScopeInput {
@@ -154,7 +155,9 @@ export interface EventsDb {
   /** История чек-ина (issue #302): ивент с ней не удаляется — отмена вместо удаления. */
   checkInCode: { findFirst(args: { where: EventHistoryWhere }): Promise<{ id: string } | null> };
   attendance: { findFirst(args: { where: EventHistoryWhere }): Promise<{ id: string } | null> };
-  dkpEntry: { findFirst(args: { where: EventHistoryWhere }): Promise<{ id: string } | null> };
+  dkpEntry: RaidLeadBonusLedger & {
+    findFirst(args: { where: EventHistoryWhere }): Promise<{ id: string } | null>;
+  };
   auditLog: AuditWriter;
   $transaction<T>(work: (tx: EventsDbTx) => Promise<T>): Promise<T>;
   $transaction<T>(
@@ -487,6 +490,10 @@ export class EventsService {
         throw new ForbiddenException('Нет права на редактирование');
       if (!isEventEditable(current.status))
         throw new ConflictException('Ивент доступен только для просмотра');
+      const changingRaidLead =
+        input.raidLeadId !== undefined && input.raidLeadId !== current.raidLeadId;
+      if (changingRaidLead && !can({ ...actor, rank: actorRank }, 'events.manage'))
+        throw new ForbiddenException('Назначать РЛ могут только Глава, Админ и Офицер');
       const changingScope =
         input.scope !== undefined || input.kpId !== undefined || input.packId !== undefined;
       if (changingScope && current.status !== 'PLANNED')
@@ -506,7 +513,8 @@ export class EventsService {
         'EVENT_UPDATE',
         id,
         `Изменён ивент ${event.startsAt.toISOString()}` +
-          (changingScope ? `, состав ${JSON.stringify(scope)}` : ''),
+          (changingScope ? `, состав ${JSON.stringify(scope)}` : '') +
+          (changingRaidLead ? `, РЛ ${current.raidLeadId} → ${input.raidLeadId}` : ''),
         tx.auditLog,
       );
     });
@@ -538,7 +546,12 @@ export class EventsService {
       });
       if (!current) throw new NotFoundException('Ивент не найден');
       this.assertStatusChange(current, input.status, actor);
-      await tx.event.update({ where: { id }, data: { status: input.status } });
+      const finishing = input.status === 'FINISHED';
+      await tx.event.update({
+        where: { id },
+        data: { status: input.status, ...(finishing ? { raidLeadBonusEnabled: true } : {}) },
+      });
+      if (finishing) await awardRaidLeadBonus(tx.dkpEntry, id, current.raidLeadId);
       await this.audit(
         actor,
         'EVENT_STATUS_CHANGE',

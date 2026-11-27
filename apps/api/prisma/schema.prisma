@@ -115,6 +115,7 @@ enum CheckInStatus {
 
 enum DkpEntryType {
   CHECKIN_EARN // начисление за чек-ин код (50% платы за ивент)
+  RAID_LEAD_BONUS // бонус РЛ за ведение ивента
   MANUAL_EARN // ручное начисление РЛ
   AUCTION_SPEND // трата на аукционе (с наценкой «чужому» классу, если применимо)
   ADJUSTMENT // корректировка — новая запись, не правка старой
@@ -346,6 +347,7 @@ model Event {
   kp KP? @relation("EventKP", fields: [kpId], references: [id])
   raidLeadId String
   raidLead Member @relation("EventRaidLead", fields: [raidLeadId], references: [id])
+  raidLeadBonusEnabled Boolean @default(false)
   creatorId String?
   creator Member? @relation("EventCreator", fields: [creatorId], references: [id], onDelete: SetNull)
   startsAt DateTime
