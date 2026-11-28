@@ -159,8 +159,8 @@ describe('SchedulePage', () => {
     expect(screen.getByRole('button', { name: 'Начать ивент' })).toBeDefined();
     expect(api).toHaveBeenCalledWith('/events/e-1/checkin/code');
     expect(screen.getByText('Отменить')).toBeDefined();
-    // Плата показана с пометкой фиксации (решение 1)
-    expect(screen.getByText('10 (фиксирована при создании)')).toBeDefined();
+    expect(screen.getByText('10', { selector: 'dd' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Изменить плату ДКП' })).toBeDefined();
   });
 
   it('непривязанному — подсказка про привязку, запросов нет', async () => {

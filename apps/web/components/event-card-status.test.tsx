@@ -110,6 +110,36 @@ function renderCard(overrides: { status?: string; canManage?: boolean } = {}) {
 }
 const statusPosts = () => vi.mocked(api).mock.calls.filter(([path]) => path === '/events/e/status');
 
+describe('Плата ДКП в карточке ивента', () => {
+  it('управляющий видит текущую плату и сохраняет новую сумму', async () => {
+    const { onChanged } = renderCard({ canManage: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Изменить плату ДКП' }));
+    const dialog = screen.getByRole('dialog', { name: 'Изменить плату ДКП' });
+    const input = within(dialog).getByRole('spinbutton', { name: 'Плата ДКП' });
+    expect((input as HTMLInputElement).valueAsNumber).toBe(10);
+
+    fireEvent.change(input, { target: { value: '4' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Сохранить плату' }));
+
+    await waitFor(() => expect(onChanged).toHaveBeenCalledWith({ dkpReward: 4 }));
+    expect(api).toHaveBeenCalledWith('/events/e', {
+      method: 'PATCH',
+      body: JSON.stringify({ dkpReward: 4 }),
+    });
+    expect(screen.queryByRole('dialog', { name: 'Изменить плату ДКП' })).toBeNull();
+  });
+
+  it.each([
+    ['PLANNED', false],
+    ['RUNNING', true],
+    ['FINISHED', true],
+    ['CANCELLED', true],
+  ])('кнопка редактирования скрыта при статусе %s и праве %s', (status, canManage) => {
+    renderCard({ status, canManage });
+    expect(screen.queryByRole('button', { name: 'Изменить плату ДКП' })).toBeNull();
+  });
+});
+
 describe('EventCard: «Начать ивент» и «Завершить ивент»', () => {
   it('офицер может переназначить РЛ в запланированном ивенте через PATCH и карточка обновляется', async () => {
     const { onChanged } = renderCard({ canManage: true });

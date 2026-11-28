@@ -490,6 +490,8 @@ export class EventsService {
         throw new ForbiddenException('Нет права на редактирование');
       if (!isEventEditable(current.status))
         throw new ConflictException('Ивент доступен только для просмотра');
+      if (input.dkpReward !== undefined && current.status !== 'PLANNED')
+        throw new ConflictException('Плату ДКП можно менять только до начала ивента');
       const changingRaidLead =
         input.raidLeadId !== undefined && input.raidLeadId !== current.raidLeadId;
       if (changingRaidLead && !can({ ...actor, rank: actorRank }, 'events.manage'))
@@ -512,9 +514,12 @@ export class EventsService {
         actor,
         'EVENT_UPDATE',
         id,
-        `Изменён ивент ${event.startsAt.toISOString()}` +
+        `Изменён ивент ${current.startsAt.toISOString()}` +
           (changingScope ? `, состав ${JSON.stringify(scope)}` : '') +
-          (changingRaidLead ? `, РЛ ${current.raidLeadId} → ${input.raidLeadId}` : ''),
+          (changingRaidLead ? `, РЛ ${current.raidLeadId} → ${input.raidLeadId}` : '') +
+          (input.dkpReward !== undefined && input.dkpReward !== current.dkpReward
+            ? `, плата ДКП ${current.dkpReward} → ${input.dkpReward}`
+            : ''),
         tx.auditLog,
       );
     });

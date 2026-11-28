@@ -64,7 +64,7 @@ export interface DkpEntry {
   comment?: string;
 }
 
-/** Создание ивента: плата ДКП фиксируется при создании (docs/PLAN.md, решение 1). */
+/** Создание ивента: плата ДКП фиксируется при запуске (docs/PLAN.md, решение 1). */
 export const createEventSchema = z.object({
   eventTypeId: z.string().min(1),
   mode: z.enum(EVENT_MODES),

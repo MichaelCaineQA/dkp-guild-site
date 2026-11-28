@@ -1,4 +1,9 @@
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { EventsDb, EventsActor } from './events.service';
 import { EventsService } from './events.service';
@@ -276,12 +281,7 @@ describe('EventsService.create', () => {
   it('редактирует состав запланированного ивента, сохраняя плату', async () => {
     const { db } = makeDb([{ id: 'e' }]);
     const service = new EventsService(db);
-    await service.update(
-      'e',
-      { scope: 'KP', kpId: 'kp-1', packId: null, dkpReward: 99 },
-      ACTOR,
-      'GUILD_LEADER',
-    );
+    await service.update('e', { scope: 'KP', kpId: 'kp-1', packId: null }, ACTOR, 'GUILD_LEADER');
     expect(await service.getOne('e')).toMatchObject({
       scope: 'KP',
       kpId: 'kp-1',
@@ -398,17 +398,36 @@ describe('EventsService.createSeries / deleteSeries', () => {
 });
 
 describe('EventsService.update', () => {
-  it('офицер меняет время, плата ДКП не входит в схему (отбрасывается)', async () => {
+  it('офицер меняет время без передачи платы ДКП', async () => {
     const { db } = makeDb([{ id: 'e-1' }]);
     const service = new EventsService(db);
 
     await service.update('e-1', { startsAt: '2026-03-03T18:00:00Z' }, ACTOR, 'OFFICER');
-    // Попытка передать плату игнорируется схемой — в data её нет
-    await expect(
-      service.update('e-1', { dkpReward: 999 } as never, ACTOR, 'OFFICER'),
-    ).resolves.toEqual({ id: 'e-1' });
     const after = await service.getOne('e-1');
-    expect(after.dkpReward).toBe(10);
+    expect(after).toMatchObject({ startsAt: new Date('2026-03-03T18:00:00Z'), dkpReward: 10 });
+  });
+
+  it.each([0, -1, 2.5, 2_147_483_648, '2', null])(
+    'отклоняет недопустимую плату %p',
+    async (dkpReward) => {
+      const { db, events, audit } = makeDb([{ id: 'e-1' }]);
+
+      await expect(
+        new EventsService(db).update('e-1', { dkpReward }, ACTOR, 'OFFICER'),
+      ).rejects.toThrow(BadRequestException);
+      expect(events[0]?.dkpReward).toBe(10);
+      expect(audit).toHaveLength(0);
+    },
+  );
+
+  it('идущий ивент отклоняет PATCH с платой и остальными изменениями целиком', async () => {
+    const { db, events, audit } = makeDb([{ id: 'e-1', status: 'RUNNING' }]);
+
+    await expect(
+      new EventsService(db).update('e-1', { dkpReward: 4, place: 'Новое место' }, ACTOR, 'OFFICER'),
+    ).rejects.toThrow('Плату ДКП можно менять только до начала ивента');
+    expect(events[0]).toMatchObject({ dkpReward: 10, place: null });
+    expect(audit).toHaveLength(0);
   });
 
   it('РЛ ивента (рядовой) может редактировать своё, чужой рядовой — 403', async () => {
@@ -425,7 +444,7 @@ describe('EventsService.update', () => {
     ).resolves.toEqual({ id: 'e-1' });
 
     await expect(
-      service.update('e-1', { place: 'X' }, { memberId: 'm-other', isAdmin: false }, 'MEMBER'),
+      service.update('e-1', { dkpReward: 4 }, { memberId: 'm-other', isAdmin: false }, 'MEMBER'),
     ).rejects.toThrow(ForbiddenException);
   });
 });

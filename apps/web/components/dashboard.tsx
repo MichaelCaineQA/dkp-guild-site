@@ -355,7 +355,12 @@ export function DashboardScreen() {
           canManage={canManageEvent(user, selected)}
           canConduct={can(user, 'events.conduct', selected)}
           onClose={() => setSelected(null)}
-          onChanged={() => {
+          onChanged={(changes) => {
+            if (changes) {
+              setSelected((current) =>
+                current?.id === selected.id ? { ...current, ...changes } : current,
+              );
+            }
             // Изменение через общую карточку обновляет и дашборд, и недельное расписание (#203).
             void load();
             setWeekReloadSignal((signal) => signal + 1);

@@ -8,7 +8,7 @@ import { getGamePhase, type GamePhase, type GamePhaseConfig } from './game-time'
  * игрового времени день/ночь для раскраски календаря.
  */
 
-/** Создание ивента: плата ДКП фиксируется при создании (решение 1). */
+/** Назначение состава ивента. */
 export const eventScopeSchema = z.object({
   scope: z.enum(['GUILD', 'KP', 'PACK']).default('GUILD'),
   kpId: z.string().min(1).nullable().default(null),
@@ -36,7 +36,7 @@ const createEventBaseSchema = z.object({
   mode: z.enum(EVENT_MODES),
   startsAt: z.coerce.date(),
   endsAt: z.coerce.date(),
-  dkpReward: z.number().int().positive(),
+  dkpReward: z.int32().positive(),
   raidLeadId: z.string().min(1),
   place: z.string().max(200).optional(),
   notes: z.string().max(2000).optional(),
@@ -45,9 +45,7 @@ export const createEventApiSchema = createEventBaseSchema.superRefine(validateEv
 export type CreateEventApiInput = z.infer<typeof createEventApiSchema>;
 
 /**
- * Редактирование ивента: плата ДКП НЕ входит — после создания неизменяема
- * (решение гильдии №1). РЛ ивента может менять своё ивент, остальное —
- * офицеры+ (проверяется в API через can с target.raidLeadId).
+ * Редактирование ивента: API разрешает менять плату ДКП только до запуска.
  */
 export const updateEventSchema = z.object({
   ...eventScopeSchema.partial().shape,
@@ -60,6 +58,7 @@ export const updateEventSchema = z.object({
   mode: z.enum(EVENT_MODES).optional(),
   startsAt: z.coerce.date().optional(),
   endsAt: z.coerce.date().optional(),
+  dkpReward: createEventBaseSchema.shape.dkpReward.optional(),
   raidLeadId: z.string().min(1).optional(),
   place: z.string().max(200).nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
