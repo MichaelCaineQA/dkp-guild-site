@@ -150,6 +150,56 @@ suite('Чек-ин: настоящие транзакции PostgreSQL и append
     expect(await auditCount('EVENT_STATUS_CHANGE')).toBe(1);
     expect(await code()).toMatch(/^\d{3}$/);
   });
+  it('оба чек-ина начисляют по половине платы, которую РЛ сохранил после планового начала', async () => {
+    now = new Date('2027-03-03T17:10:00Z');
+    await events.update(eventId, { dkpReward: 4 }, rl(), 'MEMBER');
+
+    const audit = await db.auditLog.findFirstOrThrow({
+      where: { entityId: eventId, action: 'EVENT_UPDATE' },
+    });
+    expect(audit.actorMemberId).toBe(rlId);
+    expect(audit.comment).toContain('плата ДКП 10 → 4');
+
+    await start();
+    await checkin.submit(eventId, memberId, { code: await code() });
+    await finish();
+    await checkin.submit(eventId, memberId, { code: await code() });
+
+    expect((await ledger()).map((entry) => entry.amount)).toEqual([2, 2]);
+  });
+  it('если старт сохраняется после чтения запланированного статуса, изменение платы получает 409', async () => {
+    let signalRead!: () => void;
+    let resumeUpdate!: () => void;
+    const plannedRead = new Promise<void>((resolve) => {
+      signalRead = resolve;
+    });
+    const resume = new Promise<void>((resolve) => {
+      resumeUpdate = resolve;
+    });
+    const editingDb = db.$extends({
+      query: {
+        event: {
+          async update({ args, query }) {
+            signalRead();
+            await resume;
+            return query(args);
+          },
+        },
+      },
+    });
+    const editor = new EventsService(editingDb as unknown as EventsDb);
+    const editResult = editor.update(eventId, { dkpReward: 4 }, rl(), 'MEMBER');
+    try {
+      await Promise.race([plannedRead, editResult]);
+      await start();
+    } finally {
+      resumeUpdate();
+    }
+    await expect(editResult).rejects.toThrow('Плату ДКП можно менять только до начала ивента');
+
+    expect(await events.getOne(eventId)).toMatchObject({ status: 'RUNNING', dkpReward: 10 });
+    expect(await auditCount('EVENT_UPDATE')).toBe(0);
+  });
   it('«Завершить ивент» позже планового окончания открывает финальное окно; код принимается в завершённом ивенте', async () => {
     await start();
     await checkin.submit(eventId, memberId, { code: await code() });

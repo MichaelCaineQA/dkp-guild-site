@@ -15,6 +15,7 @@ import { CheckInPanel, RaidLeadCodePanel } from './checkin-panels';
 import { FINISH_EVENT_COPY, START_EVENT_COPY } from './event-actions';
 import { AbsentMembersPanel } from './absent-members-panel';
 import { EventRoster } from './event-roster';
+import { EditEventRewardDialog } from './edit-event-reward-dialog';
 import { EditEventScopeDialog } from './edit-event-scope-dialog';
 import { Badge, Button, Card, ConfirmDialog, ErrorText, Field, Modal, Select } from './ui';
 const MODE_LABELS: Record<EventMode, string> = { PVE: 'PvE', PVP: 'PvP' };
@@ -42,11 +43,12 @@ export function EventCard({
   canManage: boolean;
   canConduct: boolean;
   onClose: () => void;
-  onChanged: () => void;
+  onChanged: (changes?: Pick<EventRow, 'dkpReward'>) => void;
 }) {
   const { user } = useSession();
   const canReassignRaidLead = !!user && can(user, 'events.manage');
   const [busy, setBusy] = useState(false);
+  const [editingReward, setEditingReward] = useState(false);
   const [editingScope, setEditingScope] = useState(false);
   const [editingRaidLead, setEditingRaidLead] = useState(false);
   const [members, setMembers] = useState<Array<{ id: string; nickname: string }> | null>(null);
@@ -206,7 +208,19 @@ export function EventCard({
         <dt>Состав</dt>
         <dd>{event.scopeName}</dd>
         <dt className="text-secondary">Плата ДКП</dt>
-        <dd>{event.dkpReward} (фиксирована при создании)</dd>
+        <dd>
+          {event.dkpReward}{' '}
+          {canManage && status === 'PLANNED' && (
+            <Button
+              className="ml-1 px-2 py-1 text-xs"
+              aria-label="Изменить плату ДКП"
+              disabled={busy}
+              onClick={() => setEditingReward(true)}
+            >
+              Изменить
+            </Button>
+          )}
+        </dd>
         <dt className="text-secondary">Рейд-лид</dt>
         <dd>
           {event.raidLeadName}{' '}
@@ -297,6 +311,13 @@ export function EventCard({
       )}
       {canManage && status === 'PLANNED' && (
         <Button onClick={() => setEditingScope(true)}>Изменить состав</Button>
+      )}
+      {editingReward && canManage && status === 'PLANNED' && (
+        <EditEventRewardDialog
+          event={event}
+          onClose={() => setEditingReward(false)}
+          onChanged={(dkpReward) => onChanged({ dkpReward })}
+        />
       )}
       {editingScope && (
         <EditEventScopeDialog
