@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ATTENDANCE_STATUSES, DKP_ENTRY_TYPES, type AttendanceStatus } from './domain';
+import { ATTENDANCE_STATUSES, type AttendanceStatus } from './domain';
 
 /**
  * Проведение ивента (issue #10, план 2.2 п.6): ручные отметки РЛ,
@@ -32,7 +32,7 @@ export type ManualCheckInInput = z.infer<typeof manualCheckInSchema>;
 export const manualDkpSchema = z
   .object({
     memberId: z.string().min(1),
-    type: z.enum(DKP_ENTRY_TYPES).exclude(['CHECKIN_EARN', 'RAID_LEAD_BONUS', 'AUCTION_SPEND']),
+    type: z.enum(['MANUAL_EARN', 'ADJUSTMENT']),
     amount: z
       .number()
       .int()

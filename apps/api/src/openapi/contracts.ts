@@ -56,7 +56,7 @@ export const contracts: Record<string, Contract> = {
     errors: [400],
     description:
       'Движения периода по факту записи журнала (DkpEntry.createdAt); суммы — факты журнала, не пересчёт по настройкам. ' +
-      'earned — CHECKIN_EARN+RAID_LEAD_BONUS+MANUAL_EARN, spent — AUCTION_SPEND (отрицательные), adjustments — чистая ADJUSTMENT со знаком: положительная корректировка не заработок. ' +
+      'earned — CHECKIN_EARN+RAID_LEAD_BONUS+MANUAL_EARN, spent — AUCTION_SPEND (отрицательные), adjustments — чистая ADJUSTMENT со знаком, decayed — списания WEEKLY_DECAY, если были. ' +
       'Команда связанного ивента определяется на дату ивента, поздняя корректировка входит в период своей записи. ' +
       'members[].balance — полный баланс по всей истории до balanceAsOf (текущий период — момент отчёта); ' +
       'balanceIgnoresFilters перечисляет фильтры запроса, не влияющие на него, — UI и CSV обязаны подписать исключение. ' +

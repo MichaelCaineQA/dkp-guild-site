@@ -31,6 +31,7 @@
 
 | Раздел | Ключи |
 |---|---|
+| ДКП | `dkp.weeklyDecayPct` — процент сгорания по понедельникам в 00:00 МСК. Значение 0 отключает сгорание (план 2.2) |
 | Чек-ин | `checkin.windowSec` — окно выбора (идёт от нажатия «Начать ивент» / «Завершить ивент», решение 23); `checkin.attempts` — число попыток; `checkin.startSharePct` / `checkin.endSharePct` — доли платы |
 | Отсутствия | `absence.deadlineBeforeStartSec` — дедлайн подачи до старта |
 | Аукцион | `auction.step` — минимальный шаг; `auction.liveDurationSec` — длительность живой раздачи; `auction.longDurationDays` — длительность длинного лота; `auction.antiSnipeLiveSec` / `auction.antiSnipeLongSec` — анти-снайп; `auction.foreignClassMarkupPct` — наценка чужому классу; `auction.noBidTimeoutSec` — тайм-аут без ставок |

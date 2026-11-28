@@ -133,6 +133,12 @@ export const SETTINGS_REGISTRY = {
   ...CHECKIN_SETTINGS,
   ...ABSENCE_SETTINGS,
   ...AUCTION_SETTINGS,
+  'dkp.weeklyDecayPct': {
+    schema: intSetting(0, 100),
+    label: 'Еженедельное сгорание ДКП',
+    unit: '%',
+    plan: '2.2 (решение 3)',
+  },
   'discord.reminderMinutes': {
     schema: intSetting(1, 10080),
     label: 'Напоминать об ивенте заранее',
@@ -161,6 +167,7 @@ export const SETTING_DEFAULTS: Record<SettingKey, number> = Object.fromEntries(
           'checkin.startSharePct': 50,
           'checkin.endSharePct': 50,
           'absence.deadlineBeforeStartSec': 180,
+          'dkp.weeklyDecayPct': 0,
           'profile.gearScoreStaleDays': 14,
           'discord.reminderMinutes': 15,
           'auction.step': 1,

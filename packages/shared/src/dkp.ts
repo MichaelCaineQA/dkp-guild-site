@@ -46,3 +46,8 @@ export interface DkpBalanceRow {
   memberName: string;
   balance: number;
 }
+
+/** Сгорание применяется к положительному балансу с округлением вниз. */
+export function dkpDecayAmount(balance: bigint, percent: number): bigint {
+  return balance > 0n ? (balance * BigInt(percent)) / 100n : 0n;
+}

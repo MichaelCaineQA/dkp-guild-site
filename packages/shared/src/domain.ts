@@ -49,6 +49,7 @@ export const DKP_ENTRY_TYPES = [
   'RAID_LEAD_BONUS',
   'MANUAL_EARN',
   'AUCTION_SPEND',
+  'WEEKLY_DECAY',
   'ADJUSTMENT',
 ] as const;
 export type DkpEntryType = (typeof DKP_ENTRY_TYPES)[number];

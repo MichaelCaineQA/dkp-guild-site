@@ -17,6 +17,7 @@ describe('SETTINGS_REGISTRY', () => {
         'checkin.attempts',
         'checkin.startSharePct',
         'checkin.endSharePct',
+        'dkp.weeklyDecayPct',
         'absence.deadlineBeforeStartSec',
         'profile.gearScoreStaleDays',
         'discord.reminderMinutes',
@@ -83,6 +84,14 @@ describe('SETTINGS_REGISTRY', () => {
     expect(() => parseSettingValue('discord.reminderMinutes', 0)).toThrow();
     expect(() => parseSettingValue('discord.reminderMinutes', 10081)).toThrow();
   });
+});
+
+it.each([0, 15, 100])('принимает ставку еженедельного сгорания %i%%', (percent) => {
+  expect(parseSettingValue('dkp.weeklyDecayPct', percent)).toBe(percent);
+});
+
+it.each([-1, 0.5, 101])('отклоняет ставку еженедельного сгорания %i%%', (percent) => {
+  expect(() => parseSettingValue('dkp.weeklyDecayPct', percent)).toThrow();
 });
 
 describe('parseSettingValue', () => {

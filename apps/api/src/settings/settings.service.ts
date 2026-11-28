@@ -3,6 +3,7 @@ import {
   SETTINGS_REGISTRY,
   SETTING_DEFAULTS,
   gameTimeSettingsSchema,
+  moscowWeekBounds,
   parseSettingValue,
   updateSettingsSchema,
   type GameTimeSettings,
@@ -21,6 +22,13 @@ export interface SettingsDb {
       update: { value: number };
     }): Promise<unknown>;
   };
+  dkpDecayRate: {
+    upsert(args: {
+      where: { effectiveAt: Date };
+      create: { effectiveAt: Date; percent: number };
+      update: { percent: number };
+    }): Promise<unknown>;
+  };
   guild: {
     findFirst(): Promise<GameTimeSettings | null>;
     update(args: {
@@ -30,7 +38,7 @@ export interface SettingsDb {
   };
   auditLog: AuditWriter;
   $transaction<T>(
-    work: (tx: Pick<SettingsDb, 'setting' | 'guild' | 'auditLog'>) => Promise<T>,
+    work: (tx: Pick<SettingsDb, 'setting' | 'guild' | 'auditLog' | 'dkpDecayRate'>) => Promise<T>,
   ): Promise<T>;
 }
 
@@ -66,10 +74,14 @@ export class SettingsService {
 
   /**
    * Запись набора настроек: валидация реестром, upsert каждого ключа,
-   * одна запись аудита с перечнем изменений. Изменение применяется сразу —
-   * читается на запросе, без деплоя.
+   * одна запись аудита с перечнем изменений. Ставка сгорания действует
+   * с начала следующей московской недели.
    */
-  async update(body: unknown, actor: SettingsActor): Promise<Record<SettingKey, number>> {
+  async update(
+    body: unknown,
+    actor: SettingsActor,
+    now?: Date,
+  ): Promise<Record<SettingKey, number>> {
     const parsed = updateSettingsSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException('Некорректные настройки');
     const input: UpdateSettingsInput = parsed.data;
@@ -86,6 +98,14 @@ export class SettingsService {
         if (current[key as SettingKey] === value) continue;
         changes.push(`${key}: ${current[key as SettingKey]} → ${value}`);
         await tx.setting.upsert({ where: { key }, create: { key, value }, update: { value } });
+        if (key === 'dkp.weeklyDecayPct') {
+          const effectiveAt = moscowWeekBounds(now ?? new Date()).end;
+          await tx.dkpDecayRate.upsert({
+            where: { effectiveAt },
+            create: { effectiveAt, percent: value },
+            update: { percent: value },
+          });
+        }
       }
       if (changes.length)
         await tx.auditLog.create({

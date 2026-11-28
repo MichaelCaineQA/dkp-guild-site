@@ -46,6 +46,8 @@ export const dkpTotalsSchema = z.object({
   spent: z.number().int(),
   /** ADJUSTMENT — чистая корректировка со знаком. */
   adjustments: z.number().int(),
+  /** WEEKLY_DECAY — списания без ивента, поле появляется при наличии списаний. */
+  decayed: z.number().int().optional(),
   /** Сумма всех движений выборки. */
   net: z.number().int(),
 });
@@ -112,13 +114,21 @@ export function aggregateDkpTotals(
   let earned = 0;
   let spent = 0;
   let adjustments = 0;
+  let decayed = 0;
   for (const entry of entries) {
     if (['CHECKIN_EARN', 'RAID_LEAD_BONUS', 'MANUAL_EARN'].includes(entry.type))
       earned += entry.amount;
     else if (entry.type === 'AUCTION_SPEND') spent += entry.amount;
-    else adjustments += entry.amount;
+    else if (entry.type === 'WEEKLY_DECAY') decayed += entry.amount;
+    else if (entry.type === 'ADJUSTMENT') adjustments += entry.amount;
   }
-  return { earned, spent, adjustments, net: earned + spent + adjustments };
+  return {
+    earned,
+    spent,
+    adjustments,
+    ...(decayed ? { decayed } : {}),
+    net: earned + spent + adjustments + decayed,
+  };
 }
 
 const byOccurrence = (a: DkpMovement, b: DkpMovement) =>

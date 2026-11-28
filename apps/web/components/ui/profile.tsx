@@ -7,6 +7,7 @@ import { Avatar } from '../avatar';
 export const DKP_ENTRY_LABELS: Record<string, string> = {
   CHECKIN_EARN: 'Чек-ин',
   RAID_LEAD_BONUS: 'За ведение рейда',
+  WEEKLY_DECAY: 'Еженедельное сгорание',
   MANUAL_EARN: 'Ручное начисление',
   AUCTION_SPEND: 'Покупка на аукционе',
   ADJUSTMENT: 'Корректировка',

@@ -7,18 +7,25 @@ const ACTOR: SettingsActor = { memberId: 'm-actor', isAdmin: false };
 function makeDb(stored: Record<string, number> = {}) {
   const state = new Map(Object.entries(stored));
   const audit: Array<Record<string, string | null>> = [];
+  const rates = new Map<number, number>();
   const db: SettingsDb = {
     $transaction: async (work) => {
       const snapshot = new Map(state);
       const logs = [...audit];
+      const scheduledRates = new Map(rates);
       try {
-        return await work({ setting: db.setting, guild: db.guild, auditLog: db.auditLog });
+        return await work(db);
       } catch (error) {
         state.clear();
         for (const [key, value] of snapshot) state.set(key, value);
         audit.splice(0, audit.length, ...logs);
+        rates.clear();
+        for (const [key, value] of scheduledRates) rates.set(key, value);
         throw error;
       }
+    },
+    dkpDecayRate: {
+      upsert: async ({ where, create }) => rates.set(+where.effectiveAt, create.percent),
     },
     setting: {
       findMany: async () => Array.from(state, ([key, value]) => ({ key, value })),
@@ -57,7 +64,7 @@ function makeDb(stored: Record<string, number> = {}) {
       },
     },
   };
-  return { db, state, audit };
+  return { db, state, audit, rates };
 }
 
 describe('SettingsService.getAll', () => {
@@ -68,11 +75,20 @@ describe('SettingsService.getAll', () => {
     const all = await service.getAll();
     expect(all['auction.step']).toBe(5);
     expect(all['checkin.windowSec']).toBe(SETTING_DEFAULTS['checkin.windowSec']);
-    expect(Object.keys(all)).toHaveLength(18);
+    expect(Object.keys(all)).toHaveLength(19);
   });
 });
 
 describe('SettingsService.update', () => {
+  it('изменение процента сохраняется для следующего понедельника по Москве', async () => {
+    const { db, audit, rates } = makeDb();
+    const now = new Date('2026-11-29T21:00:00.000Z');
+    const updated = await new SettingsService(db).update({ 'dkp.weeklyDecayPct': 20 }, ACTOR, now);
+    expect(updated['dkp.weeklyDecayPct']).toBe(20);
+    expect(rates.get(Date.parse('2026-12-06T21:00:00.000Z'))).toBe(20);
+    expect(audit[0]?.comment).toBe('dkp.weeklyDecayPct: 0 → 20');
+  });
+
   it('записывает интервал напоминания с аудитом', async () => {
     const { db, audit } = makeDb();
     const service = new SettingsService(db);
@@ -155,7 +171,7 @@ describe('SettingsService.gameTime', () => {
 describe('settingsMetadata', () => {
   it('отдаёт подписи и единицы для UI по каждому ключу', () => {
     const meta = settingsMetadata();
-    expect(meta).toHaveLength(18);
+    expect(meta).toHaveLength(19);
     expect(meta[0]).toHaveProperty('label');
     expect(meta.find((m) => m.key === 'auction.step')!.unit).toBe('очк.');
   });

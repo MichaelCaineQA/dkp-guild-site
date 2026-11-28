@@ -59,6 +59,7 @@ export function StatisticsDkpTab({
   }, [focus]);
 
   const data = report.data;
+  const showDecay = !!data?.withoutEvent.totals.decayed;
   const modeActive = !!query.mode;
   const typeActive = !!query.eventTypeId;
   // Полный баланс не ограничен фильтрами типа/режима — подпись обязательна.
@@ -279,8 +280,9 @@ export function StatisticsDkpTab({
           </span>
         </div>
         <p className="text-sm text-secondary">
-          Самостоятельные операции (лоты хранилища, ручные начисления вне ивента): без типа и
-          режима, не ограничиваются фильтрами и не подмешиваются в итог выбранного типа ивента.
+          Операции вне ивентов включают лоты хранилища, ручные начисления и еженедельное сгорание.
+          Они не ограничиваются фильтрами по ивентам и не подмешиваются в итог выбранного типа
+          ивента.
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
           {totalBadges(data.withoutEvent.totals).map((item) => (
@@ -288,6 +290,9 @@ export function StatisticsDkpTab({
               {item.label}: <span className="tabular-nums">{item.value}</span>
             </Badge>
           ))}
+          {showDecay && (
+            <Badge tone="warning">Сгорело: {signed(data.withoutEvent.totals.decayed ?? 0)}</Badge>
+          )}
         </div>
         <Table className="mt-3">
           <thead>
@@ -296,6 +301,7 @@ export function StatisticsDkpTab({
               <Table.Th>Начислено</Table.Th>
               <Table.Th>Потрачено</Table.Th>
               <Table.Th>Корректировки</Table.Th>
+              {showDecay && <Table.Th>Сгорело</Table.Th>}
               <Table.Th>Итого</Table.Th>
             </tr>
           </thead>
@@ -311,11 +317,17 @@ export function StatisticsDkpTab({
                   <Table.Td className="tabular-nums">{signed(row.totals.earned)}</Table.Td>
                   <Table.Td className="tabular-nums">{signed(row.totals.spent)}</Table.Td>
                   <Table.Td className="tabular-nums">{signed(row.totals.adjustments)}</Table.Td>
+                  {showDecay && (
+                    <Table.Td className="tabular-nums">{signed(row.totals.decayed ?? 0)}</Table.Td>
+                  )}
                   <Table.Td className="tabular-nums">{signed(row.totals.net)}</Table.Td>
                 </Table.Row>
                 {expanded === `we:${row.id}` && (
                   <tr>
-                    <td colSpan={5} className="border-b border-line bg-surface-muted p-3">
+                    <td
+                      colSpan={showDecay ? 6 : 5}
+                      className="border-b border-line bg-surface-muted p-3"
+                    >
                       <MovementTable movements={row.details} options={options} />
                     </td>
                   </tr>
