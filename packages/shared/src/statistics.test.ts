@@ -73,6 +73,37 @@ describe('statistics period', () => {
 });
 
 describe('historical statistics participants', () => {
+  it('attributes an earlier event to the direct KP after a transfer to another KP', () => {
+    const rows = statisticsEventMembers(
+      { scope: 'KP', kpId: 'old-kp', packId: null, startsAt: new Date('2026-01-01T12:00:00Z') },
+      [
+        {
+          id: 'member',
+          createdAt: new Date('2025-01-01Z'),
+          packId: null,
+          directKpId: 'new-kp',
+          blockedAt: null,
+          packHistory: [
+            {
+              memberId: 'member',
+              previousPackId: null,
+              packId: null,
+              previousDirectKpId: 'old-kp',
+              directKpId: 'new-kp',
+              changedAt: new Date('2026-02-01Z'),
+            },
+          ],
+        },
+      ],
+      [],
+      [],
+      new Date('2026-03-01Z'),
+    );
+    expect(rows).toMatchObject([
+      { memberId: 'member', packId: null, kpId: 'old-kp', teamStatus: 'KNOWN' },
+    ]);
+  });
+
   it('does not substitute current membership when transfer history is absent', () => {
     const rows = statisticsEventMembers(
       { scope: 'GUILD', kpId: null, packId: null, startsAt: new Date('2026-01-01T12:00:00Z') },

@@ -95,6 +95,7 @@ export interface ConductDb {
         id: string;
         nickname: string;
         packId?: string | null;
+        directKpId?: string | null;
         pack?: { kpId: string } | null;
       }>
     >;
@@ -327,7 +328,13 @@ export class ConductService {
       // Заблокированные скрыты из чек-листа ивента (issue #149).
       this.db.member.findMany({
         where: { blockedAt: null },
-        select: { id: true, nickname: true, packId: true, pack: { select: { kpId: true } } },
+        select: {
+          id: true,
+          nickname: true,
+          packId: true,
+          directKpId: true,
+          pack: { select: { kpId: true } },
+        },
       }),
       this.db.attendance.findMany({ where: { eventId } }),
       this.db.dkpEntry.findMany({ where: { eventId } }),
@@ -339,7 +346,7 @@ export class ConductService {
     const invited = members.filter((m) =>
       isEventInvitee(
         { scope: event.scope ?? 'GUILD', kpId: event.kpId ?? null, packId: event.packId ?? null },
-        { id: m.id, packId: m.packId ?? null, kpId: m.pack?.kpId ?? null },
+        { id: m.id, packId: m.packId ?? null, kpId: m.pack?.kpId ?? m.directKpId ?? null },
       ),
     );
     const excused = absences
@@ -518,7 +525,11 @@ export class ConductService {
       !member ||
       !isEventInvitee(
         { scope: event.scope ?? 'GUILD', kpId: event.kpId ?? null, packId: event.packId ?? null },
-        { id: member.id, packId: member.packId ?? null, kpId: member.pack?.kpId ?? null },
+        {
+          id: member.id,
+          packId: member.packId ?? null,
+          kpId: member.pack?.kpId ?? member.directKpId ?? null,
+        },
       )
     )
       throw new ForbiddenException('Участник не входит в приглашённый состав ивента');

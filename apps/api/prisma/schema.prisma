@@ -164,6 +164,9 @@ model KP {
   leaderId String? @unique
   leader Member? @relation("KPLeader", fields: [leaderId], references: [id], onDelete: SetNull)
   packs Pack[]
+  directMembers Member[] @relation("DirectKPMembers")
+  previousDirectMemberships MemberPackHistory[] @relation("PreviousDirectKP")
+  directMemberships MemberPackHistory[] @relation("DirectKPHistory")
   previousPackMemberships PackMembershipHistory[] @relation("PreviousKP")
   newPackMemberships PackMembershipHistory[] @relation("NewKP")
   events Event[] @relation("EventKP")
@@ -272,6 +275,8 @@ model Member {
   packJoinedAt DateTime?
   packId String?
   pack Pack? @relation("PackMembers", fields: [packId], references: [id])
+  directKpId String?
+  directKp KP? @relation("DirectKPMembers", fields: [directKpId], references: [id], onDelete: Restrict)
   ledPacks Pack[] @relation("PackLeader")
   ledKP KP? @relation("KPLeader")
   packHistory MemberPackHistory[]
@@ -295,6 +300,7 @@ model Member {
   createdAt DateTime @default(now())
 
   @@index([packId])
+  @@index([directKpId])
 }
 
 /// Изменение принадлежности участника; предыдущая принадлежность сохраняет
@@ -307,6 +313,10 @@ model MemberPackHistory {
   previousPack Pack? @relation("PreviousMemberPack", fields: [previousPackId], references: [id], onDelete: Restrict)
   packId String?
   pack Pack? @relation("MemberHistoryPack", fields: [packId], references: [id], onDelete: Restrict)
+  previousDirectKpId String?
+  previousDirectKp KP? @relation("PreviousDirectKP", fields: [previousDirectKpId], references: [id], onDelete: Restrict)
+  directKpId String?
+  directKp KP? @relation("DirectKPHistory", fields: [directKpId], references: [id], onDelete: Restrict)
   changedAt DateTime @default(now())
 
   @@unique([memberId, changedAt])

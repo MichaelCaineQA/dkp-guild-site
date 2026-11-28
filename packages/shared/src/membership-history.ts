@@ -6,6 +6,8 @@ export const memberPackHistorySchema = z.object({
   memberId: z.string().min(1),
   previousPackId: z.string().min(1).nullable(),
   packId: z.string().min(1).nullable(),
+  previousDirectKpId: z.string().min(1).nullable().optional(),
+  directKpId: z.string().min(1).nullable().optional(),
   changedAt: z.date(),
 });
 export const packMembershipHistorySchema = z.object({
@@ -40,6 +42,22 @@ export function memberPackAt(
   return valueAt(
     currentPackId,
     history.map((h) => ({ previous: h.previousPackId, next: h.packId, changedAt: h.changedAt })),
+    at,
+  );
+}
+
+export function memberDirectKpAt(
+  currentKpId: string | null,
+  history: readonly MemberPackHistory[],
+  at: Date,
+): string | null {
+  return valueAt(
+    currentKpId,
+    history.map((h) => ({
+      previous: h.previousDirectKpId ?? null,
+      next: h.directKpId ?? null,
+      changedAt: h.changedAt,
+    })),
     at,
   );
 }

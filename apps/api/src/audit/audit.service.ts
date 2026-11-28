@@ -51,14 +51,20 @@ export interface AuditDb {
         id: true;
         memberId?: true;
         member?: {
-          select: { pack: { select: { leaderId: true; kp: { select: { leaderId: true } } } } };
+          select: {
+            pack: { select: { leaderId: true; kp: { select: { leaderId: true } } } };
+            directKp: { select: { leaderId: true } };
+          };
         };
       };
     }): Promise<
       Array<{
         id: string;
         memberId?: string;
-        member?: { pack: { leaderId: string | null; kp: { leaderId: string | null } } | null };
+        member?: {
+          pack: { leaderId: string | null; kp: { leaderId: string | null } } | null;
+          directKp?: { leaderId: string | null } | null;
+        };
       }>
     >;
   };
@@ -214,6 +220,7 @@ export class AuditService {
               member: {
                 select: {
                   pack: { select: { leaderId: true, kp: { select: { leaderId: true } } } },
+                  directKp: { select: { leaderId: true } },
                 },
               },
             },
@@ -231,7 +238,15 @@ export class AuditService {
         .filter((row) => row.memberId)
         .map((row) => [row.id, row.memberId!]),
     );
-    const groupLeaders = new Map(affectedAbsences.map((row) => [row.id, row.member?.pack]));
+    const groupLeaders = new Map(
+      affectedAbsences.map(({ id, member }) => [
+        id,
+        {
+          pack: member?.pack?.leaderId,
+          kp: member?.pack?.kp.leaderId ?? member?.directKp?.leaderId,
+        },
+      ]),
+    );
     const targetOf = (entry: { entityType: string; entityId: string; action: string }) => {
       if (entry.entityType === 'Member') return entry.entityId;
       if (
@@ -357,8 +372,8 @@ export class AuditService {
           actor.rank !== 'GUILD_LEADER' &&
           affectedIds.get(entry.entityId) !== actor.memberId &&
           (!actor.memberId ||
-            (groupLeaders.get(entry.entityId)?.leaderId !== actor.memberId &&
-              groupLeaders.get(entry.entityId)?.kp.leaderId !== actor.memberId));
+            (groupLeaders.get(entry.entityId)?.pack !== actor.memberId &&
+              groupLeaders.get(entry.entityId)?.kp !== actor.memberId));
         return {
           ...entry,
           ...(safeDetails

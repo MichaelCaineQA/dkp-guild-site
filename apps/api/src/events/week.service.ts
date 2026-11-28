@@ -50,7 +50,7 @@ export class WeekService {
       // Заблокированные не считаются приглашёнными (issue #149).
       this.db.member.findMany({
         where: { blockedAt: null },
-        select: { id: true, packId: true, pack: { select: { kpId: true } } },
+        select: { id: true, packId: true, directKpId: true, pack: { select: { kpId: true } } },
       }),
       this.db.absence.findMany({
         where: {
@@ -72,7 +72,11 @@ export class WeekService {
       setting?.value ?? SETTING_DEFAULTS['absence.deadlineBeforeStartSec'],
     );
     const now = this.clock();
-    const roster = members.map((m) => ({ id: m.id, packId: m.packId, kpId: m.pack?.kpId ?? null }));
+    const roster = members.map((m) => ({
+      id: m.id,
+      packId: m.packId,
+      kpId: m.pack?.kpId ?? m.directKpId,
+    }));
     return events.map(({ eventType, raidLead, scope, kpId, packId, kp, pack, ...event }) => ({
       ...event,
       scope,

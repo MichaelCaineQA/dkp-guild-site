@@ -62,6 +62,7 @@ export interface CheckInDb {
     findUnique(args: { where: { id: string }; include: { pack: true } }): Promise<{
       id: string;
       packId: string | null;
+      directKpId?: string | null;
       blockedAt: Date | null;
       pack: { kpId: string } | null;
     } | null>;
@@ -376,7 +377,7 @@ export class CheckInService {
     if (
       !member ||
       member.blockedAt ||
-      !isEventInvitee(event, { ...member, kpId: member.pack?.kpId ?? null })
+      !isEventInvitee(event, { ...member, kpId: member.pack?.kpId ?? member.directKpId ?? null })
     )
       throw new ForbiddenException('Вы не приглашены на этот ивент');
   }

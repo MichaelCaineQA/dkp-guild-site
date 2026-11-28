@@ -28,8 +28,8 @@ const findEvents = jest.fn(async () => [
   },
 ]);
 const findMembers = jest.fn(async () => [
-  { id: 'a', packId: 'p', pack: { kpId: 'k' } },
-  { id: 'b', packId: null, pack: null },
+  { id: 'a', packId: 'p', directKpId: null, pack: { kpId: 'k' } },
+  { id: 'b', packId: null, directKpId: 'k', pack: null },
 ]);
 const absence = { memberId: 'b', dateFrom: startsAt, dateTo: startsAt };
 const findAbsences = jest.fn(async () => [absence, absence]);
@@ -112,7 +112,7 @@ describe('Недельное расписание через HTTP', () => {
     expect(findMembers).toHaveBeenCalledWith({
       // Заблокированные не считаются приглашёнными (issue #149)
       where: { blockedAt: null },
-      select: { id: true, packId: true, pack: { select: { kpId: true } } },
+      select: { id: true, packId: true, directKpId: true, pack: { select: { kpId: true } } },
     });
     expect(findEvents).toHaveBeenCalledWith(
       expect.objectContaining({

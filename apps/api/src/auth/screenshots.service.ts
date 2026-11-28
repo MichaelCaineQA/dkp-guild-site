@@ -104,9 +104,10 @@ export class ScreenshotsService {
         where: {
           userId: file.userId,
           blockedAt: null,
-          ...(kpId ? { pack: { kpId } } : { packId }),
+          ...(kpId ? { OR: [{ directKpId: kpId }, { pack: { kpId } }] } : { packId }),
         },
         select: {
+          directKp: { select: { leaderId: true } },
           pack: { select: { leaderId: true, kp: { select: { leaderId: true } } } },
           gsRecords: {
             where: { NOT: { screenshotIds: { isEmpty: true } } },
@@ -124,7 +125,7 @@ export class ScreenshotsService {
         !!viewer &&
         !viewer.blockedAt &&
         !!target?.gsRecords[0]?.screenshotIds.includes(id) &&
-        (target.pack?.kp.leaderId === actor.memberId ||
+        ((target.pack?.kp.leaderId ?? target.directKp?.leaderId) === actor.memberId ||
           (!!packId && target.pack?.leaderId === actor.memberId));
     }
     if (!file || (file.userId !== actor.userId && !privileged && !groupAccess))

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { memberPackAt, packKpAt } from './membership-history';
+import { memberDirectKpAt, memberPackAt, packKpAt } from './membership-history';
 import {
   statisticsHistoryStatusSchema,
   type StatisticsHistoricalMember,
@@ -140,7 +140,9 @@ export function gearScoreSnapshotRows(
     const historicalKpId =
       packKnown && pack && packHistoryKnown
         ? packKpAt(pack.kpId, pack.membershipHistory, asOf)
-        : null;
+        : packKnown && !packId
+          ? memberDirectKpAt(member.directKpId ?? null, member.packHistory, asOf)
+          : null;
     const kpKnown =
       !historicalKpId ||
       !kps ||

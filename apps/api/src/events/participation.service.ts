@@ -42,7 +42,7 @@ export class ParticipationService {
       }),
       db.member.findUnique({
         where: { id: memberId },
-        select: { id: true, packId: true, pack: { select: { kpId: true } } },
+        select: { id: true, packId: true, directKpId: true, pack: { select: { kpId: true } } },
       }),
       db.setting.findUnique({
         where: { key: 'absence.deadlineBeforeStartSec' },
@@ -51,7 +51,10 @@ export class ParticipationService {
     ]);
     if (!event) throw new NotFoundException('Ивент не найден');
     if (!member) throw new ForbiddenException('Профиль игрока не найден');
-    const invited = isEventInvitee(event, { ...member, kpId: member.pack?.kpId ?? null });
+    const invited = isEventInvitee(event, {
+      ...member,
+      kpId: member.pack?.kpId ?? member.directKpId,
+    });
     const candidates = await db.absence.findMany({
       where: {
         memberId,
@@ -134,6 +137,7 @@ export class ParticipationService {
           combatRole: true,
           weapons: true,
           packId: true,
+          directKp: { select: { id: true, name: true } },
           pack: { select: { name: true, kpId: true, kp: { select: { name: true } } } },
           gsRecords: canViewGs
             ? {
@@ -166,7 +170,11 @@ export class ParticipationService {
     );
     return members
       .filter((m) =>
-        isEventInvitee(event, { id: m.id, packId: m.packId, kpId: m.pack?.kpId ?? null }),
+        isEventInvitee(event, {
+          id: m.id,
+          packId: m.packId,
+          kpId: m.pack?.kpId ?? m.directKp?.id ?? null,
+        }),
       )
       .map((m) => ({
         id: m.id,
@@ -178,8 +186,8 @@ export class ParticipationService {
         combatRole: m.combatRole,
         packId: m.packId,
         packName: m.pack?.name ?? null,
-        kpId: m.pack?.kpId ?? null,
-        kpName: m.pack?.kp.name ?? null,
+        kpId: m.pack?.kpId ?? m.directKp?.id ?? null,
+        kpName: m.pack?.kp.name ?? m.directKp?.name ?? null,
         gearScore: canViewGs ? (m.gsRecords?.[0]?.value ?? null) : null,
         ...(canViewGs
           ? { gearScoreStale: isGearScoreStale(m.gsRecords ?? [], staleDays, this.clock()) }

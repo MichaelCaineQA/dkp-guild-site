@@ -7,8 +7,12 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  can,
+  canManageKp,
+  canMoveOrgMember,
   orgCreateKpSchema,
   orgCreatePackSchema,
+  orgEditKpSchema,
   orgMoveMemberSchema,
   orgMovePackSchema,
   orgLeaderSchema,
@@ -20,6 +24,12 @@ import { serializable } from '../prisma/serializable';
 import type { SessionUser } from '../auth/session.types';
 
 type Tx = Prisma.TransactionClient;
+type Kp = { id: string; name: string; leaderId: string | null };
+const kpFields = { id: true, name: true, leaderId: true } as const;
+
+function kpMembership(kpId: string): Prisma.MemberWhereInput {
+  return { OR: [{ directKpId: kpId }, { pack: { kpId } }] };
+}
 
 @Injectable()
 export class OrgService {
@@ -50,7 +60,7 @@ export class OrgService {
     const members = await this.db.member.findMany({
       where: {
         blockedAt: null,
-        ...(kpId ? { pack: { kpId } } : {}),
+        ...(kpId ? kpMembership(kpId) : {}),
         ...(packId ? { packId } : {}),
       },
       orderBy: { nickname: 'asc' },
@@ -62,6 +72,7 @@ export class OrgService {
         rank: true,
         combatRole: true,
         weapons: true,
+        directKp: { select: kpFields },
         pack: {
           select: {
             id: true,
@@ -83,13 +94,15 @@ export class OrgService {
     const now = new Date();
     return {
       groups,
-      members: members.map(({ gsRecords, pack, ...member }) => {
+      members: members.map(({ gsRecords, pack, directKp, ...member }) => {
+        const kp = pack?.kp ?? directKp;
         const groupAccess =
           !!(kpId || packId) &&
           !!actor.memberId &&
-          (pack?.kp.leaderId === actor.memberId || (!!packId && pack?.leaderId === actor.memberId));
+          (kp?.leaderId === actor.memberId || (!!packId && pack?.leaderId === actor.memberId));
         return {
           ...member,
+          kp,
           pack,
           ...(privileged || groupAccess
             ? {
@@ -112,22 +125,19 @@ export class OrgService {
     return parsed.data;
   }
 
-  private async authorize(tx: Tx, actor: SessionUser, kpId?: string) {
-    if (actor.isAdmin) return;
+  private async activeActor(tx: Tx, actor: SessionUser) {
+    if (actor.isAdmin) return actor;
     if (!actor.memberId) throw new ForbiddenException('Недостаточно прав');
     const member = await tx.member.findUnique({
       where: { id: actor.memberId },
       select: { rank: true, blockedAt: true },
     });
-    if (member && !member.blockedAt && member.rank === 'GUILD_LEADER') return;
-    if (
-      member &&
-      !member.blockedAt &&
-      kpId &&
-      (await tx.kP.findFirst({ where: { id: kpId, leaderId: actor.memberId } }))
-    )
-      return;
-    throw new ForbiddenException('Недостаточно прав');
+    if (!member || member.blockedAt) throw new ForbiddenException('Недостаточно прав');
+    return { ...actor, rank: member.rank };
+  }
+
+  private requirePermission(allowed: boolean) {
+    if (!allowed) throw new ForbiddenException('Недостаточно прав');
   }
 
   private async audit(
@@ -160,19 +170,38 @@ export class OrgService {
     return member?.nickname ?? 'участник недоступен';
   }
 
-  private async transferMember(tx: Tx, memberId: string, packId: string, actor: SessionUser) {
-    const member = await tx.member.findUnique({ where: { id: memberId }, include: { pack: true } });
-    if (!member) throw new NotFoundException('Участник не найден');
-    const pack = await tx.pack.findUnique({ where: { id: packId } });
-    if (!pack) throw new NotFoundException('Пак не найден');
-    if (member.packId === packId) throw new ConflictException('Участник уже в этом паке');
+  private async transferMember(
+    tx: Tx,
+    memberId: string,
+    kp: Kp,
+    pack: { id: string; name: string } | null,
+    actor: SessionUser,
+    creatingPack = false,
+  ) {
+    const member = await tx.member.findUnique({
+      where: { id: memberId },
+      include: { pack: true, directKp: true },
+    });
+    if (!member || member.blockedAt) throw new NotFoundException('Участник не найден');
+    const previousKpId = member.pack?.kpId ?? member.directKpId;
+    this.requirePermission(
+      canMoveOrgMember(actor, kp, { kpId: previousKpId, packId: member.packId }),
+    );
+    if (creatingPack && previousKpId && previousKpId !== kp.id)
+      throw new BadRequestException('Участник должен состоять в выбранной КП или быть без группы');
+    const packId = pack?.id ?? null;
+    const directKpId = pack ? null : kp.id;
+    if (member.packId === packId && member.directKpId === directKpId)
+      throw new ConflictException('Участник уже в выбранном составе');
     if (member.packId) {
       await tx.pack.updateMany({
         where: { id: member.packId, leaderId: memberId },
         data: { leaderId: null },
       });
+    }
+    if (previousKpId && (member.packId || previousKpId !== kp.id)) {
       await tx.kP.updateMany({
-        where: { id: member.pack!.kpId, leaderId: memberId },
+        where: { id: previousKpId, leaderId: memberId },
         data: { leaderId: null },
       });
     }
@@ -181,17 +210,27 @@ export class OrgService {
       orderBy: { changedAt: 'desc' },
     });
     const changedAt = new Date(Math.max(Date.now(), (previous?.changedAt.getTime() ?? 0) + 1));
-    await tx.member.update({ where: { id: memberId }, data: { packId, packJoinedAt: changedAt } });
+    await tx.member.update({
+      where: { id: memberId },
+      data: { packId, directKpId, packJoinedAt: pack ? changedAt : null },
+    });
     await tx.memberPackHistory.create({
-      data: { memberId, previousPackId: member.packId, packId, changedAt },
+      data: {
+        memberId,
+        previousPackId: member.packId,
+        previousDirectKpId: member.directKpId,
+        packId,
+        directKpId,
+        changedAt,
+      },
     });
     await this.audit(
       tx,
       actor,
-      'MEMBER_PACK_TRANSFER',
+      pack ? 'MEMBER_PACK_TRANSFER' : 'MEMBER_KP_TRANSFER',
       'Member',
       memberId,
-      `Перенос из пака «${member.pack?.name ?? 'без пака'}» в пак «${pack.name}»`,
+      `Состав: ${member.pack ? `пак «${member.pack.name}»` : member.directKp ? `КП «${member.directKp.name}»` : 'без КП и пака'} → ${pack ? `пак «${pack.name}»` : `КП «${kp.name}»`}`,
     );
   }
 
@@ -234,7 +273,9 @@ export class OrgService {
     return serializable(
       this.db,
       async (tx) => {
-        await this.authorize(tx, actor);
+        const current = await this.activeActor(tx, actor);
+        this.requirePermission(can(current, 'org.create_kp'));
+        if (input.packIds.length) this.requirePermission(can(current, 'members.manage'));
         const guild = await tx.guild.findFirst({ orderBy: { createdAt: 'asc' } });
         if (!guild) throw new NotFoundException('Гильдия не найдена');
         const kp = await tx.kP.create({ data: { name: input.name, guildId: guild.id } });
@@ -246,25 +287,43 @@ export class OrgService {
     );
   }
 
+  async editKp(kpId: string, body: unknown, actor: SessionUser) {
+    const input = this.parse(orgEditKpSchema, body);
+    return serializable(
+      this.db,
+      async (tx) => {
+        const current = await this.activeActor(tx, actor);
+        const kp = await tx.kP.findUnique({ where: { id: kpId } });
+        if (!kp) throw new NotFoundException('КП не найдена');
+        this.requirePermission(canManageKp(current, 'org.edit_kp', kp));
+        if (kp.name === input.name) return kp;
+        const updated = await tx.kP.update({ where: { id: kpId }, data: input });
+        await this.audit(
+          tx,
+          actor,
+          'KP_UPDATE',
+          'KP',
+          kpId,
+          `Название КП: «${kp.name}» → «${updated.name}»`,
+        );
+        return updated;
+      },
+      true,
+    );
+  }
+
   async createPack(body: unknown, actor: SessionUser) {
     const input = this.parse(orgCreatePackSchema, body);
     return serializable(
       this.db,
       async (tx) => {
-        await this.authorize(tx, actor, input.kpId);
+        const current = await this.activeActor(tx, actor);
         const kp = await tx.kP.findUnique({ where: { id: input.kpId } });
         if (!kp) throw new NotFoundException('КП не найдена');
-        for (const memberId of input.memberIds) {
-          const member = await tx.member.findUnique({
-            where: { id: memberId },
-            include: { pack: true },
-          });
-          if (!member || member.pack?.kpId !== input.kpId)
-            throw new BadRequestException('Участник должен состоять в выбранной КП');
-        }
+        this.requirePermission(canManageKp(current, 'org.create_pack', kp));
         const pack = await tx.pack.create({ data: { name: input.name, kpId: input.kpId } });
         for (const memberId of input.memberIds)
-          await this.transferMember(tx, memberId, pack.id, actor);
+          await this.transferMember(tx, memberId, kp, pack, current, true);
         await this.audit(
           tx,
           actor,
@@ -284,8 +343,19 @@ export class OrgService {
     return serializable(
       this.db,
       async (tx) => {
-        await this.authorize(tx, actor);
-        await this.transferMember(tx, memberId, input.packId, actor);
+        const current = await this.activeActor(tx, actor);
+        if ('packId' in input) {
+          const pack = await tx.pack.findUnique({
+            where: { id: input.packId },
+            include: { kp: { select: kpFields } },
+          });
+          if (!pack) throw new NotFoundException('Пак не найден');
+          await this.transferMember(tx, memberId, pack.kp, pack, current);
+        } else {
+          const kp = await tx.kP.findUnique({ where: { id: input.kpId }, select: kpFields });
+          if (!kp) throw new NotFoundException('КП не найдена');
+          await this.transferMember(tx, memberId, kp, null, current);
+        }
         return { ok: true as const };
       },
       true,
@@ -297,7 +367,7 @@ export class OrgService {
     return serializable(
       this.db,
       async (tx) => {
-        await this.authorize(tx, actor);
+        this.requirePermission(can(await this.activeActor(tx, actor), 'members.manage'));
         await this.transferPack(tx, packId, input.kpId, actor);
         return { ok: true as const };
       },
@@ -310,13 +380,13 @@ export class OrgService {
     return serializable(
       this.db,
       async (tx) => {
-        await this.authorize(tx, actor);
+        this.requirePermission(can(await this.activeActor(tx, actor), 'members.manage'));
         const kp = await tx.kP.findUnique({ where: { id: kpId } });
         if (!kp) throw new NotFoundException('КП не найдена');
         if (
           input.memberId &&
           !(await tx.member.findFirst({
-            where: { id: input.memberId, pack: { kpId }, blockedAt: null },
+            where: { id: input.memberId, ...kpMembership(kpId), blockedAt: null },
           }))
         )
           throw new BadRequestException('Кандидат не состоит в КП');
@@ -341,9 +411,12 @@ export class OrgService {
     return serializable(
       this.db,
       async (tx) => {
-        const pack = await tx.pack.findUnique({ where: { id: packId } });
+        const current = await this.activeActor(tx, actor);
+        const pack = await tx.pack.findUnique({ where: { id: packId }, include: { kp: true } });
         if (!pack) throw new NotFoundException('Пак не найден');
-        await this.authorize(tx, actor, pack.kpId);
+        this.requirePermission(
+          can(current, 'members.manage') || pack.kp.leaderId === current.memberId,
+        );
         if (
           input.memberId &&
           !(await tx.member.findFirst({ where: { id: input.memberId, packId, blockedAt: null } }))

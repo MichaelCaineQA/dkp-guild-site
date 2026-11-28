@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  memberDirectKpAt,
   memberPackAt,
   packKpAt,
   type MemberPackHistory,
@@ -112,6 +113,7 @@ export interface StatisticsHistoricalMember {
   id: string;
   createdAt: Date;
   packId: string | null;
+  directKpId?: string | null;
   blockedAt: Date | null;
   packHistory: MemberPackHistory[];
 }
@@ -155,7 +157,9 @@ export function statisticsEventMembers(
     const historicalKpId =
       packKnown && pack && packHistoryKnown
         ? packKpAt(pack.kpId, pack.membershipHistory, event.startsAt)
-        : null;
+        : packKnown && !packId
+          ? memberDirectKpAt(member.directKpId ?? null, member.packHistory, event.startsAt)
+          : null;
     const kpKnown =
       !historicalKpId ||
       !kps ||

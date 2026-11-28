@@ -43,11 +43,30 @@ const ROWS = [
   { id: 'm2', nickname: 'Beta', rank: 'MEMBER', combatRole: null, weapons: [], discord: null },
 ];
 
-/** Состав отдаёт таблицу, остальные запросы (КП и паки) — пустую структуру. */
+const ALPHA_KP = {
+  id: 'kp1',
+  name: 'КП Альфа',
+  leaderId: MEMBER.memberId,
+  packs: [{ id: 'pack1', name: 'Пак Альфа', kpId: 'kp1', leaderId: null }],
+};
+const BETA_KP = {
+  id: 'kp2',
+  name: 'КП Бета',
+  leaderId: null,
+  packs: [{ id: 'pack2', name: 'Пак Бета', kpId: 'kp2', leaderId: null }],
+};
+
 function mockRoster(rows: unknown[] = ROWS) {
-  vi.mocked(api).mockImplementation(async (path) =>
-    path.startsWith('/members') ? rows : { groups: [], members: [] },
-  );
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path.startsWith('/members')) return rows;
+    return {
+      groups: [ALPHA_KP, BETA_KP],
+      members: [
+        { id: 'm1', kp: ALPHA_KP, pack: { ...ALPHA_KP.packs[0], kp: ALPHA_KP } },
+        { id: 'm2', kp: null, pack: null },
+      ],
+    };
+  });
 }
 
 /** Клик по строке списка → открытое окно участника. */
@@ -68,6 +87,35 @@ describe('RosterPage', () => {
       this.removeAttribute('open');
     };
     mockSession(MEMBER);
+  });
+
+  it.each([
+    ['КП Бета · Без пака', { kpId: 'kp2' }],
+    ['КП Бета · Пак Бета', { packId: 'pack2' }],
+  ])('офицер переносит игрока из другого пака на цель «%s»', async (label, payload) => {
+    mockSession({ ...MEMBER, rank: 'OFFICER' });
+    mockRoster();
+    render(<RosterPage />);
+    await screen.findByRole('button', { name: 'Переместить участника Alpha' });
+    const row = screen.getByRole('row', { name: /Alpha/ });
+    fireEvent.dragStart(row, { dataTransfer: { setData: vi.fn(), effectAllowed: '' } });
+    fireEvent.drop(screen.getByRole('button', { name: label }));
+    await waitFor(() =>
+      expect(api).toHaveBeenCalledWith('/org/members/m1/transfer', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    );
+  });
+
+  it('лидер может выбрать только свою КП и только для участника без состава', async () => {
+    mockRoster();
+    render(<RosterPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Переместить участника Beta' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByRole('option', { name: 'КП Бета' })).toBeNull();
+    expect(within(dialog).getByRole('option', { name: 'Пак Альфа' })).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Переместить участника Alpha' })).toBeNull();
   });
 
   it('рядовой видит таблицу состава с фильтрами, но не форму добавления', async () => {
@@ -250,7 +298,7 @@ describe('RosterPage', () => {
     expect(screen.getByRole('columnheader', { name: 'Действия' })).toBeDefined();
     const changeBeta = screen.getByRole('button', { name: 'Изменить участника Beta' });
     expect(screen.getByRole('button', { name: 'Изменить участника Alpha' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Переместить участника Beta' })).toBeDefined();
+    expect(await screen.findByRole('button', { name: 'Переместить участника Beta' })).toBeDefined();
 
     changeBeta.focus();
     expect(document.activeElement).toBe(changeBeta);

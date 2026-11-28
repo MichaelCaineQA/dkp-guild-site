@@ -23,6 +23,7 @@ const enumeration = (values: readonly string[]): SchemaObject => ({
 /** Схемы входа строятся из той же валидации, которую используют сервисы. */
 const inputs: Record<string, unknown> = {
   OrgCreateKp: shared.orgCreateKpSchema,
+  OrgEditKp: shared.orgEditKpSchema,
   OrgCreatePack: shared.orgCreatePackSchema,
   OrgMoveMember: shared.orgMoveMemberSchema,
   OrgMovePack: shared.orgMovePackSchema,

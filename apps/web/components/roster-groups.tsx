@@ -2,7 +2,15 @@
 import { GearScoreStale } from './ui/gear-score-stale';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { COMBAT_ROLE_LABELS, RANK_LABELS, formatWeapons, type SessionUser } from '@dkp/shared';
+import {
+  COMBAT_ROLE_LABELS,
+  RANK_LABELS,
+  can,
+  canManageKp,
+  canMoveOrgMember,
+  formatWeapons,
+  type SessionUser,
+} from '@dkp/shared';
 import { api, API_URL_VALUE } from '../lib/api';
 import { Avatar } from './avatar';
 import { Button, Card, ErrorText, Field, Input, Modal, Muted, Select, Table } from './ui';
@@ -17,6 +25,7 @@ type Member = {
   rank: keyof typeof RANK_LABELS;
   combatRole: keyof typeof COMBAT_ROLE_LABELS | null;
   weapons: Parameters<typeof formatWeapons>[0];
+  kp?: { id: string; name: string; leaderId: string | null } | null;
   pack: {
     id: string;
     name: string;
@@ -30,6 +39,7 @@ type Member = {
 type RosterResponse = { groups: Group[]; members: Member[] };
 type Dialog =
   | 'create-kp'
+  | 'edit-kp'
   | 'create-pack'
   | 'kp-leader'
   | 'pack-leader'
@@ -42,6 +52,7 @@ export function TransferMemberModal({
   memberId,
   memberName,
   groups,
+  currentKpId,
   currentPackId,
   onClose,
   onTransferred,
@@ -49,13 +60,12 @@ export function TransferMemberModal({
   memberId: string;
   memberName: string;
   groups: Group[];
+  currentKpId?: string;
   currentPackId?: string;
   onClose: () => void;
   onTransferred: () => void;
 }) {
-  const [kpId, setKpId] = useState(
-    groups.find((group) => group.packs.some((pack) => pack.id === currentPackId))?.id ?? '',
-  );
+  const [kpId, setKpId] = useState(currentKpId ?? (groups.length === 1 ? groups[0]!.id : ''));
   const [packId, setPackId] = useState(currentPackId ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -65,6 +75,7 @@ export function TransferMemberModal({
         <p>{memberName}</p>
         <Field label="КП">
           <Select
+            className="pr-8"
             value={kpId}
             onChange={(event) => {
               setKpId(event.target.value);
@@ -80,8 +91,12 @@ export function TransferMemberModal({
           </Select>
         </Field>
         <Field label="Пак">
-          <Select value={packId} onChange={(event) => setPackId(event.target.value)}>
-            <option value="">Выберите пак</option>
+          <Select
+            className="pr-8"
+            value={packId}
+            onChange={(event) => setPackId(event.target.value)}
+          >
+            <option value="">Без пака</option>
             {groups
               .filter((group) => group.id === kpId)
               .flatMap((group) =>
@@ -95,12 +110,12 @@ export function TransferMemberModal({
         </Field>
         {error && <ErrorText>Не удалось переместить участника</ErrorText>}
         <Button
-          disabled={busy || !packId}
+          disabled={busy || !kpId || (kpId === currentKpId && packId === (currentPackId ?? ''))}
           onClick={() => {
             setBusy(true);
             api(`/org/members/${encodeURIComponent(memberId)}/transfer`, {
               method: 'POST',
-              body: JSON.stringify({ packId }),
+              body: JSON.stringify(packId ? { packId } : { kpId }),
             })
               .then(onTransferred)
               .catch(() => setError(true))
@@ -172,7 +187,9 @@ export function RosterGroups({ user, mode }: { user: SessionUser; mode: 'kp' | '
     mode === 'kp' ? (data?.groups ?? []) : (data?.groups.flatMap((group) => group.packs) ?? []);
   const members = useMemo(() => {
     const rows = (data?.members ?? []).filter((member) =>
-      mode === 'kp' ? member.pack?.kp.id === selectedId : member.pack?.id === selectedId,
+      mode === 'kp'
+        ? (member.kp ?? member.pack?.kp)?.id === selectedId
+        : member.pack?.id === selectedId,
     );
     return rows.sort(
       (a, b) =>
@@ -184,11 +201,12 @@ export function RosterGroups({ user, mode }: { user: SessionUser; mode: 'kp' | '
         a.id.localeCompare(b.id),
     );
   }, [data, mode, selectedId]);
-  const isGuildManager = user.isAdmin || user.rank === 'GUILD_LEADER';
+  const isGuildManager = can(user, 'members.manage');
   const selectedGroupKp =
     mode === 'kp' ? selectedKp : data?.groups.find((group) => group.id === selectedPack?.kpId);
   const ownKp = data?.groups.find((group) => group.leaderId === user.memberId);
-  const canCreatePack = isGuildManager || !!ownKp;
+  const canCreatePackAnywhere = can(user, 'org.create_pack');
+  const canCreatePack = canCreatePackAnywhere || !!ownKp;
   const canManageSelectedPack =
     isGuildManager || (!!user.memberId && selectedGroupKp?.leaderId === user.memberId);
   const canViewGs =
@@ -203,11 +221,11 @@ export function RosterGroups({ user, mode }: { user: SessionUser; mode: 'kp' | '
   const targetPacks = data?.groups.flatMap((group) => group.packs) ?? [];
   const targetPack = targetPacks.find((pack) => pack.id === transferPackId);
 
-  async function submit(path: string, body: unknown, nextSelection = selectedId) {
+  async function submit(path: string, body: unknown, nextSelection = selectedId, method = 'POST') {
     setBusy(true);
     setError(null);
     try {
-      await api(path, { method: 'POST', body: JSON.stringify(body) });
+      await api(path, { method, body: JSON.stringify(body) });
       setDialog(null);
       setName('');
       setSearch('');
@@ -229,13 +247,15 @@ export function RosterGroups({ user, mode }: { user: SessionUser; mode: 'kp' | '
       ? 'Подтвердить смену лидера'
       : dialog === 'create-kp'
         ? 'Создать КП'
-        : dialog === 'create-pack'
-          ? 'Создать пак'
-          : dialog === 'transfer'
-            ? 'Переместить участника'
-            : dialog === 'kp-leader'
-              ? 'Выбрать лидера КП'
-              : 'Выбрать лидера пака';
+        : dialog === 'edit-kp'
+          ? 'Изменить КП'
+          : dialog === 'create-pack'
+            ? 'Создать пак'
+            : dialog === 'transfer'
+              ? 'Переместить участника'
+              : dialog === 'kp-leader'
+                ? 'Выбрать лидера КП'
+                : 'Выбрать лидера пака';
 
   return (
     <section className="space-y-4">
@@ -253,7 +273,7 @@ export function RosterGroups({ user, mode }: { user: SessionUser; mode: 'kp' | '
           </Field>
         )}
         <div className="flex flex-wrap gap-2">
-          {mode === 'kp' && isGuildManager && (
+          {mode === 'kp' && can(user, 'org.create_kp') && (
             <Button
               onClick={() => {
                 setName('');
@@ -264,19 +284,29 @@ export function RosterGroups({ user, mode }: { user: SessionUser; mode: 'kp' | '
               Создать КП
             </Button>
           )}
+          {mode === 'kp' && selectedKp && canManageKp(user, 'org.edit_kp', selectedKp) && (
+            <Button
+              onClick={() => {
+                setName(selectedKp.name);
+                setDialog('edit-kp');
+              }}
+            >
+              Изменить КП
+            </Button>
+          )}
           {mode === 'pack' && canCreatePack && (
             <Button
               onClick={() => {
                 setName('');
                 setChosenIds([]);
-                setFormKpId(isGuildManager ? '' : (ownKp?.id ?? ''));
+                setFormKpId((canCreatePackAnywhere ? selectedGroupKp?.id : ownKp?.id) ?? '');
                 setDialog('create-pack');
               }}
             >
               Создать пак
             </Button>
           )}
-          {selectedId && isGuildManager && (
+          {selectedId && can(user, 'org.move_member') && (
             <Button onClick={() => setDialog('transfer')}>Переместить участника</Button>
           )}
           {selectedId && (mode === 'kp' ? isGuildManager : canManageSelectedPack) && (
@@ -326,7 +356,7 @@ export function RosterGroups({ user, mode }: { user: SessionUser; mode: 'kp' | '
                       >
                         {member.nickname}
                         <GearScoreStale stale={member.gearScoreStale} />
-                        {member.id === member.pack?.kp.leaderId && (
+                        {member.id === (member.kp ?? member.pack?.kp)?.leaderId && (
                           <span className="ml-1 text-amber-500" aria-label="Лидер КП">
                             👑
                           </span>
@@ -386,46 +416,53 @@ export function RosterGroups({ user, mode }: { user: SessionUser; mode: 'kp' | '
                     maxLength={100}
                   />
                 </Field>
-                <Field label="Найти пак">
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Название пака"
-                  />
-                </Field>
-                <div className="max-h-48 space-y-1 overflow-y-auto">
-                  {targetPacks
-                    .filter(
-                      (pack) =>
-                        !!search.trim() &&
-                        pack.name
-                          .toLocaleLowerCase('ru')
-                          .includes(search.toLocaleLowerCase('ru')) &&
-                        !chosenIds.includes(pack.id),
-                    )
-                    .map((pack) => (
-                      <Button
-                        key={pack.id}
-                        className="mr-2"
-                        onClick={() => setChosenIds((ids) => [...ids, pack.id])}
-                      >
-                        {pack.name} · {data?.groups.find((group) => group.id === pack.kpId)?.name}
-                      </Button>
-                    ))}
-                </div>
-                <div className="text-sm">
-                  Выбранные паки:{' '}
-                  {chosenIds.length === 0
-                    ? 'нет'
-                    : chosenIds.map((id) => (
-                        <Button
-                          key={id}
-                          onClick={() => setChosenIds((ids) => ids.filter((item) => item !== id))}
-                        >
-                          {targetPacks.find((pack) => pack.id === id)?.name} ×
-                        </Button>
-                      ))}
-                </div>
+                {isGuildManager && (
+                  <>
+                    <Field label="Найти пак">
+                      <Input
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        placeholder="Название пака"
+                      />
+                    </Field>
+                    <div className="max-h-48 space-y-1 overflow-y-auto">
+                      {targetPacks
+                        .filter(
+                          (pack) =>
+                            !!search.trim() &&
+                            pack.name
+                              .toLocaleLowerCase('ru')
+                              .includes(search.toLocaleLowerCase('ru')) &&
+                            !chosenIds.includes(pack.id),
+                        )
+                        .map((pack) => (
+                          <Button
+                            key={pack.id}
+                            className="mr-2"
+                            onClick={() => setChosenIds((ids) => [...ids, pack.id])}
+                          >
+                            {pack.name} ·{' '}
+                            {data?.groups.find((group) => group.id === pack.kpId)?.name}
+                          </Button>
+                        ))}
+                    </div>
+                    <div className="text-sm">
+                      Выбранные паки:{' '}
+                      {chosenIds.length === 0
+                        ? 'нет'
+                        : chosenIds.map((id) => (
+                            <Button
+                              key={id}
+                              onClick={() =>
+                                setChosenIds((ids) => ids.filter((item) => item !== id))
+                              }
+                            >
+                              {targetPacks.find((pack) => pack.id === id)?.name} ×
+                            </Button>
+                          ))}
+                    </div>
+                  </>
+                )}
                 <Button
                   disabled={busy || !name.trim()}
                   onClick={() => void submit('/org/kps', { name, packIds: chosenIds })}
@@ -434,11 +471,35 @@ export function RosterGroups({ user, mode }: { user: SessionUser; mode: 'kp' | '
                 </Button>
               </>
             )}
+            {dialog === 'edit-kp' && selectedKp && (
+              <>
+                <Field label="Название КП">
+                  <Input
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    maxLength={100}
+                  />
+                </Field>
+                <Button
+                  disabled={busy || !name.trim() || name.trim() === selectedKp.name}
+                  onClick={() =>
+                    void submit(
+                      `/org/kps/${encodeURIComponent(selectedId)}`,
+                      { name },
+                      selectedId,
+                      'PATCH',
+                    )
+                  }
+                >
+                  Сохранить
+                </Button>
+              </>
+            )}
             {dialog === 'create-pack' && (
               <>
                 <Field label="КП">
                   <Select
-                    disabled={!isGuildManager}
+                    disabled={!canCreatePackAnywhere}
                     value={formKpId}
                     onChange={(event) => {
                       setFormKpId(event.target.value);
@@ -446,11 +507,13 @@ export function RosterGroups({ user, mode }: { user: SessionUser; mode: 'kp' | '
                     }}
                   >
                     <option value="">Выберите КП</option>
-                    {data?.groups.map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {group.name}
-                      </option>
-                    ))}
+                    {data?.groups
+                      .filter((group) => canManageKp(user, 'org.create_pack', group))
+                      .map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
                   </Select>
                 </Field>
                 <Field label="Название пака">
@@ -469,15 +532,23 @@ export function RosterGroups({ user, mode }: { user: SessionUser; mode: 'kp' | '
                 </Field>
                 <div className="max-h-48 space-y-1 overflow-y-auto">
                   {allMembers
-                    .filter(
-                      (member) =>
+                    .filter((member) => {
+                      const kp = data?.groups.find((group) => group.id === formKpId);
+                      const memberKpId = (member.kp ?? member.pack?.kp)?.id ?? null;
+                      return (
+                        !!kp &&
+                        canMoveOrgMember(user, kp, {
+                          kpId: memberKpId,
+                          packId: member.pack?.id ?? null,
+                        }) &&
                         !!search.trim() &&
-                        member.pack?.kp.id === formKpId &&
+                        (!memberKpId || memberKpId === formKpId) &&
                         member.nickname
                           .toLocaleLowerCase('ru')
                           .includes(search.toLocaleLowerCase('ru')) &&
-                        !chosenIds.includes(member.id),
-                    )
+                        !chosenIds.includes(member.id)
+                      );
+                    })
                     .map((member) => (
                       <Button
                         key={member.id}

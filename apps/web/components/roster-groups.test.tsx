@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { RosterGroups } from './roster-groups';
 import { api } from '../lib/api';
@@ -38,6 +38,12 @@ const member = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  HTMLDialogElement.prototype.showModal = function () {
+    this.setAttribute('open', '');
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.removeAttribute('open');
+  };
   vi.mocked(api).mockImplementation(async (path) => ({
     groups,
     members: path.includes('?') ? [member] : [],
@@ -52,4 +58,41 @@ it('показывает состав только после выбора КП 
   expect(await screen.findByText('Игрок')).toBeDefined();
   expect(screen.getByText('1234')).toBeDefined();
   await waitFor(() => expect(api).toHaveBeenCalledWith('/org/roster?kpId=kp'));
+});
+
+it('рядовой лидер сохраняет название своей КП', async () => {
+  render(<RosterGroups user={user} mode="kp" />);
+  fireEvent.change(await screen.findByLabelText('КП:'), { target: { value: 'kp' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Изменить КП' }));
+  const dialog = screen.getByRole('dialog');
+  fireEvent.change(within(dialog).getByLabelText('Название КП'), { target: { value: 'Новая КП' } });
+  fireEvent.click(within(dialog).getByText('Сохранить'));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith('/org/kps/kp', {
+      method: 'PATCH',
+      body: JSON.stringify({ name: 'Новая КП' }),
+    }),
+  );
+});
+
+it('офицер без назначения может выбрать КП при создании пака', async () => {
+  render(<RosterGroups user={{ ...user, rank: 'OFFICER', memberId: 'officer' }} mode="pack" />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Создать пак' }));
+  const dialog = screen.getByRole('dialog');
+  const kp = within(dialog).getByLabelText('КП') as HTMLSelectElement;
+  expect(kp.disabled).toBe(false);
+  fireEvent.change(kp, { target: { value: 'kp' } });
+  fireEvent.change(within(dialog).getByLabelText('Название пака'), {
+    target: { value: 'Новый пак' },
+  });
+  fireEvent.click(within(dialog).getByText('Принять'));
+  await waitFor(() => {
+    const request = vi.mocked(api).mock.calls.find(([path]) => path === '/org/packs')?.[1];
+    expect(request?.method).toBe('POST');
+    expect(JSON.parse(String(request?.body))).toEqual({
+      kpId: 'kp',
+      name: 'Новый пак',
+      memberIds: [],
+    });
+  });
 });

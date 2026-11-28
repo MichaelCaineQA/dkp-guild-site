@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard';
 import { OrgService } from './org.service';
 
@@ -19,6 +19,11 @@ export class OrgController {
   @Post('kps')
   createKp(@Body() body: unknown, @Req() req: AuthedRequest) {
     return this.org.createKp(body, req.session!.user!);
+  }
+
+  @Patch('kps/:id')
+  editKp(@Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest) {
+    return this.org.editKp(id, body, req.session!.user!);
   }
 
   @Post('packs')

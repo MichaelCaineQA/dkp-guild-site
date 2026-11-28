@@ -8,6 +8,7 @@ import {
   RANKS,
   RANK_LABELS,
   can,
+  canMoveOrgMember,
   WEAPONS,
   WEAPON_LABELS,
   formatWeapons,
@@ -57,8 +58,13 @@ type OrgMember = {
   id: string;
   gearScore?: number | null;
   gearScoreStale?: boolean;
+  kp?: { id: string; name: string } | null;
   pack: { id: string; name: string; kp: { id: string; name: string } } | null;
 };
+
+function memberKp(member: OrgMember | undefined) {
+  return member?.kp ?? member?.pack?.kp;
+}
 
 /** «Состав гильдии» (issue #6): таблица с фильтрами, доступна всем членам. */
 export default function RosterPage() {
@@ -69,6 +75,9 @@ export default function RosterPage() {
   const [kpFilter, setKpFilter] = useState('');
   const [packFilter, setPackFilter] = useState('');
   const [transfer, setTransfer] = useState<RosterRow | null>(null);
+  const [draggedMember, setDraggedMember] = useState<RosterRow | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [orgRevision, setOrgRevision] = useState(0);
   const [rankFilter, setRankFilter] = useState<Rank | ''>('');
   const [roleFilter, setRoleFilter] = useState<CombatRole | ''>('');
   const [weaponFilter, setWeaponFilter] = useState<Weapon | ''>('');
@@ -92,7 +101,7 @@ export default function RosterPage() {
     const filtered = rows.filter((row) => {
       const member = orgMembers.find((item) => item.id === row.id);
       return (
-        (!kpFilter || member?.pack?.kp.id === kpFilter) &&
+        (!kpFilter || memberKp(member)?.id === kpFilter) &&
         (!packFilter || member?.pack?.id === packFilter)
       );
     });
@@ -102,7 +111,7 @@ export default function RosterPage() {
     return [...filtered].sort((a, b) => {
       const av =
         sortKey === 'kp'
-          ? (orgMembers.find((item) => item.id === a.id)?.pack?.kp.name ?? '')
+          ? (memberKp(orgMembers.find((item) => item.id === a.id))?.name ?? '')
           : sortKey === 'pack'
             ? (orgMembers.find((item) => item.id === a.id)?.pack?.name ?? '')
             : sortKey === 'weapons'
@@ -112,7 +121,7 @@ export default function RosterPage() {
                 : (a[sortKey] ?? '');
       const bv =
         sortKey === 'kp'
-          ? (orgMembers.find((item) => item.id === b.id)?.pack?.kp.name ?? '')
+          ? (memberKp(orgMembers.find((item) => item.id === b.id))?.name ?? '')
           : sortKey === 'pack'
             ? (orgMembers.find((item) => item.id === b.id)?.pack?.name ?? '')
             : sortKey === 'weapons'
@@ -182,7 +191,7 @@ export default function RosterPage() {
     return () => {
       active = false;
     };
-  }, [sessionLoading, user]);
+  }, [sessionLoading, user, orgRevision]);
 
   const canManage = useMemo(
     () =>
@@ -226,6 +235,39 @@ export default function RosterPage() {
       </Page>
     );
   }
+
+  function transferGroups(memberId: string) {
+    const member = orgMembers.find((item) => item.id === memberId);
+    if (!user || !member) return [];
+    const source = { kpId: memberKp(member)?.id ?? null, packId: member.pack?.id ?? null };
+    return groups.filter((group) => canMoveOrgMember(user, group, source));
+  }
+
+  async function dropMember(body: { kpId: string } | { packId: string }) {
+    if (!draggedMember || moving) return;
+    const memberId = draggedMember.id;
+    setDraggedMember(null);
+    setMoving(true);
+    setError(null);
+    try {
+      await api(`/org/members/${encodeURIComponent(memberId)}/transfer`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      setOrgRevision((revision) => revision + 1);
+    } catch {
+      setError('Не удалось переместить участника');
+    } finally {
+      setMoving(false);
+    }
+  }
+
+  const draggedOrgMember = orgMembers.find((item) => item.id === draggedMember?.id);
+  const transferMember = orgMembers.find((item) => item.id === transfer?.id);
+  const showActions =
+    canManage ||
+    can(user, 'org.move_member') ||
+    groups.some((group) => group.leaderId === user.memberId);
 
   return (
     <Page width="wide">
@@ -383,82 +425,104 @@ export default function RosterPage() {
               {(user.isAdmin || user.rank === 'GUILD_LEADER' || user.rank === 'ADMIN') && (
                 <Table.Th>GS</Table.Th>
               )}
-              {canManage && <Table.Th>Действия</Table.Th>}
+              {showActions && <Table.Th>Действия</Table.Th>}
             </tr>
           </thead>
           <tbody>
-            {sortedRows.slice(pageOffset, pageOffset + PAGE_SIZE).map((row) => (
-              <Table.Row key={row.id} onClick={() => setSelected(row)}>
-                <Table.Td>
-                  <span className="flex items-center gap-3">
-                    <Avatar
-                      avatar={row.avatar}
-                      avatarColor={row.avatarColor}
-                      nickname={row.nickname}
-                    />
-                    <a
-                      className="font-semibold text-primary hover:text-accent"
-                      href={`/profiles/${encodeURIComponent(row.id)}`}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {row.nickname}
-                      <GearScoreStale
-                        stale={orgMembers.find((item) => item.id === row.id)?.gearScoreStale}
+            {sortedRows.slice(pageOffset, pageOffset + PAGE_SIZE).map((row) => {
+              const orgMember = orgMembers.find((item) => item.id === row.id);
+              const canTransfer = transferGroups(row.id).length > 0;
+              return (
+                <Table.Row
+                  key={row.id}
+                  onClick={() => setSelected(row)}
+                  draggable={canTransfer && !moving}
+                  onDragStart={(event) => {
+                    if (!canTransfer || moving) {
+                      event.preventDefault();
+                      return;
+                    }
+                    event.dataTransfer.setData('text/plain', row.nickname);
+                    event.dataTransfer.effectAllowed = 'move';
+                    setDraggedMember(row);
+                  }}
+                  onDragEnd={() => setDraggedMember(null)}
+                >
+                  <Table.Td>
+                    <span className="flex items-center gap-3">
+                      <Avatar
+                        avatar={row.avatar}
+                        avatarColor={row.avatarColor}
+                        nickname={row.nickname}
                       />
-                    </a>
-                  </span>
-                </Table.Td>
-                <Table.Td>{RANK_LABELS[row.rank]}</Table.Td>
-                <Table.Td>
-                  {row.combatRole ? (
-                    <Badge tone="accent">{COMBAT_ROLE_LABELS[row.combatRole]}</Badge>
-                  ) : (
-                    <Muted>—</Muted>
-                  )}
-                </Table.Td>
-                <Table.Td>{formatWeapons(row.weapons ?? [])}</Table.Td>
-                <Table.Td>{row.discord ?? <Muted>—</Muted>}</Table.Td>
-                <Table.Td>
-                  {orgMembers.find((item) => item.id === row.id)?.pack?.kp.name ?? '—'}
-                </Table.Td>
-                <Table.Td>
-                  {orgMembers.find((item) => item.id === row.id)?.pack?.name ?? '—'}
-                </Table.Td>
-                {(user.isAdmin || user.rank === 'GUILD_LEADER' || user.rank === 'ADMIN') && (
-                  <Table.Td>
-                    {orgMembers.find((item) => item.id === row.id)?.gearScore ?? '—'}
+                      <a
+                        className="font-semibold text-primary hover:text-accent"
+                        href={`/profiles/${encodeURIComponent(row.id)}`}
+                        draggable={false}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {row.nickname}
+                        <GearScoreStale
+                          stale={orgMembers.find((item) => item.id === row.id)?.gearScoreStale}
+                        />
+                      </a>
+                    </span>
                   </Table.Td>
-                )}
-                {canManage && (
+                  <Table.Td>{RANK_LABELS[row.rank]}</Table.Td>
                   <Table.Td>
-                    {/* Строка таблицы не получает фокус — клик по ней работает только мышью.
+                    {row.combatRole ? (
+                      <Badge tone="accent">{COMBAT_ROLE_LABELS[row.combatRole]}</Badge>
+                    ) : (
+                      <Muted>—</Muted>
+                    )}
+                  </Table.Td>
+                  <Table.Td>{formatWeapons(row.weapons ?? [])}</Table.Td>
+                  <Table.Td>{row.discord ?? <Muted>—</Muted>}</Table.Td>
+                  <Table.Td>{memberKp(orgMember)?.name ?? '—'}</Table.Td>
+                  <Table.Td>
+                    {orgMembers.find((item) => item.id === row.id)?.pack?.name ?? '—'}
+                  </Table.Td>
+                  {(user.isAdmin || user.rank === 'GUILD_LEADER' || user.rank === 'ADMIN') && (
+                    <Table.Td>
+                      {orgMembers.find((item) => item.id === row.id)?.gearScore ?? '—'}
+                    </Table.Td>
+                  )}
+                  {showActions && (
+                    <Table.Td>
+                      {/* Строка таблицы не получает фокус — клик по ней работает только мышью.
                         Кнопка открывает то же окно участника с клавиатуры (#299). На компьютере
                         кнопки в столбик — столбец остаётся узким и не теснит соседние; на
                         телефоне они высокие (44 px) и идут в строку, чтобы не тянуть строку. */}
-                    <div className="flex flex-nowrap gap-2 md:flex-col md:items-start md:gap-0.5">
-                      <Button
-                        aria-label={`Изменить участника ${row.nickname}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setSelected(row);
-                        }}
-                      >
-                        Изменить
-                      </Button>
-                      <Button
-                        aria-label={`Переместить участника ${row.nickname}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setTransfer(row);
-                        }}
-                      >
-                        Переместить
-                      </Button>
-                    </div>
-                  </Table.Td>
-                )}
-              </Table.Row>
-            ))}
+                      <div className="flex flex-nowrap gap-2 md:flex-col md:items-start md:gap-0.5">
+                        {canManage && (
+                          <Button
+                            aria-label={`Изменить участника ${row.nickname}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelected(row);
+                            }}
+                          >
+                            Изменить
+                          </Button>
+                        )}
+                        {canTransfer && (
+                          <Button
+                            disabled={moving}
+                            aria-label={`Переместить участника ${row.nickname}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setTransfer(row);
+                            }}
+                          >
+                            Переместить
+                          </Button>
+                        )}
+                      </div>
+                    </Table.Td>
+                  )}
+                </Table.Row>
+              );
+            })}
             {sortedRows.length === 0 && (
               <tr>
                 <Table.Td colSpan={5}>
@@ -492,19 +556,52 @@ export default function RosterPage() {
         )}
       </Card>
 
+      {draggedMember && (
+        <Card className="fixed inset-x-4 bottom-4 z-40 mx-auto max-h-[40vh] max-w-4xl space-y-3 overflow-auto">
+          <p>Куда переместить {draggedMember.nickname}</p>
+          {transferGroups(draggedMember.id).map((group) => (
+            <div key={group.id} className="flex flex-wrap gap-2">
+              <Button
+                disabled={!draggedOrgMember?.pack && memberKp(draggedOrgMember)?.id === group.id}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  if (draggedOrgMember?.pack || memberKp(draggedOrgMember)?.id !== group.id)
+                    void dropMember({ kpId: group.id });
+                }}
+              >
+                {group.name} · Без пака
+              </Button>
+              {group.packs.map((pack) => (
+                <Button
+                  key={pack.id}
+                  disabled={draggedOrgMember?.pack?.id === pack.id}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (draggedOrgMember?.pack?.id !== pack.id)
+                      void dropMember({ packId: pack.id });
+                  }}
+                >
+                  {group.name} · {pack.name}
+                </Button>
+              ))}
+            </div>
+          ))}
+        </Card>
+      )}
+
       {transfer && (
         <TransferMemberModal
           memberId={transfer.id}
           memberName={transfer.nickname}
-          groups={groups}
-          currentPackId={orgMembers.find((item) => item.id === transfer.id)?.pack?.id}
+          groups={transferGroups(transfer.id)}
+          currentKpId={memberKp(transferMember)?.id}
+          currentPackId={transferMember?.pack?.id}
           onClose={() => setTransfer(null)}
           onTransferred={() => {
             setTransfer(null);
-            void api<{ groups: OrgGroup[]; members: OrgMember[] }>('/org/roster').then((data) => {
-              setGroups(data.groups);
-              setOrgMembers(data.members);
-            });
+            setOrgRevision((revision) => revision + 1);
           }}
         />
       )}
