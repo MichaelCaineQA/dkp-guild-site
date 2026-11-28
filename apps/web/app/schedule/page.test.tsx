@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { WeekEvent } from '@dkp/shared';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SchedulePage from './page';
 
@@ -30,20 +31,19 @@ const GAME_TIME = {
   gameTimeNightMinutes: 30,
 };
 
-function eventFixture(overrides: Record<string, unknown> = {}) {
-  // Дата в текущем месяце, чтобы попала в календарь и «ближайшие».
-  const now = new Date();
-  const startsAt = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), Math.min(now.getUTCDate() + 1, 27), 17),
-  );
+function eventFixture({
+  startsAt = new Date(2026, 0, 6, 17).toISOString(),
+  ...overrides
+}: Partial<WeekEvent> = {}): WeekEvent {
   return {
     id: 'e-1',
+    name: '',
     eventTypeId: 'et-1',
     eventTypeName: 'Гильдбосс',
     mode: 'PVE',
     status: 'PLANNED',
-    startsAt: startsAt.toISOString(),
-    endsAt: new Date(startsAt.getTime() + 2 * 60 * 60 * 1000).toISOString(),
+    startsAt,
+    endsAt: new Date(+new Date(startsAt) + 2 * 60 * 60 * 1000).toISOString(),
     dkpReward: 10,
     raidLeadId: 'm-rl',
     raidLeadName: 'РЛ',
@@ -53,12 +53,16 @@ function eventFixture(overrides: Record<string, unknown> = {}) {
     scopeName: 'Вся гильдия',
     place: null,
     notes: null,
+    invitedCount: 12,
+    attendingCount: 10,
+    canDecline: false,
     ...overrides,
   };
 }
 
 describe('SchedulePage', () => {
   beforeEach(() => {
+    vi.setSystemTime(new Date(2026, 0, 5, 12));
     HTMLDialogElement.prototype.showModal = function () {
       this.setAttribute('open', '');
     };
@@ -88,8 +92,7 @@ describe('SchedulePage', () => {
           windowClosesAt: '2026-03-03T17:00:00Z',
         };
       }
-      if (path.startsWith('/schedule/week'))
-        return [eventFixture({ invitedCount: 12, attendingCount: 10 })];
+      if (path.startsWith('/schedule/week')) return [eventFixture()];
       if (path.startsWith('/events')) {
         return [eventFixture()];
       }
@@ -105,6 +108,7 @@ describe('SchedulePage', () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
   });
 
   it('рядовой видит неделю, счётчик и подсказку выбора, без кнопок управления', async () => {
@@ -166,6 +170,76 @@ describe('SchedulePage', () => {
 
     expect(await screen.findByText(/отправьте заявку на привязку ника/)).toBeDefined();
     expect(api).not.toHaveBeenCalled();
+  });
+
+  it('группирует события по локальным дням и сортирует их по времени начала', async () => {
+    mockSession({ userId: 'u', memberId: 'm3', rank: 'MEMBER', isAdmin: false });
+    const mockApi = vi.mocked(api).getMockImplementation()!;
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (!path.startsWith('/schedule/week')) return mockApi(path);
+      return [
+        eventFixture({
+          id: 'sunday',
+          name: 'Осада',
+          startsAt: new Date(2026, 0, 11, 23, 30).toISOString(),
+        }),
+        eventFixture({
+          id: 'late',
+          name: 'Вечерний сбор',
+          startsAt: new Date(2026, 0, 5, 21).toISOString(),
+        }),
+        eventFixture({ id: 'finished', name: 'Завершённый босс', status: 'FINISHED' }),
+        eventFixture({
+          id: 'early',
+          name: 'Ранний сбор',
+          status: 'RUNNING',
+          startsAt: new Date(2026, 0, 5, 0, 30).toISOString(),
+        }),
+      ];
+    });
+
+    render(<SchedulePage />);
+
+    const monday = await screen.findByRole('heading', { name: /понедельник, 5 января/i });
+    const sunday = screen.getByRole('heading', { name: /воскресенье, 11 января/i });
+    const [mondayEvents, sundayEvents] = screen.getAllByRole('list');
+    expect(screen.getAllByRole('heading', { level: 2 })).toEqual([monday, sunday]);
+    expect(within(mondayEvents).getAllByRole('button')).toEqual([
+      screen.getByRole('button', { name: /00:30.*Ранний сбор/ }),
+      screen.getByRole('button', { name: /21:00.*Вечерний сбор/ }),
+    ]);
+    expect(within(sundayEvents).getByRole('button', { name: /23:30.*Осада/ })).toBeDefined();
+    expect(screen.queryByText('Завершённый босс')).toBeNull();
+  });
+
+  it('показывает пустое состояние недели из завершённых ивентов, доступных в календаре', async () => {
+    mockSession({ userId: 'u', memberId: 'm3', rank: 'MEMBER', isAdmin: false });
+    const mockApi = vi.mocked(api).getMockImplementation()!;
+    const finished = eventFixture({
+      name: 'Завершённый босс',
+      status: 'FINISHED',
+      startsAt: new Date(2026, 0, 13, 17).toISOString(),
+      endsAt: new Date(2026, 0, 13, 19).toISOString(),
+    });
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path.startsWith('/schedule/week?')) {
+        const from = new URLSearchParams(path.split('?')[1]).get('from');
+        if (from === new Date(2026, 0, 12).toISOString()) return [finished];
+      }
+      if (path.startsWith('/events?')) return [finished];
+      return mockApi(path);
+    });
+
+    render(<SchedulePage />);
+    await screen.findByText(/РЛ: РЛ · 10 ДКП/);
+    fireEvent.click(screen.getByRole('button', { name: 'Следующая неделя' }));
+
+    expect(await screen.findByText('На этой неделе событий нет')).toBeDefined();
+    expect(screen.queryByText('Завершённый босс')).toBeNull();
+    expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Календарь' }));
+    await screen.findByTitle(/^Завершённый босс · 17:00/);
   });
 
   it.each(['MEMBER', 'OFFICER'])(
