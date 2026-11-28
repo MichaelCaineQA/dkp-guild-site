@@ -5,6 +5,7 @@ import {
   can,
   canManageEvent,
   getLocalWeekBounds,
+  groupEventsByLocalDay,
   localDayKey,
   splitIntoPhaseSegments,
   type DashboardEvent as EventRow,
@@ -36,6 +37,11 @@ interface EventTypeRow {
 }
 const MODE_LABELS: Record<EventMode, string> = { PVE: 'PvE', PVP: 'PvP' };
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const weekDayFormat = new Intl.DateTimeFormat('ru-RU', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+});
 // Тот же порог, что у lg:grid-cols-2 в ScheduleColumns.
 const twoColumns = '(min-width: 64rem)';
 
@@ -101,8 +107,10 @@ export default function SchedulePage() {
         ),
       ]);
       if (request !== generation.current) return;
-      setEvents(data);
-      setWeekEvents(view === 'week' ? (data as WeekEvent[]) : []);
+      const visibleWeekEvents =
+        view === 'week' ? (data as WeekEvent[]).filter((event) => event.status !== 'FINISHED') : [];
+      setEvents(view === 'week' ? visibleWeekEvents : data);
+      setWeekEvents(visibleWeekEvents);
       setEventTypes(types);
       setGameTime({
         anchor: new Date(time.gameTimeAnchor),
@@ -143,6 +151,7 @@ export default function SchedulePage() {
       </Page>
     );
   const week = getLocalWeekBounds(weekCursor);
+  const weekEventsByDay = groupEventsByLocalDay(weekEvents);
   const lastDay = new Date(week.end);
   lastDay.setDate(lastDay.getDate() - 1);
   const detail =
@@ -278,18 +287,27 @@ export default function SchedulePage() {
             list={
               <Card>
                 {weekEvents.length === 0 && <Muted>На этой неделе событий нет</Muted>}
-                <ul className="flex flex-col gap-2">
-                  {weekEvents.map((event) => (
-                    <li key={event.id}>
-                      <WeekEventButton
-                        event={event}
-                        selected={selectedId === event.id}
-                        onSelect={() => setSelectedId(event.id)}
-                        onDecline={() => setDecliningId(event.id)}
-                      />
-                    </li>
+                <div className="flex flex-col gap-4">
+                  {Array.from(weekEventsByDay, ([day, dayEvents]) => (
+                    <div key={day}>
+                      <h2 className="mb-2 text-sm font-semibold text-secondary first-letter:uppercase">
+                        {weekDayFormat.format(new Date(dayEvents[0].startsAt))}
+                      </h2>
+                      <ul className="flex flex-col gap-2">
+                        {dayEvents.map((event) => (
+                          <li key={event.id}>
+                            <WeekEventButton
+                              event={event}
+                              selected={selectedId === event.id}
+                              onSelect={() => setSelectedId(event.id)}
+                              onDecline={() => setDecliningId(event.id)}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </Card>
             }
             detail={

@@ -122,24 +122,21 @@ export function WeekEventButton({
   onSelect: () => void;
   onDecline: () => void;
 }) {
-  const past = +new Date(event.endsAt) <= Date.now() || event.status === 'FINISHED';
+  const past = +new Date(event.endsAt) <= Date.now();
   // Цветная полоса слева по статусу ивента (как на референсе расписания)
   const statusBar: Record<string, string> = {
     PLANNED: 'shadow-[inset_3px_0_0_0_var(--status-warning)]',
     RUNNING: 'shadow-[inset_3px_0_0_0_var(--accent-cyan)]',
-    FINISHED: 'shadow-[inset_3px_0_0_0_var(--status-success)]',
     CANCELLED: 'shadow-[inset_3px_0_0_0_var(--text-muted)]',
   };
   const statusBadge: Record<string, 'success' | 'accent' | 'warning' | 'neutral'> = {
     PLANNED: 'warning',
     RUNNING: 'accent',
-    FINISHED: 'success',
     CANCELLED: 'neutral',
   };
   const statusLabel: Record<string, string> = {
     PLANNED: 'Запланирован',
     RUNNING: 'Идёт',
-    FINISHED: 'Завершён',
     CANCELLED: 'Отменён',
   };
   return (
@@ -155,10 +152,7 @@ export function WeekEventButton({
       >
         <span className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-sm text-secondary">
-            {new Date(event.startsAt).toLocaleString('ru-RU', {
-              weekday: 'short',
-              day: 'numeric',
-              month: 'short',
+            {new Date(event.startsAt).toLocaleTimeString('ru-RU', {
               hour: '2-digit',
               minute: '2-digit',
             })}
