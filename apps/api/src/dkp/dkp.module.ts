@@ -3,12 +3,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DkpController } from './dkp.controller';
 import { DkpService, type DkpDb } from './dkp.service';
 import { AdminGrantService } from './admin-grant.service';
+import { DkpDecayScheduler } from './dkp-decay.scheduler';
 
 /** Журнал ДКП (issue #12) — чтение, append-only. */
 @Module({
   controllers: [DkpController],
   providers: [
     PrismaService,
+    DkpDecayScheduler,
     {
       provide: AdminGrantService,
       useFactory: (prisma: PrismaService) => new AdminGrantService(prisma),

@@ -26,6 +26,7 @@ interface MemberRow {
 const TYPE_LABELS: Record<string, string> = {
   CHECKIN_EARN: 'чек-ин',
   RAID_LEAD_BONUS: 'За ведение рейда',
+  WEEKLY_DECAY: 'Еженедельное сгорание',
   MANUAL_EARN: 'ручное',
   AUCTION_SPEND: 'аукцион',
   ADJUSTMENT: 'корректировка',

@@ -34,6 +34,7 @@ const CHECKIN_CSV: Record<string, string> = {
 const DKP_TYPE_CSV: Record<string, string> = {
   CHECKIN_EARN: 'Чек-ин',
   RAID_LEAD_BONUS: 'За ведение рейда',
+  WEEKLY_DECAY: 'Еженедельное сгорание',
   MANUAL_EARN: 'Ручное начисление',
   AUCTION_SPEND: 'Покупка на аукционе',
   ADJUSTMENT: 'Корректировка',
@@ -386,14 +387,23 @@ export function dkpCsv(
     );
   }
   if (table === 'without-event') {
+    const showDecay = !!report.withoutEvent.totals.decayed;
     return toCsvFile(
       meta,
-      ['Игрок', 'Начислено', 'Потрачено', 'Корректировки', 'Итого'],
+      [
+        'Игрок',
+        'Начислено',
+        'Потрачено',
+        'Корректировки',
+        ...(showDecay ? ['Сгорело'] : []),
+        'Итого',
+      ],
       report.withoutEvent.members.map((row) => [
         row.nickname,
         row.totals.earned,
         row.totals.spent,
         row.totals.adjustments,
+        ...(showDecay ? [row.totals.decayed ?? 0] : []),
         row.totals.net,
       ]),
     );

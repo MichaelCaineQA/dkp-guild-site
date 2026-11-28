@@ -118,6 +118,7 @@ enum DkpEntryType {
   RAID_LEAD_BONUS // бонус РЛ за ведение ивента
   MANUAL_EARN // ручное начисление РЛ
   AUCTION_SPEND // трата на аукционе (с наценкой «чужому» классу, если применимо)
+  WEEKLY_DECAY // еженедельное сгорание ДКП
   ADJUSTMENT // корректировка — новая запись, не правка старой
 }
 
@@ -672,6 +673,17 @@ model RulesPageVersion {
 model Setting {
   key String @id
   value Json
+}
+
+/// Процент, вступающий в силу с указанного понедельника по Москве.
+model DkpDecayRate {
+  effectiveAt DateTime @id
+  percent Int
+}
+
+/// Отметка обработанного понедельника, включая недели без списаний.
+model DkpDecayRun {
+  scheduledAt DateTime @id
 }
 
 /// Квитанция применения итогов: повтор одного запроса не выдаёт ДКП заново.

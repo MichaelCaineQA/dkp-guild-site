@@ -11,6 +11,15 @@ import { isEventInvitee, type ScopedEvent } from './week';
 const DAY = 86_400_000;
 const MOSCOW_OFFSET = 3 * 60 * 60 * 1000;
 
+/** Границы текущей московской недели, понедельник 00:00. */
+export function moscowWeekBounds(now: Date): { start: Date; end: Date } {
+  const moscow = new Date(+now + MOSCOW_OFFSET);
+  const daysSinceMonday = (moscow.getUTCDay() + 6) % 7;
+  moscow.setUTCHours(0, 0, 0, 0);
+  const start = +moscow - daysSinceMonday * DAY - MOSCOW_OFFSET;
+  return { start: new Date(start), end: new Date(start + 7 * DAY) };
+}
+
 const calendarDate = z.iso.date();
 
 /** Calendar dates are inclusive; timestamps in the resolved period are half-open. */

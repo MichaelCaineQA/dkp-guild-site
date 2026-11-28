@@ -13,6 +13,7 @@ import {
   ErrorText,
   Input,
   Modal,
+  Muted,
   Notice,
   SectionTitle,
   SettingsField,
@@ -76,19 +77,20 @@ export function SettingsEditor({
 }) {
   const groups = new Map<string, SettingKey[]>();
   for (const key of Object.keys(SETTINGS_REGISTRY) as SettingKey[]) {
-    const title = key.endsWith('SharePct')
-      ? 'ДКП'
-      : key.startsWith('checkin.')
-        ? 'Чек-ин'
-        : key.startsWith('absence.')
-          ? 'Отсутствия'
-          : key.startsWith('discord.')
-            ? 'Discord'
-            : key.startsWith('auction.')
-              ? 'Аукцион'
-              : key.startsWith('profile.')
-                ? 'Профиль и GS'
-                : 'Общие';
+    const title =
+      key.startsWith('dkp.') || key.endsWith('SharePct')
+        ? 'ДКП'
+        : key.startsWith('checkin.')
+          ? 'Чек-ин'
+          : key.startsWith('absence.')
+            ? 'Отсутствия'
+            : key.startsWith('discord.')
+              ? 'Discord'
+              : key.startsWith('auction.')
+                ? 'Аукцион'
+                : key.startsWith('profile.')
+                  ? 'Профиль и GS'
+                  : 'Общие';
     groups.set(title, [...(groups.get(title) ?? []), key]);
   }
   return (
@@ -165,7 +167,13 @@ function NumberSettingsGroup({
           <Input
             id={key}
             aria-invalid={!!errors[key]}
-            aria-describedby={errors[key] ? `${key}-error` : undefined}
+            aria-describedby={
+              errors[key]
+                ? `${key}-error`
+                : key === 'dkp.weeklyDecayPct'
+                  ? `${key}-hint`
+                  : undefined
+            }
             type="number"
             step={1}
             className="w-40"
@@ -176,6 +184,11 @@ function NumberSettingsGroup({
               setMessage('');
             }}
           />
+          {key === 'dkp.weeklyDecayPct' && (
+            <div id={`${key}-hint`}>
+              <Muted>По понедельникам в 00:00 МСК. 0% отключает сгорание.</Muted>
+            </div>
+          )}
         </SettingsField>
       ))}
       <div className="flex flex-wrap gap-3">

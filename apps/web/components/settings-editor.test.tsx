@@ -43,6 +43,18 @@ it('без изменений нет Сохранить, есть отдельн
   expect(screen.getAllByRole('spinbutton')).toHaveLength(Object.keys(SETTING_DEFAULTS).length + 2);
   expect(screen.getByRole('region', { name: 'ДКП' })).toBeDefined();
 });
+it('сохраняет процент сгорания из раздела ДКП', async () => {
+  render(<Form />);
+  const region = within(screen.getByRole('region', { name: 'ДКП' }));
+  expect(field(/^Еженедельное сгорание/).value).toBe('0');
+  change(/^Еженедельное сгорание/, '100');
+  fireEvent.click(region.getByRole('button', { name: 'Сохранить' }));
+  await region.findByText('Сохранено');
+  expect(api).toHaveBeenLastCalledWith('/settings', {
+    method: 'PUT',
+    body: JSON.stringify({ 'dkp.weeklyDecayPct': 100 }),
+  });
+});
 it('ошибка у поля берётся из общего реестра; возвращение значения убирает Сохранить', () => {
   render(<Form />);
   change(/^Окно выбора кода/, '0');
