@@ -23,10 +23,14 @@ const actor = (partial: Partial<PermissionActor>): PermissionActor => ({
 const ALL_RANKS: Rank[] = ['GUILD_LEADER', 'ADMIN', 'OFFICER', 'MEMBER'];
 
 /** Ожидания матрицы 2.6: право → кто может (кроме РЛ ивента и админа). */
-const EXPECTED: Partial<Record<Permission, Rank[]>> = {
+const EXPECTED: Record<Permission, Rank[]> = {
   'members.manage': ['GUILD_LEADER', 'ADMIN'],
   'members.change_rank': ['GUILD_LEADER', 'ADMIN'],
   'members.view_roster': ALL_RANKS,
+  'org.create_kp': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
+  'org.create_pack': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
+  'org.edit_kp': ['GUILD_LEADER', 'ADMIN'],
+  'org.move_member': ['GUILD_LEADER', 'ADMIN', 'OFFICER'],
   'link_requests.review': ['GUILD_LEADER', 'ADMIN'],
   'settings.manage': ['GUILD_LEADER', 'ADMIN'],
   'rules.edit': ['GUILD_LEADER', 'ADMIN'],
@@ -49,10 +53,9 @@ describe('can: матрица прав 2.6', () => {
   for (const permission of PERMISSIONS) {
     const allowed = EXPECTED[permission];
     it(`${permission}: точно заявленным рангам`, () => {
-      expect(allowed, `пропиши ожидание для ${permission}`).toBeDefined();
       for (const rank of ALL_RANKS) {
         const verdict = can(actor({ rank }), permission);
-        expect(verdict, `${rank} × ${permission}`).toBe(allowed!.includes(rank));
+        expect(verdict, `${rank} × ${permission}`).toBe(allowed.includes(rank));
       }
     });
   }

@@ -21,6 +21,23 @@ import {
 } from '@dkp/shared';
 import type { AuditWriter } from '../members/members.service';
 
+type AbsenceGroup = {
+  pack?: { leaderId: string | null; kp: { leaderId: string | null } } | null;
+  directKp?: { leaderId: string | null } | null;
+};
+const absenceGroupFields = {
+  pack: { select: { leaderId: true, kp: { select: { leaderId: true } } } },
+  directKp: { select: { leaderId: true } },
+} as const;
+
+function leadsMember(actorId: string | null | undefined, member?: AbsenceGroup): boolean {
+  return (
+    !!actorId &&
+    (member?.pack?.leaderId === actorId ||
+      (member?.pack?.kp.leaderId ?? member?.directKp?.leaderId) === actorId)
+  );
+}
+
 /** Строка заявки для списков. */
 export interface AbsenceRow {
   id: string;
@@ -45,6 +62,7 @@ export interface AbsencesDb {
         id: true;
         nickname: true;
         packId: true;
+        directKp: { select: { id: true; leaderId: true } };
         pack: { select: { kpId: true; leaderId: true; kp: { select: { leaderId: true } } } };
       };
     }): Promise<
@@ -52,6 +70,7 @@ export interface AbsencesDb {
         id: string;
         nickname: string;
         packId: string | null;
+        directKp?: { id: string; leaderId: string | null } | null;
         pack: { kpId: string; leaderId: string | null; kp: { leaderId: string | null } } | null;
       }>
     >;
@@ -72,10 +91,7 @@ export interface AbsencesDb {
       orderBy: { dateFrom: 'desc' };
       include: {
         member: {
-          select: {
-            nickname: true;
-            pack?: { select: { leaderId: true; kp: { select: { leaderId: true } } } };
-          };
+          select: { nickname: true } & typeof absenceGroupFields;
         };
         seenBy: { select: { actorKey: true } };
         event?: { select: { startsAt: true; endsAt: true; name: true } };
@@ -92,10 +108,7 @@ export interface AbsencesDb {
         allDay?: boolean;
         reason: string;
         status: string;
-        member: {
-          nickname: string;
-          pack?: { leaderId: string | null; kp: { leaderId: string | null } } | null;
-        };
+        member: { nickname: string } & AbsenceGroup;
         seenBy: Array<{ actorKey: string }>;
       }>
     >;
@@ -103,7 +116,7 @@ export interface AbsencesDb {
       where: { id: string };
       include?: {
         member: {
-          select: { pack: { select: { leaderId: true; kp: { select: { leaderId: true } } } } };
+          select: typeof absenceGroupFields;
         };
       };
     }): Promise<{
@@ -114,7 +127,7 @@ export interface AbsencesDb {
       dateTo: Date;
       eligibleFrom?: Date | null;
       status: string;
-      member?: { pack: { leaderId: string | null; kp: { leaderId: string | null } } | null };
+      member?: AbsenceGroup;
     } | null>;
     create(args: {
       data: {
@@ -194,15 +207,12 @@ export class AbsencesService {
         id: true,
         nickname: true,
         packId: true,
+        directKp: { select: { id: true, leaderId: true } },
         pack: { select: { kpId: true, leaderId: true, kp: { select: { leaderId: true } } } },
       },
     });
     return members
-      .filter(
-        (m) =>
-          m.id !== actor.memberId &&
-          (m.pack?.leaderId === actor.memberId || m.pack?.kp.leaderId === actor.memberId),
-      )
+      .filter((m) => m.id !== actor.memberId && leadsMember(actor.memberId, m))
       .map(({ id, nickname }) => ({ id, nickname }));
   }
 
@@ -215,7 +225,7 @@ export class AbsencesService {
         member: {
           select: {
             nickname: true,
-            pack: { select: { leaderId: true, kp: { select: { leaderId: true } } } },
+            ...absenceGroupFields,
           },
         },
         seenBy: { select: { actorKey: true } },
@@ -227,9 +237,7 @@ export class AbsencesService {
         (row) =>
           !actor ||
           can({ ...actor, rank: actor.rank as never }, 'absence.see') ||
-          (!!actor.memberId &&
-            (actor.memberId === row.member.pack?.leaderId ||
-              actor.memberId === row.member.pack?.kp.leaderId)),
+          leadsMember(actor.memberId, row.member),
       )
       .map((row) => ({
         id: row.id,
@@ -354,15 +362,14 @@ export class AbsencesService {
         where: { id },
         include: {
           member: {
-            select: { pack: { select: { leaderId: true, kp: { select: { leaderId: true } } } } },
+            select: absenceGroupFields,
           },
         },
       });
       if (!absence) throw new NotFoundException('Заявка не найдена');
       if (
         !can({ ...actor, rank: actor.rank as never }, 'absence.see') &&
-        actor.memberId !== absence.member?.pack?.leaderId &&
-        actor.memberId !== absence.member?.pack?.kp.leaderId
+        !leadsMember(actor.memberId, absence.member)
       )
         throw new ForbiddenException('Отметка «Увидел» недоступна');
       const result = await tx.absenceSeen.createMany({
@@ -413,7 +420,7 @@ export class AbsencesService {
         member: {
           select: {
             nickname: true,
-            pack: { select: { leaderId: true, kp: { select: { leaderId: true } } } },
+            ...absenceGroupFields,
           },
         },
         seenBy: { select: { actorKey: true } },
@@ -432,12 +439,15 @@ export class AbsencesService {
           id: true,
           nickname: true,
           packId: true,
+          directKp: { select: { id: true, leaderId: true } },
           pack: { select: { kpId: true, leaderId: true, kp: { select: { leaderId: true } } } },
         },
       });
       invitedIds = new Set(
         members
-          .filter((m) => isEventInvitee(event, { ...m, kpId: m.pack?.kpId ?? null }))
+          .filter((m) =>
+            isEventInvitee(event, { ...m, kpId: m.pack?.kpId ?? m.directKp?.id ?? null }),
+          )
           .map((m) => m.id),
       );
     }
@@ -455,18 +465,14 @@ export class AbsencesService {
         canMarkSeen:
           !!actor &&
           (can({ ...actor, rank: actor.rank as never }, 'absence.see') ||
-            (!!actor.memberId &&
-              (actor.memberId === absence.member.pack?.leaderId ||
-                actor.memberId === absence.member.pack?.kp.leaderId))),
+            leadsMember(actor.memberId, absence.member)),
         reason:
           actor &&
           (actor.isAdmin ||
             actor.rank === 'ADMIN' ||
             actor.rank === 'GUILD_LEADER' ||
             actor.memberId === absence.memberId ||
-            (!!actor.memberId &&
-              (actor.memberId === absence.member.pack?.leaderId ||
-                actor.memberId === absence.member.pack?.kp.leaderId)))
+            leadsMember(actor.memberId, absence.member))
             ? absence.reason
             : null,
         seenBy: absence.seenBy.map((s) => s.actorKey),

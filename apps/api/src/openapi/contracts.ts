@@ -171,12 +171,13 @@ export const contracts: Record<string, Contract> = {
           {
             id: str,
             nickname: str,
+            kp: { type: 'object', nullable: true, additionalProperties: true },
             pack: { type: 'object', nullable: true, additionalProperties: true },
             gearScore: { type: 'number', nullable: true },
             gearScoreStale: { type: 'boolean' },
             screenshotIds: array(str),
           },
-          ['id', 'nickname', 'pack'],
+          ['id', 'nickname', 'kp', 'pack'],
         ),
       ),
     }),
@@ -186,17 +187,22 @@ export const contracts: Record<string, Contract> = {
   ),
   Org_createKp: c('Создать КП', 'OrgKp', {
     body: 'OrgCreateKp',
-    access: leader,
+    access: 'Глава, Админ, Офицер. Перенос существующих паков — Глава и Админ.',
+    errors: [400, 403, 404, 409],
+  }),
+  Org_editKp: c('Изменить название КП', 'OrgKp', {
+    body: 'OrgEditKp',
+    access: 'Глава, Админ или лидер выбранной КП.',
     errors: [400, 403, 404, 409],
   }),
   Org_createPack: c('Создать пак', 'OrgPack', {
     body: 'OrgCreatePack',
-    access: 'Глава, администратор или лидер выбранной КП.',
+    access: 'Глава, Админ, Офицер или лидер выбранной КП.',
     errors: [400, 403, 404, 409],
   }),
   Org_moveMember: c('Перевести участника', 'Ok', {
     body: 'OrgMoveMember',
-    access: leader,
+    access: 'Глава, Админ, Офицер. Лидер выбранной КП может добавить участника без КП и пака.',
     errors: [400, 403, 404, 409],
   }),
   Org_movePack: c('Перевести пак', 'Ok', {

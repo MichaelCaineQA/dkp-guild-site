@@ -80,10 +80,14 @@ suite('Управление оргструктурой в PostgreSQL', () => {
     pack1 = p.id;
     pack2 = q.id;
     packs.push(pack1, pack2);
-    const m = await db.member.create({ data: { nickname: `org-${suffix}`, packId: pack1 } });
+    const user = await db.user.create({ data: { username: `org-user-${suffix}` } });
+    users.push(user.id);
+    const m = await db.member.create({
+      data: { nickname: `org-${suffix}`, packId: pack1, userId: user.id },
+    });
     memberId = m.id;
     members.push(memberId);
-    actor = { ...admin, memberId, isAdmin: false, rank: 'MEMBER' };
+    actor = { ...admin, userId: user.id, memberId, isAdmin: false, rank: 'MEMBER' };
   });
 
   afterAll(async () => {
@@ -142,10 +146,6 @@ suite('Управление оргструктурой в PostgreSQL', () => {
   });
 
   it('HTTP выдаёт GS только при выборе своей группы', async () => {
-    const user = await db.user.create({ data: { username: `org-http-${randomUUID()}` } });
-    users.push(user.id);
-    await db.member.update({ where: { id: memberId }, data: { userId: user.id } });
-    actor.userId = user.id;
     await db.gearScoreRecord.create({
       data: { memberId, value: 4321, screenshotIds: ['gs-http'] },
     });
@@ -257,17 +257,120 @@ suite('Управление оргструктурой в PostgreSQL', () => {
     ).not.toBeNull();
   });
 
-  it('лидер КП создаёт пак с игроком своей КП и назначает ему лидера', async () => {
+  it('лидер КП создаёт пак с игроком без КП и пака и назначает его лидером пака', async () => {
     await db.kP.update({ where: { id: kp1 }, data: { leaderId: memberId } });
+    const recruit = await db.member.create({ data: { nickname: `org-recruit-${randomUUID()}` } });
+    members.push(recruit.id);
     const result = await service.createPack(
-      { name: 'Новый пак', kpId: kp1, memberIds: [memberId] },
+      { name: 'Новый пак', kpId: kp1, memberIds: [recruit.id] },
       actor,
     );
     packs.push(result.id);
-    expect((await db.member.findUniqueOrThrow({ where: { id: memberId } })).packId).toBe(result.id);
-    // Лидер КП при собственном переносе теряет назначение; админ назначает лидера пака.
-    await service.setPackLeader(result.id, { memberId }, admin);
-    expect((await db.pack.findUniqueOrThrow({ where: { id: result.id } })).leaderId).toBe(memberId);
+    expect((await db.member.findUniqueOrThrow({ where: { id: recruit.id } })).packId).toBe(
+      result.id,
+    );
+    await service.setPackLeader(result.id, { memberId: recruit.id }, actor);
+    expect((await db.pack.findUniqueOrThrow({ where: { id: result.id } })).leaderId).toBe(
+      recruit.id,
+    );
+  });
+
+  it('HTTP принимает новое название своей КП от рядового, назначенного лидером', async () => {
+    await db.kP.update({ where: { id: kp1 }, data: { leaderId: memberId } });
+    const response = await fetch(`${baseUrl}/org/kps/${kp1}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', 'x-test-member': '1' },
+      body: JSON.stringify({ name: 'Новое название' }),
+    });
+    expect(response.status).toBe(200);
+    expect((await db.kP.findUniqueOrThrow({ where: { id: kp1 } })).name).toBe('Новое название');
+  });
+
+  it('лидер КП получает отказ при редактировании другой КП', async () => {
+    await db.kP.update({ where: { id: kp1 }, data: { leaderId: memberId } });
+    await expect(service.editKp(kp2, { name: 'Чужая КП' }, actor)).rejects.toMatchObject({
+      status: 403,
+    });
+  });
+
+  it('офицер без назначения лидером создаёт КП и пак в другой КП', async () => {
+    await db.member.update({ where: { id: memberId }, data: { rank: 'OFFICER' } });
+    const kp = await service.createKp({ name: 'Офицерская КП' }, actor);
+    kps.push(kp.id);
+    const pack = await service.createPack({ name: 'Офицерский пак', kpId: kp2 }, actor);
+    packs.push(pack.id);
+    expect(kp.name).toBe('Офицерская КП');
+    expect(pack.kpId).toBe(kp2);
+  });
+
+  it('право офицера сохраняется при назначении лидером КП', async () => {
+    await db.member.update({ where: { id: memberId }, data: { rank: 'OFFICER' } });
+    await db.kP.update({ where: { id: kp1 }, data: { leaderId: memberId } });
+    await service.moveMember(memberId, { kpId: kp2 }, actor);
+    await service.moveMember(memberId, { packId: pack1 }, actor);
+    const history = await db.memberPackHistory.findMany({
+      where: { memberId },
+      orderBy: { changedAt: 'asc' },
+    });
+    expect(history).toMatchObject([
+      { previousPackId: pack1, packId: null, directKpId: kp2 },
+      { previousDirectKpId: kp2, packId: pack1, directKpId: null },
+    ]);
+  });
+
+  it('лидер добавляет игрока прямо в свою КП и после этого не может переместить его в пак', async () => {
+    await db.kP.update({ where: { id: kp1 }, data: { leaderId: memberId } });
+    const recruit = await db.member.create({ data: { nickname: `org-direct-${randomUUID()}` } });
+    members.push(recruit.id);
+    await service.moveMember(recruit.id, { kpId: kp1 }, actor);
+    const roster = await service.roster(actor, kp1);
+    expect(roster.members).toContainEqual(
+      expect.objectContaining({
+        id: recruit.id,
+        kp: expect.objectContaining({ id: kp1 }),
+        pack: null,
+      }),
+    );
+    await expect(service.moveMember(recruit.id, { packId: pack1 }, actor)).rejects.toMatchObject({
+      status: 403,
+    });
+  });
+
+  it('лидер получает отказ при попытке переместить игрока из существующего пака', async () => {
+    await db.kP.update({ where: { id: kp1 }, data: { leaderId: memberId } });
+    const recruit = await db.member.create({
+      data: { nickname: `org-packed-${randomUUID()}`, packId: pack2 },
+    });
+    members.push(recruit.id);
+    await expect(service.moveMember(recruit.id, { packId: pack1 }, actor)).rejects.toMatchObject({
+      status: 403,
+    });
+    await expect(
+      service.createPack(
+        { kpId: kp1, name: 'Недоступный перенос', memberIds: [recruit.id] },
+        actor,
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('параллельные назначения лидером допускают только первый перевод свободного игрока', async () => {
+    await db.kP.update({ where: { id: kp1 }, data: { leaderId: memberId } });
+    const recruit = await db.member.create({ data: { nickname: `org-race-${randomUUID()}` } });
+    members.push(recruit.id);
+    const outcomes = await Promise.allSettled([
+      service.moveMember(recruit.id, { kpId: kp1 }, actor),
+      service.moveMember(recruit.id, { packId: pack1 }, actor),
+    ]);
+    expect(outcomes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ status: 'fulfilled' }),
+        expect.objectContaining({
+          status: 'rejected',
+          reason: expect.objectContaining({ status: 403 }),
+        }),
+      ]),
+    );
+    expect(await db.memberPackHistory.count({ where: { memberId: recruit.id } })).toBe(1);
   });
 
   it('конкурентные переносы сохраняют последовательную историю', async () => {

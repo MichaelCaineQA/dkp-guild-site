@@ -13,6 +13,10 @@ export const PERMISSIONS = [
   'members.manage', // создание/редактирование членов — Глава/Админ
   'members.change_rank', // смена рангов — только Глава/Админ
   'members.view_roster', // состав гильдии — всем членам
+  'org.create_kp',
+  'org.create_pack',
+  'org.edit_kp',
+  'org.move_member',
   'link_requests.review', // подтверждение заявок на привязку Discord
   'settings.manage', // настройка системы, справочники
   'rules.edit', // страницы правил
@@ -36,6 +40,10 @@ const MIN_RANK: Record<Permission, Rank> = {
   'members.manage': 'GUILD_LEADER',
   'members.change_rank': 'GUILD_LEADER',
   'members.view_roster': 'MEMBER',
+  'org.create_kp': 'OFFICER',
+  'org.create_pack': 'OFFICER',
+  'org.edit_kp': 'GUILD_LEADER',
+  'org.move_member': 'OFFICER',
   'link_requests.review': 'GUILD_LEADER',
   'settings.manage': 'GUILD_LEADER',
   'rules.edit': 'GUILD_LEADER',
